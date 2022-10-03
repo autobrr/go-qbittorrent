@@ -1,2 +1,3 @@
 # go-qbittorrent
-Go client for qBittorrent
+
+Go library for communicating with qBittorrent.
