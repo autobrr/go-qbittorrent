@@ -243,7 +243,7 @@ func (c *Client) postFileCtx(ctx context.Context, endpoint string, fileName stri
 }
 
 func (c *Client) setCookies(cookies []*http.Cookie) {
-	cookieURL, _ := url.Parse(c.buildUrl(c.cfg.Host, nil))
+	cookieURL, _ := url.Parse(c.buildUrl("/", nil))
 
 	c.http.Jar.SetCookies(cookieURL, cookies)
 }
@@ -259,12 +259,10 @@ func (c *Client) buildUrl(endpoint string, params map[string]string) string {
 		}
 	}
 
-	encodedValues := queryParams.Encode()
-
-	joinedUrl, _ := url.JoinPath(c.cfg.Host, apiBase, endpoint, encodedValues)
-
-	escapedUrl, _ := url.QueryUnescape(joinedUrl)
+	joinedUrl, _ := url.JoinPath(c.cfg.Host, apiBase, endpoint)
+	parsedUrl, _ := url.Parse(joinedUrl)
+	parsedUrl.RawQuery = queryParams.Encode()
 
 	// make into new string and return
-	return escapedUrl
+	return parsedUrl.String()
 }
