@@ -232,6 +232,32 @@ func (c *Client) AddTorrentFromFileCtx(ctx context.Context, filePath string, opt
 	return nil
 }
 
+// AddTorrentFromUrl add new torrent from torrent file
+func (c *Client) AddTorrentFromUrl(url string, options map[string]string) error {
+	return c.AddTorrentFromUrlCtx(context.Background(), url, options)
+}
+
+func (c *Client) AddTorrentFromUrlCtx(ctx context.Context, url string, options map[string]string) error {
+	if url == "" {
+		return errors.New("no torrent url provided")
+	}
+
+	options["urls"] = url
+
+	res, err := c.postCtx(ctx, "torrents/add", options)
+	if err != nil {
+		return errors.Wrap(err, "could not add torrent %v", url)
+	}
+
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		return errors.Wrap(err, "could not add torrent %v unexpected status: %v", url, res.StatusCode)
+	}
+
+	return nil
+}
+
 func (c *Client) DeleteTorrents(hashes []string, deleteFiles bool) error {
 	return c.DeleteTorrentsCtx(context.Background(), hashes, deleteFiles)
 }
