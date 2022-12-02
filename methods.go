@@ -226,7 +226,7 @@ func (c *Client) AddTorrentFromFileCtx(ctx context.Context, filePath string, opt
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		return errors.Wrap(err, "could not add torrent %v unexpected status: %v", filePath, res.StatusCode)
+		return errors.New("could not add torrent %v unexpected status: %v", filePath, res.StatusCode)
 	}
 
 	return nil
@@ -252,7 +252,7 @@ func (c *Client) AddTorrentFromUrlCtx(ctx context.Context, url string, options m
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		return errors.Wrap(err, "could not add torrent %v unexpected status: %v", url, res.StatusCode)
+		return errors.New("could not add torrent %v unexpected status: %v", url, res.StatusCode)
 	}
 
 	return nil
@@ -279,7 +279,7 @@ func (c *Client) DeleteTorrentsCtx(ctx context.Context, hashes []string, deleteF
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.Wrap(err, "could not delete torrents %v unexpected status: %v", hashes, resp.StatusCode)
+		return errors.New("could not delete torrents %v unexpected status: %v", hashes, resp.StatusCode)
 	}
 
 	return nil
@@ -304,7 +304,7 @@ func (c *Client) ReAnnounceTorrentsCtx(ctx context.Context, hashes []string) err
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.Wrap(err, "could not re-announce torrents: %v unexpected status: %v", hashes, resp.StatusCode)
+		return errors.New("could not re-announce torrents: %v unexpected status: %v", hashes, resp.StatusCode)
 	}
 
 	return nil
@@ -354,7 +354,7 @@ func (c *Client) PauseCtx(ctx context.Context, hashes []string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.Wrap(err, "could not pause torrents: %v unexpected status: %v", hashes, resp.StatusCode)
+		return errors.New("could not pause torrents: %v unexpected status: %v", hashes, resp.StatusCode)
 	}
 
 	return nil
@@ -379,7 +379,7 @@ func (c *Client) ResumeCtx(ctx context.Context, hashes []string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.Wrap(err, "could not resume torrents: %v unexpected status: %v", hashes, resp.StatusCode)
+		return errors.New("could not resume torrents: %v unexpected status: %v", hashes, resp.StatusCode)
 	}
 
 	return nil
@@ -405,7 +405,7 @@ func (c *Client) SetForceStartCtx(ctx context.Context, hashes []string, value bo
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.Wrap(err, "could not setForceStart torrents: %v unexpected status: %v", hashes, resp.StatusCode)
+		return errors.New("could not setForceStart torrents: %v unexpected status: %v", hashes, resp.StatusCode)
 	}
 
 	return nil
@@ -430,7 +430,7 @@ func (c *Client) RecheckCtx(ctx context.Context, hashes []string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.Wrap(err, "could not recheck torrents: %v unexpected status: %v", hashes, resp.StatusCode)
+		return errors.New("could not recheck torrents: %v unexpected status: %v", hashes, resp.StatusCode)
 	}
 
 	return nil
@@ -456,7 +456,7 @@ func (c *Client) SetAutoManagementCtx(ctx context.Context, hashes []string, enab
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.Wrap(err, "could not setAutoManagement torrents: %v unexpected status: %v", hashes, resp.StatusCode)
+		return errors.New("could not setAutoManagement torrents: %v unexpected status: %v", hashes, resp.StatusCode)
 	}
 
 	return nil
@@ -482,7 +482,7 @@ func (c *Client) SetLocationCtx(ctx context.Context, hashes []string, location s
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.Wrap(err, "could not setLocation torrents: %v unexpected status: %v", hashes, resp.StatusCode)
+		return errors.New("could not setLocation torrents: %v unexpected status: %v", hashes, resp.StatusCode)
 	}
 
 	return nil
@@ -506,7 +506,7 @@ func (c *Client) CreateCategoryCtx(ctx context.Context, category string, path st
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.Wrap(err, "could not createCategory torrents: %v unexpected status: %v", category, resp.StatusCode)
+		return errors.New("could not createCategory torrents: %v unexpected status: %v", category, resp.StatusCode)
 	}
 
 	return nil
@@ -530,7 +530,7 @@ func (c *Client) EditCategoryCtx(ctx context.Context, category string, path stri
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.Wrap(err, "could not editCategory torrents: %v unexpected status: %v", category, resp.StatusCode)
+		return errors.New("could not editCategory torrents: %v unexpected status: %v", category, resp.StatusCode)
 	}
 
 	return nil
@@ -553,7 +553,7 @@ func (c *Client) RemoveCategoriesCtx(ctx context.Context, categories []string) e
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.Wrap(err, "could not removeCategories torrents: %v unexpected status: %v", opts["categories"], resp.StatusCode)
+		return errors.New("could not removeCategories torrents: %v unexpected status: %v", opts["categories"], resp.StatusCode)
 	}
 
 	return nil
@@ -579,7 +579,7 @@ func (c *Client) SetCategoryCtx(ctx context.Context, hashes []string, category s
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.Wrap(err, "could not setCategory torrents: %v unexpected status: %v", hashes, resp.StatusCode)
+		return errors.New("could not setCategory torrents: %v unexpected status: %v", hashes, resp.StatusCode)
 	}
 
 	return nil
@@ -658,7 +658,7 @@ func (c *Client) RenameFileCtx(ctx context.Context, hash, oldPath, newPath strin
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.Wrap(err, "could not renameFile: %v | old: %v | new: %v unexpected status: %v", hash, oldPath, newPath, resp.StatusCode)
+		return errors.New("could not renameFile: %v | old: %v | new: %v unexpected status: %v", hash, oldPath, newPath, resp.StatusCode)
 	}
 
 	return nil
