@@ -34,7 +34,7 @@ func (c *Client) getCtx(ctx context.Context, endpoint string, opts map[string]st
 	err = retry.Do(func() error {
 		resp, err = c.http.Do(req)
 		if resp != nil && resp.StatusCode == http.StatusForbidden {
-			if err := c.Login(); err != nil {
+			if err := c.LoginCtx(ctx); err != nil {
 				return errors.Wrap(err, "qbit re-login failed")
 			}
 		} else if err != nil {
@@ -83,7 +83,7 @@ func (c *Client) postCtx(ctx context.Context, endpoint string, opts map[string]s
 	err = retry.Do(func() error {
 		resp, err = c.http.Do(req)
 		if resp != nil && resp.StatusCode == http.StatusForbidden {
-			if err := c.Login(); err != nil {
+			if err := c.LoginCtx(ctx); err != nil {
 				return errors.Wrap(err, "qbit re-login failed")
 			}
 		} else if err != nil {
@@ -196,7 +196,7 @@ func (c *Client) postFileCtx(ctx context.Context, endpoint string, fileName stri
 	err = retry.Do(func() error {
 		resp, err = c.http.Do(req)
 		if resp != nil && resp.StatusCode == http.StatusForbidden {
-			if err := c.Login(); err != nil {
+			if err := c.LoginCtx(ctx); err != nil {
 				return errors.Wrap(err, "qbit re-login failed")
 			}
 		} else if err != nil {

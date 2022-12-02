@@ -271,7 +271,7 @@ func (c *Client) DeleteTorrentsCtx(ctx context.Context, hashes []string, deleteF
 		"deleteFiles": strconv.FormatBool(deleteFiles),
 	}
 
-	resp, err := c.getCtx(ctx, "torrents/delete", opts)
+	resp, err := c.postCtx(ctx, "torrents/delete", opts)
 	if err != nil {
 		return errors.Wrap(err, "could not delete torrents: %+v", hashes)
 	}
@@ -296,7 +296,7 @@ func (c *Client) ReAnnounceTorrentsCtx(ctx context.Context, hashes []string) err
 		"hashes": hv,
 	}
 
-	resp, err := c.getCtx(ctx, "torrents/reannounce", opts)
+	resp, err := c.postCtx(ctx, "torrents/reannounce", opts)
 	if err != nil {
 		return errors.Wrap(err, "could not re-announce torrents: %v", hashes)
 	}
@@ -346,7 +346,7 @@ func (c *Client) PauseCtx(ctx context.Context, hashes []string) error {
 		"hashes": hv,
 	}
 
-	resp, err := c.getCtx(ctx, "torrents/pause", opts)
+	resp, err := c.postCtx(ctx, "torrents/pause", opts)
 	if err != nil {
 		return errors.Wrap(err, "could not pause torrents: %v", hashes)
 	}
@@ -371,7 +371,7 @@ func (c *Client) ResumeCtx(ctx context.Context, hashes []string) error {
 		"hashes": hv,
 	}
 
-	resp, err := c.getCtx(ctx, "torrents/resume", opts)
+	resp, err := c.postCtx(ctx, "torrents/resume", opts)
 	if err != nil {
 		return errors.Wrap(err, "could not resume torrents: %v", hashes)
 	}
@@ -397,7 +397,7 @@ func (c *Client) SetForceStartCtx(ctx context.Context, hashes []string, value bo
 		"value":  strconv.FormatBool(value),
 	}
 
-	resp, err := c.getCtx(ctx, "torrents/setForceStart", opts)
+	resp, err := c.postCtx(ctx, "torrents/setForceStart", opts)
 	if err != nil {
 		return errors.Wrap(err, "could not setForceStart torrents: %v", hashes)
 	}
@@ -422,7 +422,7 @@ func (c *Client) RecheckCtx(ctx context.Context, hashes []string) error {
 		"hashes": hv,
 	}
 
-	resp, err := c.getCtx(ctx, "torrents/recheck", opts)
+	resp, err := c.postCtx(ctx, "torrents/recheck", opts)
 	if err != nil {
 		return errors.Wrap(err, "could not recheck torrents: %v", hashes)
 	}
@@ -448,7 +448,7 @@ func (c *Client) SetAutoManagementCtx(ctx context.Context, hashes []string, enab
 		"enable": strconv.FormatBool(enable),
 	}
 
-	resp, err := c.getCtx(ctx, "torrents/setAutoManagement", opts)
+	resp, err := c.postCtx(ctx, "torrents/setAutoManagement", opts)
 	if err != nil {
 		return errors.Wrap(err, "could not setAutoManagement torrents: %v", hashes)
 	}
@@ -498,7 +498,7 @@ func (c *Client) CreateCategoryCtx(ctx context.Context, category string, path st
 		"savePath": path,
 	}
 
-	resp, err := c.getCtx(ctx, "torrents/createCategory", opts)
+	resp, err := c.postCtx(ctx, "torrents/createCategory", opts)
 	if err != nil {
 		return errors.Wrap(err, "could not createCategory torrents: %v", category)
 	}
@@ -522,7 +522,7 @@ func (c *Client) EditCategoryCtx(ctx context.Context, category string, path stri
 		"savePath": path,
 	}
 
-	resp, err := c.getCtx(ctx, "torrents/editCategory", opts)
+	resp, err := c.postCtx(ctx, "torrents/editCategory", opts)
 	if err != nil {
 		return errors.Wrap(err, "could not editCategory torrents: %v", category)
 	}
@@ -545,7 +545,7 @@ func (c *Client) RemoveCategoriesCtx(ctx context.Context, categories []string) e
 		"categories": strings.Join(categories, "\n"),
 	}
 
-	resp, err := c.getCtx(ctx, "torrents/removeCategories", opts)
+	resp, err := c.postCtx(ctx, "torrents/removeCategories", opts)
 	if err != nil {
 		return errors.Wrap(err, "could not removeCategories torrents: %v", opts["categories"])
 	}
@@ -571,7 +571,7 @@ func (c *Client) SetCategoryCtx(ctx context.Context, hashes []string, category s
 		"category": category,
 	}
 
-	resp, err := c.getCtx(ctx, "torrents/setCategory", opts)
+	resp, err := c.postCtx(ctx, "torrents/setCategory", opts)
 	if err != nil {
 		return errors.Wrap(err, "could not setCategory torrents: %v", hashes)
 	}
