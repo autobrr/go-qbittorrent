@@ -15,11 +15,6 @@ import (
 	"github.com/avast/retry-go"
 )
 
-func (c *Client) get(endpoint string, opts map[string]string) (*http.Response, error) {
-	return c.getCtx(
-		context.Background(), endpoint, opts)
-}
-
 func (c *Client) getCtx(ctx context.Context, endpoint string, opts map[string]string) (*http.Response, error) {
 	var err error
 	var resp *http.Response
@@ -39,7 +34,7 @@ func (c *Client) getCtx(ctx context.Context, endpoint string, opts map[string]st
 	err = retry.Do(func() error {
 		resp, err = c.http.Do(req)
 		if resp != nil && resp.StatusCode == http.StatusForbidden {
-			if err := c.Login(); err != nil {
+			if err := c.LoginCtx(ctx); err != nil {
 				return errors.Wrap(err, "qbit re-login failed")
 			}
 		} else if err != nil {
@@ -60,17 +55,11 @@ func (c *Client) getCtx(ctx context.Context, endpoint string, opts map[string]st
 	return resp, nil
 }
 
-func (c *Client) post(endpoint string, opts map[string]string) (*http.Response, error) {
-	return c.postCtx(context.Background(), endpoint, opts)
-}
-
 func (c *Client) postCtx(ctx context.Context, endpoint string, opts map[string]string) (*http.Response, error) {
 	// add optional parameters that the user wants
 	form := url.Values{}
-	if opts != nil {
-		for k, v := range opts {
-			form.Add(k, v)
-		}
+	for k, v := range opts {
+		form.Add(k, v)
 	}
 
 	var err error
@@ -94,7 +83,7 @@ func (c *Client) postCtx(ctx context.Context, endpoint string, opts map[string]s
 	err = retry.Do(func() error {
 		resp, err = c.http.Do(req)
 		if resp != nil && resp.StatusCode == http.StatusForbidden {
-			if err := c.Login(); err != nil {
+			if err := c.LoginCtx(ctx); err != nil {
 				return errors.Wrap(err, "qbit re-login failed")
 			}
 		} else if err != nil {
@@ -115,17 +104,11 @@ func (c *Client) postCtx(ctx context.Context, endpoint string, opts map[string]s
 	return resp, nil
 }
 
-func (c *Client) postBasic(endpoint string, opts map[string]string) (*http.Response, error) {
-	return c.postBasicCtx(context.Background(), endpoint, opts)
-}
-
 func (c *Client) postBasicCtx(ctx context.Context, endpoint string, opts map[string]string) (*http.Response, error) {
 	// add optional parameters that the user wants
 	form := url.Values{}
-	if opts != nil {
-		for k, v := range opts {
-			form.Add(k, v)
-		}
+	for k, v := range opts {
+		form.Add(k, v)
 	}
 
 	var err error
@@ -153,10 +136,6 @@ func (c *Client) postBasicCtx(ctx context.Context, endpoint string, opts map[str
 	return resp, nil
 }
 
-func (c *Client) postFile(endpoint string, fileName string, opts map[string]string) (*http.Response, error) {
-	return c.postFileCtx(context.Background(), endpoint, fileName, opts)
-}
-
 func (c *Client) postFileCtx(ctx context.Context, endpoint string, fileName string, opts map[string]string) (*http.Response, error) {
 	var err error
 	var resp *http.Response
@@ -181,23 +160,19 @@ func (c *Client) postFileCtx(ctx context.Context, endpoint string, fileName stri
 	}
 
 	// Copy the actual file content to the fields writer
-	_, err = io.Copy(fileWriter, file)
-	if err != nil {
+	if _, err := io.Copy(fileWriter, file); err != nil {
 		return nil, errors.Wrap(err, "error copy file contents to writer %v", fileName)
 	}
 
 	// Populate other fields
-	if opts != nil {
-		for key, val := range opts {
-			fieldWriter, err := multiPartWriter.CreateFormField(key)
-			if err != nil {
-				return nil, errors.Wrap(err, "error creating form field %v with value %v", key, val)
-			}
+	for key, val := range opts {
+		fieldWriter, err := multiPartWriter.CreateFormField(key)
+		if err != nil {
+			return nil, errors.Wrap(err, "error creating form field %v with value %v", key, val)
+		}
 
-			_, err = fieldWriter.Write([]byte(val))
-			if err != nil {
-				return nil, errors.Wrap(err, "error writing field %v with value %v", key, val)
-			}
+		if _, err := fieldWriter.Write([]byte(val)); err != nil {
+			return nil, errors.Wrap(err, "error writing field %v with value %v", key, val)
 		}
 	}
 
@@ -221,7 +196,7 @@ func (c *Client) postFileCtx(ctx context.Context, endpoint string, fileName stri
 	err = retry.Do(func() error {
 		resp, err = c.http.Do(req)
 		if resp != nil && resp.StatusCode == http.StatusForbidden {
-			if err := c.Login(); err != nil {
+			if err := c.LoginCtx(ctx); err != nil {
 				return errors.Wrap(err, "qbit re-login failed")
 			}
 		} else if err != nil {
@@ -253,10 +228,8 @@ func (c *Client) buildUrl(endpoint string, params map[string]string) string {
 
 	// add query params
 	queryParams := url.Values{}
-	if params != nil {
-		for key, value := range params {
-			queryParams.Add(key, value)
-		}
+	for key, value := range params {
+		queryParams.Add(key, value)
 	}
 
 	joinedUrl, _ := url.JoinPath(c.cfg.Host, apiBase, endpoint)
