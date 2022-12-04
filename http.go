@@ -242,12 +242,6 @@ func (c *Client) retryDo(ctx context.Context, req *http.Request) (*http.Response
 		resp, err = c.http.Do(req)
 
 		if err == nil {
-			defer func() {
-				if err := resp.Body.Close(); err != nil {
-					retry.Unrecoverable(err)
-				}
-			}()
-
 			if resp.StatusCode == http.StatusForbidden {
 				if err := c.LoginCtx(ctx); err != nil {
 					return errors.Wrap(err, "qbit re-login failed")
@@ -267,9 +261,6 @@ func (c *Client) retryDo(ctx context.Context, req *http.Request) (*http.Response
 			}
 		}
 
-		//if req.Body != nil {
-		//	resetBody(req, originalBody)
-		//}
 		retry.Delay(time.Second * 3)
 
 		return err
