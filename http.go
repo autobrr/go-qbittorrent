@@ -262,6 +262,8 @@ func (c *Client) retryDo(ctx context.Context, req *http.Request) (*http.Response
 				return errors.New("qbit re-login")
 			} else if resp.StatusCode < 500 {
 				return err
+			} else if resp.StatusCode >= 500 {
+				return retry.Unrecoverable(errors.New("unrecoverable status: %v", resp.StatusCode))
 			}
 		}
 
