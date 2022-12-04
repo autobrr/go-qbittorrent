@@ -8,6 +8,7 @@ import (
 	"net/http/httputil"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/autobrr/go-qbittorrent/errors"
 )
@@ -662,4 +663,116 @@ func (c *Client) RenameFileCtx(ctx context.Context, hash, oldPath, newPath strin
 	}
 
 	return nil
+}
+
+const (
+	ReannounceMaxAttempts = 50
+	ReannounceInterval    = 7000
+)
+
+type ReannounceOptions struct {
+	Interval        int
+	MaxAttempts     int
+	DeleteOnFailure bool
+}
+
+func (c *Client) ReannounceTorrentWithRetry(ctx context.Context, opts ReannounceOptions, hash string) error {
+	interval := ReannounceInterval
+	if opts.Interval > 0 {
+		interval = opts.Interval
+	}
+
+	maxAttempts := ReannounceMaxAttempts
+	if opts.MaxAttempts > 0 {
+		maxAttempts = opts.MaxAttempts
+	}
+
+	attempts := 0
+
+	for attempts < maxAttempts {
+		c.log.Printf("re-announce %v attempt: %v", hash, attempts)
+
+		// add delay for next run
+		time.Sleep(time.Duration(interval) * time.Second)
+
+		trackers, err := c.GetTorrentTrackersCtx(ctx, hash)
+		if err != nil {
+			return errors.Wrap(err, "could not get trackers for torrent with hash: %v", hash)
+		}
+
+		if trackers == nil {
+			attempts++
+			continue
+		}
+
+		c.log.Printf("re-announce %v attempt: %v trackers (%+v)", hash, attempts, trackers)
+
+		// check if status not working or something else
+		if isTrackerStatusOK(trackers) {
+			c.log.Printf("re-announce for %v OK", hash)
+
+			// if working lets return
+			return nil
+		}
+
+		c.log.Printf("not working yet, lets re-announce %v attempt: %v", hash, attempts)
+
+		if err = c.ReAnnounceTorrentsCtx(ctx, []string{hash}); err != nil {
+			return errors.Wrap(err, "could not re-announce torrent with hash: %v", hash)
+		}
+
+		attempts++
+	}
+
+	// delete on failure to reannounce
+	if opts.DeleteOnFailure {
+		c.log.Printf("re-announce for %v took too long, deleting torrent", hash)
+
+		if err := c.DeleteTorrentsCtx(ctx, []string{hash}, false); err != nil {
+			return errors.Wrap(err, "could not delete torrent with hash: %v", hash)
+		}
+	}
+
+	return nil
+}
+
+// Check if status not working or something else
+// https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-4.1)#get-torrent-trackers
+//
+//	0 Tracker is disabled (used for DHT, PeX, and LSD)
+//	1 Tracker has not been contacted yet
+//	2 Tracker has been contacted and is working
+//	3 Tracker is updating
+//	4 Tracker has been contacted, but it is not working (or doesn't send proper replies)
+func isTrackerStatusOK(trackers []TorrentTracker) bool {
+	for _, tracker := range trackers {
+		if tracker.Status == TrackerStatusDisabled {
+			continue
+		}
+
+		// check for certain messages before the tracker status to catch ok status with unreg msg
+		if isUnregistered(tracker.Message) {
+			return false
+		}
+
+		if tracker.Status == TrackerStatusOK {
+			return true
+		}
+	}
+
+	return false
+}
+
+func isUnregistered(msg string) bool {
+	words := []string{"unregistered", "not registered", "not found", "not exist"}
+
+	msg = strings.ToLower(msg)
+
+	for _, v := range words {
+		if strings.Contains(msg, v) {
+			return true
+		}
+	}
+
+	return false
 }
