@@ -42,7 +42,7 @@ type Torrent struct {
 	Tags               string       `json:"tags"`
 	TimeActive         int          `json:"time_active"`
 	TotalSize          int          `json:"total_size"`
-	Tracker            *string      `json:"tracker"`
+	Tracker            string       `json:"tracker"`
 	UpLimit            int          `json:"up_limit"`
 	Uploaded           int          `json:"uploaded"`
 	UploadedSession    int          `json:"uploaded_session"`
@@ -264,6 +264,7 @@ type TorrentAddOptions struct {
 func (o *TorrentAddOptions) Prepare() map[string]string {
 	options := map[string]string{}
 
+	options["paused"] = "false"
 	if o.Paused {
 		options["paused"] = "true"
 	}
