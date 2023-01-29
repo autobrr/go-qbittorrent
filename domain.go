@@ -259,6 +259,7 @@ type TorrentAddOptions struct {
 	LimitDownloadSpeed int64
 	LimitRatio         float64
 	LimitSeedTime      int64
+	Rename             string
 }
 
 func (o *TorrentAddOptions) Prepare() map[string]string {
@@ -309,6 +310,10 @@ func (o *TorrentAddOptions) Prepare() map[string]string {
 	}
 	if o.LimitSeedTime > 0 {
 		options["seedingTimeLimit"] = strconv.FormatInt(o.LimitSeedTime, 10)
+	}
+
+	if o.Rename != "" {
+		options["rename"] = o.Rename
 	}
 
 	return options

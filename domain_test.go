@@ -19,6 +19,7 @@ func TestTorrentAddOptions_Prepare(t *testing.T) {
 		LimitDownloadSpeed int64
 		LimitRatio         float64
 		LimitSeedTime      int64
+		Rename             string
 	}
 	tests := []struct {
 		name   string
@@ -41,6 +42,7 @@ func TestTorrentAddOptions_Prepare(t *testing.T) {
 				LimitSeedTime:      100,
 			},
 			want: map[string]string{
+				"paused":           "false",
 				"skip_checking":    "true",
 				"autoTMM":          "false",
 				"ratioLimit":       "2.00",
@@ -68,6 +70,7 @@ func TestTorrentAddOptions_Prepare(t *testing.T) {
 				LimitSeedTime:      100,
 			},
 			want: map[string]string{
+				"paused":           "false",
 				"skip_checking":    "true",
 				"root_folder":      "true",
 				"contentLayout":    "Subfolder",
@@ -97,6 +100,7 @@ func TestTorrentAddOptions_Prepare(t *testing.T) {
 				LimitSeedTime:      100,
 			},
 			want: map[string]string{
+				"paused":           "false",
 				"skip_checking":    "true",
 				"root_folder":      "false",
 				"contentLayout":    "NoSubfolder",
@@ -126,6 +130,7 @@ func TestTorrentAddOptions_Prepare(t *testing.T) {
 				LimitSeedTime:      100,
 			},
 			want: map[string]string{
+				"paused":           "false",
 				"skip_checking":    "true",
 				"autoTMM":          "false",
 				"ratioLimit":       "2.00",
@@ -135,6 +140,36 @@ func TestTorrentAddOptions_Prepare(t *testing.T) {
 				"tags":             "limited,slow",
 				"upLimit":          "100000000",
 				"dlLimit":          "100000000",
+			},
+		},
+		{
+			name: "test_05",
+			fields: fields{
+				Paused:             false,
+				SkipHashCheck:      true,
+				ContentLayout:      ContentLayoutOriginal,
+				SavePath:           "/home/test/torrents",
+				AutoTMM:            false,
+				Category:           "test",
+				Tags:               "limited,slow",
+				LimitUploadSpeed:   100000,
+				LimitDownloadSpeed: 100000,
+				LimitRatio:         2.0,
+				LimitSeedTime:      100,
+				Rename:             "test-torrent-rename",
+			},
+			want: map[string]string{
+				"paused":           "false",
+				"skip_checking":    "true",
+				"autoTMM":          "false",
+				"ratioLimit":       "2.00",
+				"savepath":         "/home/test/torrents",
+				"seedingTimeLimit": "100",
+				"category":         "test",
+				"tags":             "limited,slow",
+				"upLimit":          "100000000",
+				"dlLimit":          "100000000",
+				"rename":           "test-torrent-rename",
 			},
 		},
 	}
@@ -152,6 +187,7 @@ func TestTorrentAddOptions_Prepare(t *testing.T) {
 				LimitDownloadSpeed: tt.fields.LimitDownloadSpeed,
 				LimitRatio:         tt.fields.LimitRatio,
 				LimitSeedTime:      tt.fields.LimitSeedTime,
+				Rename:             tt.fields.Rename,
 			}
 
 			got := o.Prepare()
