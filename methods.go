@@ -615,6 +615,25 @@ func (c *Client) GetFilesInformationCtx(ctx context.Context, hash string) (*Torr
 	return &info, nil
 }
 
+func (c *Client) ExportTorrent(hash string) ([]byte, error) {
+	return c.ExportTorrentCtx(context.Background(), hash)
+}
+
+func (c *Client) ExportTorrentCtx(ctx context.Context, hash string) ([]byte, error) {
+	opts := map[string]string{
+		"hash": hash,
+	}
+
+	resp, err := c.getCtx(ctx, "torrents/export", opts)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get export")
+	}
+
+	defer resp.Body.Close()
+
+	return io.ReadAll(resp.Body)
+}
+
 func (c *Client) GetCategories() (map[string]Category, error) {
 	return c.GetCategoriesCtx(context.Background())
 }
