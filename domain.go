@@ -65,7 +65,7 @@ type TorrentTracker struct {
 }
 
 type TorrentFiles []struct {
-	Availability int     `json:"availability"`
+	Availability float32 `json:"availability"`
 	Index        int     `json:"index"`
 	IsSeed       bool    `json:"is_seed,omitempty"`
 	Name         string  `json:"name"`
