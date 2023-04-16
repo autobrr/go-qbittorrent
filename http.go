@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"math/rand"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -113,28 +114,39 @@ func (c *Client) postBasicCtx(ctx context.Context, endpoint string, opts map[str
 }
 
 func (c *Client) postFileCtx(ctx context.Context, endpoint string, fileName string, opts map[string]string) (*http.Response, error) {
-	file, err := os.Open(fileName)
+	b, err := os.ReadFile(fileName)
 	if err != nil {
-		return nil, errors.Wrap(err, "error opening file %v", fileName)
+		return nil, errors.Wrap(err, "error reading file %v", fileName)
 	}
-	// Close the file later
-	defer file.Close()
 
+	return c.postMemoryCtx(ctx, endpoint, b, opts)
+}
+
+func (c *Client) postMemoryCtx(ctx context.Context, endpoint string, buf []byte, opts map[string]string) (*http.Response, error) {
 	// Buffer to store our request body as bytes
 	var requestBody bytes.Buffer
 
 	// Store a multipart writer
 	multiPartWriter := multipart.NewWriter(&requestBody)
+	torName := func() string {
+		s := make([]byte, 16)
+		for i := 0; i < len(s); i += 2 {
+			s[i] = 'a' + byte(rand.Intn(25))
+			s[i+1] = 'A' + byte(rand.Intn(25))
+		}
+
+		return string(s)
+	}()
 
 	// Initialize file field
-	fileWriter, err := multiPartWriter.CreateFormFile("torrents", fileName)
+	fileWriter, err := multiPartWriter.CreateFormFile("torrents", torName)
 	if err != nil {
-		return nil, errors.Wrap(err, "error initializing file field %v", fileName)
+		return nil, errors.Wrap(err, "error initializing file field")
 	}
 
 	// Copy the actual file content to the fields writer
-	if _, err := io.Copy(fileWriter, file); err != nil {
-		return nil, errors.Wrap(err, "error copy file contents to writer %v", fileName)
+	if _, err := io.Copy(fileWriter, bytes.NewBuffer(buf)); err != nil {
+		return nil, errors.Wrap(err, "error copy file contents to writer")
 	}
 
 	// Populate other fields
@@ -155,7 +167,7 @@ func (c *Client) postFileCtx(ctx context.Context, endpoint string, fileName stri
 	reqUrl := c.buildUrl(endpoint, nil)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqUrl, &requestBody)
 	if err != nil {
-		return nil, errors.Wrap(err, "error creating request %v", fileName)
+		return nil, errors.Wrap(err, "error creating request")
 	}
 
 	if c.cfg.BasicUser != "" && c.cfg.BasicPass != "" {
@@ -174,7 +186,7 @@ func (c *Client) postFileCtx(ctx context.Context, endpoint string, fileName stri
 
 	resp, err := c.retryDo(ctx, req)
 	if err != nil {
-		return nil, errors.Wrap(err, "error making post file request %v", fileName)
+		return nil, errors.Wrap(err, "error making post file request")
 	}
 
 	return resp, nil
