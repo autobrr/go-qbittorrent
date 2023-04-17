@@ -129,10 +129,10 @@ func (c *Client) postMemoryCtx(ctx context.Context, endpoint string, buf []byte,
 	// Store a multipart writer
 	multiPartWriter := multipart.NewWriter(&requestBody)
 	torName := func() string {
+		z := []byte{'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', 'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', 'Z', 'X', 'C', 'V', 'B', 'N', 'M', 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', 'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', 'z', 'x', 'c', 'v', 'b', 'n', 'm', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '_'}
 		s := make([]byte, 16)
-		for i := 0; i < len(s); i += 2 {
-			s[i] = 'a' + byte(rand.Intn(25))
-			s[i+1] = 'A' + byte(rand.Intn(25))
+		for i := 0; i < len(s); i++ {
+			s[i] = z[rand.Intn(len(z)-1)]
 		}
 
 		return string(s)
