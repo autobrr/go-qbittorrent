@@ -684,6 +684,62 @@ func (c *Client) RenameFileCtx(ctx context.Context, hash, oldPath, newPath strin
 	return nil
 }
 
+func (c *Client) AddTags(hashes []string, tags string) error {
+	return c.AddTagsCtx(context.Background(), hashes, tags)
+}
+
+func (c *Client) AddTagsCtx(ctx context.Context, hashes []string, tags string) error {
+	// Add hashes together with | separator
+	hv := strings.Join(hashes, "|")
+	opts := map[string]string{
+		"hashes": hv,
+		"tags":  tags,
+	}
+
+	resp, err := c.postCtx(ctx, "torrents/addTags", opts)
+	if err != nil {
+		return errors.Wrap(err, "could not addTags torrents: %v", hashes)
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return errors.New("could not addTags torrents: %v unexpected status: %v", hashes, resp.StatusCode)
+	}
+
+	return nil
+}
+
+func (c *Client) RemoveTags(hashes []string, tags string) error {
+	return c.RemoveTagsCtx(context.Background(), hashes, tags)
+}
+
+func (c *Client) RemoveTagsCtx(ctx context.Context, hashes []string, tags string) error {
+	// Add hashes together with | separator
+	hv := strings.Join(hashes, "|")
+	
+	opts := map[string]string{
+		"hashes": hv
+	}
+
+	if len(tags) != 0 {
+		opts["tags"] = tags
+	}
+
+	resp, err := c.postCtx(ctx, "torrents/removeTags", opts)
+	if err != nil {
+		return errors.Wrap(err, "could not removeTags torrents: %v", hashes)
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return errors.New("could not removeTags torrents: %v unexpected status: %v", hashes, resp.StatusCode)
+	}
+
+	return nil
+}
+
 const (
 	ReannounceMaxAttempts = 50
 	ReannounceInterval    = 7000
