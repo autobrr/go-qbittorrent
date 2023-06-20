@@ -14,7 +14,7 @@ type Torrent struct {
 	CompletionOn       int64        `json:"completion_on"`
 	ContentPath        string       `json:"content_path"`
 	DlLimit            int64        `json:"dl_limit"`
-	Dlspeed            int64        `json:"dlspeed"`
+	DlSpeed            int64        `json:"dlspeed"`
 	DownloadPath       string       `json:"download_path"`
 	Downloaded         int64        `json:"downloaded"`
 	DownloadedSession  int64        `json:"downloaded_session"`
@@ -41,7 +41,7 @@ type Torrent struct {
 	SeedingTime        int64        `json:"seeding_time"`
 	SeedingTimeLimit   int64        `json:"seeding_time_limit"`
 	SeenComplete       int64        `json:"seen_complete"`
-	SeqDl              bool         `json:"seq_dl"`
+	SequentialDownload bool         `json:"seq_dl"`
 	Size               int64        `json:"size"`
 	State              TorrentState `json:"state"`
 	SuperSeeding       bool         `json:"super_seeding"`
