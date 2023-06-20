@@ -719,11 +719,11 @@ func (c *Client) RemoveTagsCtx(ctx context.Context, hashes []string, tags string
 	hv := strings.Join(hashes, "|")
 	
 	opts := map[string]string{
-		"hashes": hv
+		"hashes": hv,
 	}
 
 	if len(tags) != 0 {
-		opts["tags"] = tags,
+		opts["tags"] = tags
 	}
 
 	resp, err := c.postCtx(ctx, "torrents/removeTags", opts)
