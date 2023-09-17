@@ -586,6 +586,31 @@ func (c *Client) SetCategoryCtx(ctx context.Context, hashes []string, category s
 	return nil
 }
 
+func (c *Client) GetCategories() (map[string]Category, error) {
+	return c.GetCategoriesCtx(context.Background())
+}
+
+func (c *Client) GetCategoriesCtx(ctx context.Context) (map[string]Category, error) {
+	resp, err := c.getCtx(ctx, "torrents/categories", nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get files info")
+	}
+
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not read body")
+	}
+
+	m := make(map[string]Category)
+	if err := json.Unmarshal(body, &m); err != nil {
+		return nil, errors.Wrap(err, "could not unmarshal body")
+	}
+
+	return m, nil
+}
+
 func (c *Client) GetFilesInformation(hash string) (*TorrentFiles, error) {
 	return c.GetFilesInformationCtx(context.Background(), hash)
 }
@@ -634,31 +659,6 @@ func (c *Client) ExportTorrentCtx(ctx context.Context, hash string) ([]byte, err
 	return io.ReadAll(resp.Body)
 }
 
-func (c *Client) GetCategories() (map[string]Category, error) {
-	return c.GetCategoriesCtx(context.Background())
-}
-
-func (c *Client) GetCategoriesCtx(ctx context.Context) (map[string]Category, error) {
-	resp, err := c.getCtx(ctx, "torrents/categories", nil)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not get files info")
-	}
-
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not read body")
-	}
-
-	m := make(map[string]Category)
-	if err := json.Unmarshal(body, &m); err != nil {
-		return nil, errors.Wrap(err, "could not unmarshal body")
-	}
-
-	return m, nil
-}
-
 func (c *Client) RenameFile(hash, oldPath, newPath string) error {
 	return c.RenameFileCtx(context.Background(), hash, oldPath, newPath)
 }
@@ -684,6 +684,56 @@ func (c *Client) RenameFileCtx(ctx context.Context, hash, oldPath, newPath strin
 	return nil
 }
 
+func (c *Client) GetTags() ([]string, error) {
+	return c.GetTagsCtx(context.Background())
+}
+
+func (c *Client) GetTagsCtx(ctx context.Context) ([]string, error) {
+	resp, err := c.getCtx(ctx, "torrents/tags", nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get tags")
+	}
+
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not read body")
+	}
+
+	m := make([]string, 0)
+	if err := json.Unmarshal(body, &m); err != nil {
+		return nil, errors.Wrap(err, "could not unmarshal body")
+	}
+
+	return m, nil
+}
+
+func (c *Client) CreateTags(tags []string) error {
+	return c.CreateTagsCtx(context.Background(), tags)
+}
+
+func (c *Client) CreateTagsCtx(ctx context.Context, tags []string) error {
+	t := strings.Join(tags, ",")
+
+	opts := map[string]string{
+		"tags": t,
+	}
+
+	resp, err := c.postCtx(ctx, "torrents/createTags", opts)
+	if err != nil {
+		return errors.Wrap(err, "could not create tags: %s", t)
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return errors.New("could not create tags: %s unexpected status: %d", t, resp.StatusCode)
+	}
+
+	return nil
+}
+
 func (c *Client) AddTags(hashes []string, tags string) error {
 	return c.AddTagsCtx(context.Background(), hashes, tags)
 }
@@ -693,7 +743,7 @@ func (c *Client) AddTagsCtx(ctx context.Context, hashes []string, tags string) e
 	hv := strings.Join(hashes, "|")
 	opts := map[string]string{
 		"hashes": hv,
-		"tags":  tags,
+		"tags":   tags,
 	}
 
 	resp, err := c.postCtx(ctx, "torrents/addTags", opts)
@@ -710,14 +760,43 @@ func (c *Client) AddTagsCtx(ctx context.Context, hashes []string, tags string) e
 	return nil
 }
 
+// DeleteTags delete tags from qBittorrent
+func (c *Client) DeleteTags(tags []string) error {
+	return c.DeleteTagsCtx(context.Background(), tags)
+}
+
+// DeleteTagsCtx delete tags from qBittorrent
+func (c *Client) DeleteTagsCtx(ctx context.Context, tags []string) error {
+	t := strings.Join(tags, ",")
+
+	opts := map[string]string{
+		"tags": t,
+	}
+
+	resp, err := c.postCtx(ctx, "torrents/deleteTags", opts)
+	if err != nil {
+		return errors.Wrap(err, "could not delete tags: %s", t)
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return errors.New("could not delete tags: %s unexpected status: %d", t, resp.StatusCode)
+	}
+
+	return nil
+}
+
+// RemoveTags remove tags from torrents specified by hashes
 func (c *Client) RemoveTags(hashes []string, tags string) error {
 	return c.RemoveTagsCtx(context.Background(), hashes, tags)
 }
 
+// RemoveTagsCtx remove tags from torrents specified by hashes
 func (c *Client) RemoveTagsCtx(ctx context.Context, hashes []string, tags string) error {
 	// Add hashes together with | separator
 	hv := strings.Join(hashes, "|")
-	
+
 	opts := map[string]string{
 		"hashes": hv,
 	}
@@ -738,6 +817,46 @@ func (c *Client) RemoveTagsCtx(ctx context.Context, hashes []string, tags string
 	}
 
 	return nil
+}
+
+func (c *Client) GetAppVersion() (string, error) {
+	return c.GetAppVersionCtx(context.Background())
+}
+
+func (c *Client) GetAppVersionCtx(ctx context.Context) (string, error) {
+	resp, err := c.getCtx(ctx, "app/version", nil)
+	if err != nil {
+		return "", errors.Wrap(err, "could not get app version")
+	}
+
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", errors.Wrap(err, "could not read body")
+	}
+
+	return string(body), nil
+}
+
+func (c *Client) GetWebAPIVersion() (string, error) {
+	return c.GetWebAPIVersionCtx(context.Background())
+}
+
+func (c *Client) GetWebAPIVersionCtx(ctx context.Context) (string, error) {
+	resp, err := c.getCtx(ctx, "app/webapiVersion", nil)
+	if err != nil {
+		return "", errors.Wrap(err, "could not get webapi version")
+	}
+
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", errors.Wrap(err, "could not read body")
+	}
+
+	return string(body), nil
 }
 
 const (
