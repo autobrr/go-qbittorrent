@@ -819,6 +819,48 @@ func (c *Client) RemoveTagsCtx(ctx context.Context, hashes []string, tags string
 	return nil
 }
 
+// EditTracker edit tracker of torrent
+func (c *Client) EditTracker(hash string, old, new string) error {
+	return c.EditTrackerCtx(context.Background(), hash, old, new)
+}
+
+// EditTrackerCtx edit tracker of torrent
+func (c *Client) EditTrackerCtx(ctx context.Context, hash string, old, new string) error {
+	opts := map[string]string{
+		"hash":    hash,
+		"origUrl": old,
+		"newUrl":  new,
+	}
+
+	resp, err := c.postCtx(ctx, "torrents/editTracker", opts)
+	if err != nil {
+		return errors.Wrap(err, "could not edit tracker for torrent: %s", hash)
+	}
+
+	defer resp.Body.Close()
+
+	/*
+		HTTP Status Code 	Scenario
+		400 	newUrl is not a valid URL
+		404 	Torrent hash was not found
+		409 	newUrl already exists for the torrent
+		409 	origUrl was not found
+		200 	All other scenarios
+	*/
+	switch resp.StatusCode {
+	case http.StatusBadRequest:
+		return errors.New("new url %s is not a valid URL", new)
+	case http.StatusNotFound:
+		return errors.New("torrent %s not found", hash)
+	case http.StatusConflict:
+		return nil
+	case http.StatusOK:
+		return nil
+	default:
+		return errors.New("could not edit tracker for torrent: %s unexpected status: %d", hash, resp.StatusCode)
+	}
+}
+
 func (c *Client) GetAppVersion() (string, error) {
 	return c.GetAppVersionCtx(context.Background())
 }
