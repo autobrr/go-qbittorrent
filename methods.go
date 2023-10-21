@@ -903,7 +903,7 @@ func (c *Client) GetWebAPIVersionCtx(ctx context.Context) (string, error) {
 
 const (
 	ReannounceMaxAttempts = 50
-	ReannounceInterval    = 7000
+	ReannounceInterval    = 7 // interval in seconds
 )
 
 type ReannounceOptions struct {
@@ -912,28 +912,36 @@ type ReannounceOptions struct {
 	DeleteOnFailure bool
 }
 
-func (c *Client) ReannounceTorrentWithRetry(ctx context.Context, opts ReannounceOptions, hash string) error {
+func (c *Client) ReannounceTorrentWithRetry(ctx context.Context, hash string, opts *ReannounceOptions) error {
 	interval := ReannounceInterval
-	if opts.Interval > 0 {
-		interval = opts.Interval
-	}
-
 	maxAttempts := ReannounceMaxAttempts
-	if opts.MaxAttempts > 0 {
-		maxAttempts = opts.MaxAttempts
+	deleteOnFailure := false
+
+	if opts != nil {
+		if opts.Interval > 0 {
+			interval = opts.Interval
+		}
+
+		if opts.MaxAttempts > 0 {
+			maxAttempts = opts.MaxAttempts
+		}
+
+		if opts.DeleteOnFailure {
+			deleteOnFailure = opts.DeleteOnFailure
+		}
 	}
 
 	attempts := 0
 
 	for attempts < maxAttempts {
-		c.log.Printf("re-announce %v attempt: %v", hash, attempts)
+		c.log.Printf("re-announce %s attempt: %d", hash, attempts)
 
 		// add delay for next run
 		time.Sleep(time.Duration(interval) * time.Second)
 
 		trackers, err := c.GetTorrentTrackersCtx(ctx, hash)
 		if err != nil {
-			return errors.Wrap(err, "could not get trackers for torrent with hash: %v", hash)
+			return errors.Wrap(err, "could not get trackers for torrent with hash: %s", hash)
 		}
 
 		if trackers == nil {
@@ -941,7 +949,7 @@ func (c *Client) ReannounceTorrentWithRetry(ctx context.Context, opts Reannounce
 			continue
 		}
 
-		c.log.Printf("re-announce %v attempt: %v trackers (%+v)", hash, attempts, trackers)
+		c.log.Printf("re-announce %s attempt: %d trackers (%+v)", hash, attempts, trackers)
 
 		// check if status not working or something else
 		if isTrackerStatusOK(trackers) {
@@ -951,22 +959,24 @@ func (c *Client) ReannounceTorrentWithRetry(ctx context.Context, opts Reannounce
 			return nil
 		}
 
-		c.log.Printf("not working yet, lets re-announce %v attempt: %v", hash, attempts)
+		c.log.Printf("not working yet, lets re-announce %s attempt: %d", hash, attempts)
 
 		if err = c.ReAnnounceTorrentsCtx(ctx, []string{hash}); err != nil {
-			return errors.Wrap(err, "could not re-announce torrent with hash: %v", hash)
+			return errors.Wrap(err, "could not re-announce torrent with hash: %s", hash)
 		}
 
 		attempts++
 	}
 
 	// delete on failure to reannounce
-	if opts.DeleteOnFailure {
-		c.log.Printf("re-announce for %v took too long, deleting torrent", hash)
+	if deleteOnFailure {
+		c.log.Printf("re-announce for %s took too long, deleting torrent", hash)
 
 		if err := c.DeleteTorrentsCtx(ctx, []string{hash}, false); err != nil {
-			return errors.Wrap(err, "could not delete torrent with hash: %v", hash)
+			return errors.Wrap(err, "could not delete torrent with hash: %s", hash)
 		}
+
+		return ErrReannounceTookTooLong
 	}
 
 	return nil

@@ -2,6 +2,12 @@ package qbittorrent
 
 import (
 	"strconv"
+
+	"github.com/autobrr/go-qbittorrent/errors"
+)
+
+var (
+	ErrReannounceTookTooLong = errors.New("reannounce took too long, deleted torrent")
 )
 
 type Torrent struct {
