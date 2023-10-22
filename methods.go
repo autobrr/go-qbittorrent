@@ -861,6 +861,126 @@ func (c *Client) EditTrackerCtx(ctx context.Context, hash string, old, new strin
 	}
 }
 
+// SetMaxPriority set torrents to max priority specified by hashes
+func (c *Client) SetMaxPriority(hashes []string) error {
+	return c.SetMaxPriorityCtx(context.Background(), hashes)
+}
+
+// SetMaxPriorityCtx set torrents to max priority specified by hashes
+func (c *Client) SetMaxPriorityCtx(ctx context.Context, hashes []string) error {
+	// Add hashes together with | separator
+	hv := strings.Join(hashes, "|")
+
+	opts := map[string]string{
+		"hashes": hv,
+	}
+
+	resp, err := c.postCtx(ctx, "torrents/topPrio", opts)
+	if err != nil {
+		return errors.Wrap(err, "could not set torrents to maximum priority: %v", hashes)
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusConflict {
+		return errors.New("torrent queueing is not enabled, could not set hashes %v to max priority unexpected status: %d", hashes, resp.StatusCode)
+	} else if resp.StatusCode != http.StatusOK {
+		return errors.New("could not set max priority for torrents: %v unexpected status: %d", hashes, resp.StatusCode)
+	}
+
+	return nil
+}
+
+// SetMinPriority set torrents to min priority specified by hashes
+func (c *Client) SetMinPriority(hashes []string) error {
+	return c.SetMinPriorityCtx(context.Background(), hashes)
+}
+
+// SetMinPriorityCtx set torrents to min priority specified by hashes
+func (c *Client) SetMinPriorityCtx(ctx context.Context, hashes []string) error {
+	// Add hashes together with | separator
+	hv := strings.Join(hashes, "|")
+
+	opts := map[string]string{
+		"hashes": hv,
+	}
+
+	resp, err := c.postCtx(ctx, "torrents/bottomPrio", opts)
+	if err != nil {
+		return errors.Wrap(err, "could not set torrents to minimum priority: %v", hashes)
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusConflict {
+		return errors.New("torrent queueing is not enabled, could not set hashes %v to min priority unexpected status: %d", hashes, resp.StatusCode)
+	} else if resp.StatusCode != http.StatusOK {
+		return errors.New("could not set min priority for torrents: %v unexpected status: %d", hashes, resp.StatusCode)
+	}
+
+	return nil
+}
+
+// DecreasePriority decrease priority for torrents specified by hashes
+func (c *Client) DecreasePriority(hashes []string) error {
+	return c.DecreasePriorityCtx(context.Background(), hashes)
+}
+
+// DecreasePriorityCtx decrease priority for torrents specified by hashes
+func (c *Client) DecreasePriorityCtx(ctx context.Context, hashes []string) error {
+	// Add hashes together with | separator
+	hv := strings.Join(hashes, "|")
+
+	opts := map[string]string{
+		"hashes": hv,
+	}
+
+	resp, err := c.postCtx(ctx, "torrents/decreasePrio", opts)
+	if err != nil {
+		return errors.Wrap(err, "could not decrease torrent priority: %v", hashes)
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusConflict {
+		return errors.New("torrent queueing is not enabled, could not decrease hashes %v priority unexpected status: %d", hashes, resp.StatusCode)
+	} else if resp.StatusCode != http.StatusOK {
+		return errors.New("could not decrease priority for torrents: %v unexpected status: %d", hashes, resp.StatusCode)
+	}
+
+	return nil
+}
+
+// IncreasePriority increase priority for torrents specified by hashes
+func (c *Client) IncreasePriority(hashes []string) error {
+	return c.IncreasePriorityCtx(context.Background(), hashes)
+}
+
+// IncreasePriorityCtx increase priority for torrents specified by hashes
+func (c *Client) IncreasePriorityCtx(ctx context.Context, hashes []string) error {
+	// Add hashes together with | separator
+	hv := strings.Join(hashes, "|")
+
+	opts := map[string]string{
+		"hashes": hv,
+	}
+
+	resp, err := c.postCtx(ctx, "torrents/increasePrio", opts)
+	if err != nil {
+		return errors.Wrap(err, "could not increase torrent priority: %v", hashes)
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusConflict {
+		return errors.New("torrent queueing is not enabled, could not increase hashes %v priority unexpected status: %d", hashes, resp.StatusCode)
+	} else if resp.StatusCode != http.StatusOK {
+		return errors.New("could not increase priority for torrents: %v unexpected status: %d", hashes, resp.StatusCode)
+	}
+
+	return nil
+}
+
 func (c *Client) GetAppVersion() (string, error) {
 	return c.GetAppVersionCtx(context.Background())
 }
