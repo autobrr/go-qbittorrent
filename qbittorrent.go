@@ -1,6 +1,7 @@
 package qbittorrent
 
 import (
+	"crypto/tls"
 	"io"
 	"log"
 	"net/http"
@@ -64,9 +65,15 @@ func NewClient(cfg Config) *Client {
 		c.log.Println("new client cookie error")
 	}
 
+	customTransport := http.DefaultTransport.(*http.Transport).Clone()
+	if cfg.TLSSkipVerify {
+		customTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: cfg.TLSSkipVerify}
+	}
+
 	c.http = &http.Client{
-		Timeout: c.timeout,
-		Jar:     jar,
+		Jar:       jar,
+		Timeout:   c.timeout,
+		Transport: customTransport,
 	}
 
 	return c
