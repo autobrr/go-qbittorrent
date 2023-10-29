@@ -150,7 +150,8 @@ func (c *Client) postFileCtx(ctx context.Context, endpoint string, fileName stri
 	}
 
 	// Close multipart writer
-	defer multiPartWriter.Close()
+	contentType := multiPartWriter.FormDataContentType()
+	multiPartWriter.Close()
 
 	reqUrl := c.buildUrl(endpoint, nil)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqUrl, &requestBody)
@@ -163,7 +164,7 @@ func (c *Client) postFileCtx(ctx context.Context, endpoint string, fileName stri
 	}
 
 	// Set correct content type
-	req.Header.Set("Content-Type", multiPartWriter.FormDataContentType())
+	req.Header.Set("Content-Type", contentType)
 
 	cookieURL, _ := url.Parse(c.buildUrl("/", nil))
 	if len(c.http.Jar.Cookies(cookieURL)) == 0 {
