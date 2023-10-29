@@ -66,6 +66,31 @@ func (c *Client) LoginCtx(ctx context.Context) error {
 	return nil
 }
 
+func (c *Client) GetAppPreferences() (AppPreferences, error) {
+	return c.GetAppPreferencesCtx(context.Background())
+}
+
+func (c *Client) GetAppPreferencesCtx(ctx context.Context) (AppPreferences, error) {
+	resp, err := c.getCtx(ctx, "app/preferences", nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get app preferences")
+	}
+
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not read body")
+	}
+
+	var app AppPreferences
+	if err := json.Unmarshal(body, &app); err != nil {
+		return nil, errors.Wrap(err, "could not unmarshal body")
+	}
+
+	return app, nil
+}
+
 func (c *Client) GetTorrents(o TorrentFilterOptions) ([]Torrent, error) {
 	return c.GetTorrentsCtx(context.Background(), o)
 }
