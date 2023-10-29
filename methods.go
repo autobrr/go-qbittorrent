@@ -71,21 +71,21 @@ func (c *Client) GetAppPreferences() (AppPreferences, error) {
 }
 
 func (c *Client) GetAppPreferencesCtx(ctx context.Context) (AppPreferences, error) {
+	var app AppPreferences
 	resp, err := c.getCtx(ctx, "app/preferences", nil)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not get app preferences")
+		return app, errors.Wrap(err, "could not get app preferences")
 	}
 
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not read body")
+		return app, errors.Wrap(err, "could not read body")
 	}
-
-	var app AppPreferences
+	
 	if err := json.Unmarshal(body, &app); err != nil {
-		return nil, errors.Wrap(err, "could not unmarshal body")
+		return app, errors.Wrap(err, "could not unmarshal body")
 	}
 
 	return app, nil
