@@ -182,7 +182,7 @@ func (c *Client) GetTorrentPropertiesCtx(ctx context.Context, hash string) (Torr
 	}
 
 	var prop TorrentProperties
-	resp, err := c.getCtx(ctx, "torrent/properties", opts)
+	resp, err := c.getCtx(ctx, "torrents/properties", opts)
 	if err != nil {
 		return prop, errors.Wrap(err, "could not get app preferences")
 	}
