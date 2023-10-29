@@ -172,6 +172,35 @@ func (c *Client) GetTorrentsActiveDownloadsCtx(ctx context.Context) ([]Torrent, 
 	return res, nil
 }
 
+func (c *Client) GetTorrentProperties() (TorrentProperties, error) {
+	return c.GetTorrentPropertiesCtx(context.Background())
+}
+
+func (c *Client) GetTorrentPropertiesCtx(ctx context.Context, hash string) (TorrentProperties, error) {
+	opts := map[string]string{
+		"hash": hash,
+	}
+
+	var prop TorrentProperties
+	resp, err := c.getCtx(ctx, "torrent/properties", opts)
+	if err != nil {
+		return prop, errors.Wrap(err, "could not get app preferences")
+	}
+
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return prop, errors.Wrap(err, "could not read body")
+	}
+	
+	if err := json.Unmarshal(body, &app); err != nil {
+		return prop, errors.Wrap(err, "could not unmarshal body")
+	}
+
+	return prop, nil
+}
+
 func (c *Client) GetTorrentsRaw() (string, error) {
 	return c.GetTorrentsRawCtx(context.Background())
 }
