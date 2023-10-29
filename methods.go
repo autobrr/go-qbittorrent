@@ -172,8 +172,8 @@ func (c *Client) GetTorrentsActiveDownloadsCtx(ctx context.Context) ([]Torrent, 
 	return res, nil
 }
 
-func (c *Client) GetTorrentProperties() (TorrentProperties, error) {
-	return c.GetTorrentPropertiesCtx(context.Background())
+func (c *Client) GetTorrentProperties(hash string) (TorrentProperties, error) {
+	return c.GetTorrentPropertiesCtx(context.Background(), hash)
 }
 
 func (c *Client) GetTorrentPropertiesCtx(ctx context.Context, hash string) (TorrentProperties, error) {
@@ -194,7 +194,7 @@ func (c *Client) GetTorrentPropertiesCtx(ctx context.Context, hash string) (Torr
 		return prop, errors.Wrap(err, "could not read body")
 	}
 	
-	if err := json.Unmarshal(body, &app); err != nil {
+	if err := json.Unmarshal(body, &prop); err != nil {
 		return prop, errors.Wrap(err, "could not unmarshal body")
 	}
 
