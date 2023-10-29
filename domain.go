@@ -343,6 +343,48 @@ type TorrentFilterOptions struct {
 	Hashes   []string
 }
 
+type TorrentProperties struct {
+	AdditionDate           int    `json:"addition_date"`
+	Comment                string `json:"comment"`
+	CompletionDate         int    `json:"completion_date"`
+	CreatedBy              string `json:"created_by"`
+	CreationDate           int    `json:"creation_date"`
+	DlLimit                int    `json:"dl_limit"`
+	DlSpeed                int    `json:"dl_speed"`
+	DlSpeedAvg             int    `json:"dl_speed_avg"`
+	DownloadPath           string `json:"download_path"`
+	Eta                    int    `json:"eta"`
+	Hash                   string `json:"hash"`
+	InfohashV1             string `json:"infohash_v1"`
+	InfohashV2             string `json:"infohash_v2"`
+	IsPrivate              bool   `json:"is_private"`
+	LastSeen               int    `json:"last_seen"`
+	Name                   string `json:"name"`
+	NbConnections          int    `json:"nb_connections"`
+	NbConnectionsLimit     int    `json:"nb_connections_limit"`
+	Peers                  int    `json:"peers"`
+	PeersTotal             int    `json:"peers_total"`
+	PieceSize              int    `json:"piece_size"`
+	PiecesHave             int    `json:"pieces_have"`
+	PiecesNum              int    `json:"pieces_num"`
+	Reannounce             int    `json:"reannounce"`
+	SavePath               string `json:"save_path"`
+	SeedingTime            int    `json:"seeding_time"`
+	Seeds                  int    `json:"seeds"`
+	SeedsTotal             int    `json:"seeds_total"`
+	ShareRatio             int    `json:"share_ratio"`
+	TimeElapsed            int    `json:"time_elapsed"`
+	TotalDownloaded        int    `json:"total_downloaded"`
+	TotalDownloadedSession int    `json:"total_downloaded_session"`
+	TotalSize              int    `json:"total_size"`
+	TotalUploaded          int    `json:"total_uploaded"`
+	TotalUploadedSession   int    `json:"total_uploaded_session"`
+	TotalWasted            int    `json:"total_wasted"`
+	UpLimit                int    `json:"up_limit"`
+	UpSpeed                int    `json:"up_speed"`
+	UpSpeedAvg             int    `json:"up_speed_avg"`
+}
+
 type AppPreferences struct {
 	AddTrackers                      string `json:"add_trackers"`
 	AddTrackersEnabled               bool   `json:"add_trackers_enabled"`
