@@ -65,9 +65,23 @@ func NewClient(cfg Config) *Client {
 		c.log.Println("new client cookie error")
 	}
 
-	customTransport := http.DefaultTransport.(*http.Transport).Clone()
-	if cfg.TLSSkipVerify {
-		customTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: cfg.TLSSkipVerify}
+	customTransport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second, // default transport value
+			KeepAlive: 30 * time.Second, // default transport value
+		}).DialContext,
+		ForceAttemptHTTP2:     true,             // default is true; since HTTP/2 multiplexes a single TCP connection. we'd want to use HTTP/1, which would use multiple TCP connections.
+		MaxIdleConns:          100,              // default transport value
+		MaxIdleConnsPerHost:   10,               // default is 2, so we want to increase the number to use establish more connections.
+		IdleConnTimeout:       90 * time.Second, // default transport value
+		TLSHandshakeTimeout:   10 * time.Second, // default transport value
+		ExpectContinueTimeout: 1 * time.Second,  // default transport value
+		ReadBufferSize:        65536,
+		WriteBufferSize:       65536,
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
 	}
 
 	c.http = &http.Client{
