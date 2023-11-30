@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"time"
