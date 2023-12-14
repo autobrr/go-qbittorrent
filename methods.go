@@ -66,6 +66,31 @@ func (c *Client) LoginCtx(ctx context.Context) error {
 	return nil
 }
 
+func (c *Client) GetAppPreferences() (AppPreferences, error) {
+	return c.GetAppPreferencesCtx(context.Background())
+}
+
+func (c *Client) GetAppPreferencesCtx(ctx context.Context) (AppPreferences, error) {
+	var app AppPreferences
+	resp, err := c.getCtx(ctx, "app/preferences", nil)
+	if err != nil {
+		return app, errors.Wrap(err, "could not get app preferences")
+	}
+
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return app, errors.Wrap(err, "could not read body")
+	}
+	
+	if err := json.Unmarshal(body, &app); err != nil {
+		return app, errors.Wrap(err, "could not unmarshal body")
+	}
+
+	return app, nil
+}
+
 func (c *Client) GetTorrents(o TorrentFilterOptions) ([]Torrent, error) {
 	return c.GetTorrentsCtx(context.Background(), o)
 }
@@ -145,6 +170,35 @@ func (c *Client) GetTorrentsActiveDownloadsCtx(ctx context.Context) ([]Torrent, 
 	}
 
 	return res, nil
+}
+
+func (c *Client) GetTorrentProperties(hash string) (TorrentProperties, error) {
+	return c.GetTorrentPropertiesCtx(context.Background(), hash)
+}
+
+func (c *Client) GetTorrentPropertiesCtx(ctx context.Context, hash string) (TorrentProperties, error) {
+	opts := map[string]string{
+		"hash": hash,
+	}
+
+	var prop TorrentProperties
+	resp, err := c.getCtx(ctx, "torrents/properties", opts)
+	if err != nil {
+		return prop, errors.Wrap(err, "could not get app preferences")
+	}
+
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return prop, errors.Wrap(err, "could not read body")
+	}
+	
+	if err := json.Unmarshal(body, &prop); err != nil {
+		return prop, errors.Wrap(err, "could not unmarshal body")
+	}
+
+	return prop, nil
 }
 
 func (c *Client) GetTorrentsRaw() (string, error) {
