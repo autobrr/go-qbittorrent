@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"math/rand"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -113,28 +114,31 @@ func (c *Client) postBasicCtx(ctx context.Context, endpoint string, opts map[str
 }
 
 func (c *Client) postFileCtx(ctx context.Context, endpoint string, fileName string, opts map[string]string) (*http.Response, error) {
-	file, err := os.Open(fileName)
+	b, err := os.ReadFile(fileName)
 	if err != nil {
-		return nil, errors.Wrap(err, "error opening file %v", fileName)
+		return nil, errors.Wrap(err, "error reading file %v", fileName)
 	}
-	// Close the file later
-	defer file.Close()
 
+	return c.postMemoryCtx(ctx, endpoint, b, opts)
+}
+
+func (c *Client) postMemoryCtx(ctx context.Context, endpoint string, buf []byte, opts map[string]string) (*http.Response, error) {
 	// Buffer to store our request body as bytes
 	var requestBody bytes.Buffer
 
 	// Store a multipart writer
 	multiPartWriter := multipart.NewWriter(&requestBody)
+	torName := generateTorrentName()
 
 	// Initialize file field
-	fileWriter, err := multiPartWriter.CreateFormFile("torrents", fileName)
+	fileWriter, err := multiPartWriter.CreateFormFile("torrents", torName)
 	if err != nil {
-		return nil, errors.Wrap(err, "error initializing file field %v", fileName)
+		return nil, errors.Wrap(err, "error initializing file field")
 	}
 
 	// Copy the actual file content to the fields writer
-	if _, err := io.Copy(fileWriter, file); err != nil {
-		return nil, errors.Wrap(err, "error copy file contents to writer %v", fileName)
+	if _, err := io.Copy(fileWriter, bytes.NewBuffer(buf)); err != nil {
+		return nil, errors.Wrap(err, "error copy file contents to writer")
 	}
 
 	// Populate other fields
@@ -156,7 +160,7 @@ func (c *Client) postFileCtx(ctx context.Context, endpoint string, fileName stri
 	reqUrl := c.buildUrl(endpoint, nil)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqUrl, &requestBody)
 	if err != nil {
-		return nil, errors.Wrap(err, "error creating request %v", fileName)
+		return nil, errors.Wrap(err, "error creating request")
 	}
 
 	if c.cfg.BasicUser != "" && c.cfg.BasicPass != "" {
@@ -175,10 +179,23 @@ func (c *Client) postFileCtx(ctx context.Context, endpoint string, fileName stri
 
 	resp, err := c.retryDo(ctx, req)
 	if err != nil {
-		return nil, errors.Wrap(err, "error making post file request %v", fileName)
+		return nil, errors.Wrap(err, "error making post file request")
 	}
 
 	return resp, nil
+}
+
+func generateTorrentName() string {
+	// A simple string generator for supplying multipart form fields
+	// Presently with the API this does not matter, but may be used for internal context
+	// if it ever becomes a problem, feel no qualms about removing it.
+	z := []byte{'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', 'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', 'Z', 'X', 'C', 'V', 'B', 'N', 'M', 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', 'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', 'z', 'x', 'c', 'v', 'b', 'n', 'm', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '_'}
+	s := make([]byte, 16)
+	for i := 0; i < len(s); i++ {
+		s[i] = z[rand.Intn(len(z)-1)]
+	}
+
+	return string(s)
 }
 
 func (c *Client) setCookies(cookies []*http.Cookie) {

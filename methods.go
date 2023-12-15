@@ -266,6 +266,26 @@ func (c *Client) GetTorrentTrackersCtx(ctx context.Context, hash string) ([]Torr
 	return trackers, nil
 }
 
+func (c *Client) AddTorrentFromMemory(buf []byte, options map[string]string) error {
+	return c.AddTorrentFromMemoryCtx(context.Background(), buf, options)
+}
+
+func (c *Client) AddTorrentFromMemoryCtx(ctx context.Context, buf []byte, options map[string]string) error {
+
+	res, err := c.postMemoryCtx(ctx, "torrents/add", buf, options)
+	if err != nil {
+		return errors.Wrap(err, "could not add torrent")
+	}
+
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		return errors.New("could not add torrent, unexpected status: %v", res.StatusCode)
+	}
+
+	return nil
+}
+
 // AddTorrentFromFile add new torrent from torrent file
 func (c *Client) AddTorrentFromFile(filePath string, options map[string]string) error {
 	return c.AddTorrentFromFileCtx(context.Background(), filePath, options)
