@@ -57,7 +57,7 @@ func (c *Client) LoginCtx(ctx context.Context) error {
 	// place cookies in jar for future requests
 	if cookies := resp.Cookies(); len(cookies) > 0 {
 		c.setCookies(cookies)
-	} else {
+	} else if bodyString != "Ok." {
 		return errors.New("bad credentials")
 	}
 
