@@ -374,12 +374,12 @@ type TorrentProperties struct {
 	SeedsTotal             int     `json:"seeds_total"`
 	ShareRatio             float64 `json:"share_ratio"`
 	TimeElapsed            int     `json:"time_elapsed"`
-	TotalDownloaded        int64     `json:"total_downloaded"`
-	TotalDownloadedSession int64     `json:"total_downloaded_session"`
+	TotalDownloaded        int64   `json:"total_downloaded"`
+	TotalDownloadedSession int64   `json:"total_downloaded_session"`
 	TotalSize              int64   `json:"total_size"`
 	TotalUploaded          int64   `json:"total_uploaded"`
-	TotalUploadedSession   int64     `json:"total_uploaded_session"`
-	TotalWasted            int64     `json:"total_wasted"`
+	TotalUploadedSession   int64   `json:"total_uploaded_session"`
+	TotalWasted            int64   `json:"total_wasted"`
 	UpLimit                int     `json:"up_limit"`
 	UpSpeed                int     `json:"up_speed"`
 	UpSpeedAvg             int     `json:"up_speed_avg"`
@@ -492,7 +492,7 @@ type AppPreferences struct {
 	ProxyPeerConnections             bool   `json:"proxy_peer_connections"`
 	ProxyPort                        int    `json:"proxy_port"`
 	ProxyTorrentsOnly                bool   `json:"proxy_torrents_only"`
-	ProxyType                        int    `json:"proxy_type"`
+	ProxyType                        any    `json:"proxy_type"` // 4.3.9 has string None when empty, 4.5.x does int
 	ProxyUsername                    string `json:"proxy_username"`
 	QueueingEnabled                  bool   `json:"queueing_enabled"`
 	RandomPort                       bool   `json:"random_port"`
