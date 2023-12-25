@@ -962,23 +962,23 @@ func (c *Client) EditTrackerCtx(ctx context.Context, hash string, old, new strin
 	}
 }
 
-// SetQueueingEnabled enable/disable torrent queueing
-func (c *Client) SetQueueingEnabled(enabled bool) error {
+// SetPreferencesQueueingEnabled enable/disable torrent queueing
+func (c *Client) SetPreferencesQueueingEnabled(enabled bool) error {
 	return c.SetPreferences(map[string]interface{}{"queueing_enabled": enabled})
 }
 
-// SetMaxActiveDownloads set max active downloads
-func (c *Client) SetMaxActiveDownloads(max int) error {
+// SetPreferencesMaxActiveDownloads set max active downloads
+func (c *Client) SetPreferencesMaxActiveDownloads(max int) error {
 	return c.SetPreferences(map[string]interface{}{"max_active_downloads": max})
 }
 
-// SetMaxActiveTorrents set max active torrents
-func (c *Client) SetMaxActiveTorrents(max int) error {
+// SetPreferencesMaxActiveTorrents set max active torrents
+func (c *Client) SetPreferencesMaxActiveTorrents(max int) error {
 	return c.SetPreferences(map[string]interface{}{"max_active_torrents": max})
 }
 
-// SetMaxActiveUploads set max active uploads
-func (c *Client) SetMaxActiveUploads(max int) error {
+// SetPreferencesMaxActiveUploads set max active uploads
+func (c *Client) SetPreferencesMaxActiveUploads(max int) error {
 	return c.SetPreferences(map[string]interface{}{"max_active_uploads": max})
 }
 
