@@ -83,12 +83,39 @@ func (c *Client) GetAppPreferencesCtx(ctx context.Context) (AppPreferences, erro
 	if err != nil {
 		return app, errors.Wrap(err, "could not read body")
 	}
-	
+
 	if err := json.Unmarshal(body, &app); err != nil {
 		return app, errors.Wrap(err, "could not unmarshal body")
 	}
 
 	return app, nil
+}
+
+func (c *Client) SetPreferences(prefs map[string]interface{}) error {
+	return c.SetPreferencesCtx(context.Background(), prefs)
+}
+
+func (c *Client) SetPreferencesCtx(ctx context.Context, prefs map[string]interface{}) error {
+	prefsJSON, err := json.Marshal(prefs)
+	if err != nil {
+		return errors.Wrap(err, "could not marshal preferences")
+	}
+
+	data := map[string]string{
+		"json": string(prefsJSON),
+	}
+
+	resp, err := c.postCtx(ctx, "app/setPreferences", data)
+	if err != nil {
+		return errors.Wrap(err, "could not set preferences")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return errors.New("unexpected status when setting preferences: %d", resp.StatusCode)
+	}
+
+	return nil
 }
 
 func (c *Client) GetTorrents(o TorrentFilterOptions) ([]Torrent, error) {
@@ -193,7 +220,7 @@ func (c *Client) GetTorrentPropertiesCtx(ctx context.Context, hash string) (Torr
 	if err != nil {
 		return prop, errors.Wrap(err, "could not read body")
 	}
-	
+
 	if err := json.Unmarshal(body, &prop); err != nil {
 		return prop, errors.Wrap(err, "could not unmarshal body")
 	}
@@ -933,6 +960,26 @@ func (c *Client) EditTrackerCtx(ctx context.Context, hash string, old, new strin
 	default:
 		return errors.New("could not edit tracker for torrent: %s unexpected status: %d", hash, resp.StatusCode)
 	}
+}
+
+// SetPreferencesQueueingEnabled enable/disable torrent queueing
+func (c *Client) SetPreferencesQueueingEnabled(enabled bool) error {
+	return c.SetPreferences(map[string]interface{}{"queueing_enabled": enabled})
+}
+
+// SetPreferencesMaxActiveDownloads set max active downloads
+func (c *Client) SetPreferencesMaxActiveDownloads(max int) error {
+	return c.SetPreferences(map[string]interface{}{"max_active_downloads": max})
+}
+
+// SetPreferencesMaxActiveTorrents set max active torrents
+func (c *Client) SetPreferencesMaxActiveTorrents(max int) error {
+	return c.SetPreferences(map[string]interface{}{"max_active_torrents": max})
+}
+
+// SetPreferencesMaxActiveUploads set max active uploads
+func (c *Client) SetPreferencesMaxActiveUploads(max int) error {
+	return c.SetPreferences(map[string]interface{}{"max_active_uploads": max})
 }
 
 // SetMaxPriority set torrents to max priority specified by hashes
