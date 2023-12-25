@@ -81,7 +81,7 @@ func NewClient(cfg Config) *Client {
 		ReadBufferSize:        65536,
 		WriteBufferSize:       65536,
 		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: true,
+			InsecureSkipVerify: cfg.TLSSkipVerify,
 		},
 	}
 
