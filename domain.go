@@ -331,9 +331,9 @@ func (o *TorrentAddOptions) Prepare() map[string]string {
 	}
 
 	if o.ToggleFirstLastPiecePrio {
-		options["firstLastPiecePrio"] = "true"
+		options["toggleFirstLastPiecePrio"] = "true"
 	} else {
-		options["firstLastPiecePrio"] = "false"
+		options["toggleFirstLastPiecePrio"] = "false"
 	}
 
 	return options
