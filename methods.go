@@ -1102,6 +1102,33 @@ func (c *Client) IncreasePriorityCtx(ctx context.Context, hashes []string) error
 	return nil
 }
 
+// ToggleFirstLastPiecePrio toggles the priority of the first and last pieces of torrents specified by hashes
+func (c *Client) ToggleFirstLastPiecePrio(hashes []string) error {
+	return c.ToggleFirstLastPiecePrioCtx(context.Background(), hashes)
+}
+
+// ToggleFirstLastPiecePrioCtx toggles the priority of the first and last pieces of torrents specified by hashes
+func (c *Client) ToggleFirstLastPiecePrioCtx(ctx context.Context, hashes []string) error {
+	hv := strings.Join(hashes, "|")
+
+	opts := map[string]string{
+		"hashes": hv,
+	}
+
+	resp, err := c.postCtx(ctx, "torrents/toggleFirstLastPiecePrio", opts)
+	if err != nil {
+		return errors.Wrap(err, "could not toggle first/last piece priority for torrents: %v", hashes)
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return errors.New("unexpected status while toggling first/last piece priority for torrents: %v, status: %d", hashes, resp.StatusCode)
+	}
+
+	return nil
+}
+
 func (c *Client) GetAppVersion() (string, error) {
 	return c.GetAppVersionCtx(context.Background())
 }
