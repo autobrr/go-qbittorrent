@@ -8,18 +8,19 @@ import (
 
 func TestTorrentAddOptions_Prepare(t *testing.T) {
 	type fields struct {
-		Paused             bool
-		SkipHashCheck      bool
-		ContentLayout      ContentLayout
-		SavePath           string
-		AutoTMM            bool
-		Category           string
-		Tags               string
-		LimitUploadSpeed   int64
-		LimitDownloadSpeed int64
-		LimitRatio         float64
-		LimitSeedTime      int64
-		Rename             string
+		Paused                   bool
+		SkipHashCheck            bool
+		ContentLayout            ContentLayout
+		SavePath                 string
+		AutoTMM                  bool
+		Category                 string
+		Tags                     string
+		LimitUploadSpeed         int64
+		LimitDownloadSpeed       int64
+		LimitRatio               float64
+		LimitSeedTime            int64
+		Rename                   string
+		ToggleFirstLastPiecePrio bool
 	}
 	tests := []struct {
 		name   string
@@ -42,16 +43,17 @@ func TestTorrentAddOptions_Prepare(t *testing.T) {
 				LimitSeedTime:      100,
 			},
 			want: map[string]string{
-				"paused":           "false",
-				"skip_checking":    "true",
-				"autoTMM":          "false",
-				"ratioLimit":       "2.00",
-				"savepath":         "/home/test/torrents",
-				"seedingTimeLimit": "100",
-				"category":         "test",
-				"tags":             "limited,slow",
-				"upLimit":          "102400000",
-				"dlLimit":          "102400000",
+				"paused":             "false",
+				"skip_checking":      "true",
+				"autoTMM":            "false",
+				"firstLastPiecePrio": "false",
+				"ratioLimit":         "2.00",
+				"savepath":           "/home/test/torrents",
+				"seedingTimeLimit":   "100",
+				"category":           "test",
+				"tags":               "limited,slow",
+				"upLimit":            "102400000",
+				"dlLimit":            "102400000",
 			},
 		},
 		{
@@ -70,18 +72,19 @@ func TestTorrentAddOptions_Prepare(t *testing.T) {
 				LimitSeedTime:      100,
 			},
 			want: map[string]string{
-				"paused":           "false",
-				"skip_checking":    "true",
-				"root_folder":      "true",
-				"contentLayout":    "Subfolder",
-				"autoTMM":          "false",
-				"ratioLimit":       "2.00",
-				"savepath":         "/home/test/torrents",
-				"seedingTimeLimit": "100",
-				"category":         "test",
-				"tags":             "limited,slow",
-				"upLimit":          "102400000",
-				"dlLimit":          "102400000",
+				"paused":             "false",
+				"skip_checking":      "true",
+				"root_folder":        "true",
+				"contentLayout":      "Subfolder",
+				"autoTMM":            "false",
+				"firstLastPiecePrio": "false",
+				"ratioLimit":         "2.00",
+				"savepath":           "/home/test/torrents",
+				"seedingTimeLimit":   "100",
+				"category":           "test",
+				"tags":               "limited,slow",
+				"upLimit":            "102400000",
+				"dlLimit":            "102400000",
 			},
 		},
 		{
@@ -100,18 +103,19 @@ func TestTorrentAddOptions_Prepare(t *testing.T) {
 				LimitSeedTime:      100,
 			},
 			want: map[string]string{
-				"paused":           "false",
-				"skip_checking":    "true",
-				"root_folder":      "false",
-				"contentLayout":    "NoSubfolder",
-				"autoTMM":          "false",
-				"ratioLimit":       "2.00",
-				"savepath":         "/home/test/torrents",
-				"seedingTimeLimit": "100",
-				"category":         "test",
-				"tags":             "limited,slow",
-				"upLimit":          "102400000",
-				"dlLimit":          "102400000",
+				"paused":             "false",
+				"skip_checking":      "true",
+				"root_folder":        "false",
+				"contentLayout":      "NoSubfolder",
+				"autoTMM":            "false",
+				"firstLastPiecePrio": "false",
+				"ratioLimit":         "2.00",
+				"savepath":           "/home/test/torrents",
+				"seedingTimeLimit":   "100",
+				"category":           "test",
+				"tags":               "limited,slow",
+				"upLimit":            "102400000",
+				"dlLimit":            "102400000",
 			},
 		},
 		{
@@ -130,16 +134,17 @@ func TestTorrentAddOptions_Prepare(t *testing.T) {
 				LimitSeedTime:      100,
 			},
 			want: map[string]string{
-				"paused":           "false",
-				"skip_checking":    "true",
-				"autoTMM":          "false",
-				"ratioLimit":       "2.00",
-				"savepath":         "/home/test/torrents",
-				"seedingTimeLimit": "100",
-				"category":         "test",
-				"tags":             "limited,slow",
-				"upLimit":          "102400000",
-				"dlLimit":          "102400000",
+				"paused":             "false",
+				"skip_checking":      "true",
+				"autoTMM":            "false",
+				"firstLastPiecePrio": "false",
+				"ratioLimit":         "2.00",
+				"savepath":           "/home/test/torrents",
+				"seedingTimeLimit":   "100",
+				"category":           "test",
+				"tags":               "limited,slow",
+				"upLimit":            "102400000",
+				"dlLimit":            "102400000",
 			},
 		},
 		{
@@ -159,35 +164,69 @@ func TestTorrentAddOptions_Prepare(t *testing.T) {
 				Rename:             "test-torrent-rename",
 			},
 			want: map[string]string{
-				"paused":           "false",
-				"skip_checking":    "true",
-				"autoTMM":          "false",
-				"ratioLimit":       "2.00",
-				"savepath":         "/home/test/torrents",
-				"seedingTimeLimit": "100",
-				"category":         "test",
-				"tags":             "limited,slow",
-				"upLimit":          "102400000",
-				"dlLimit":          "102400000",
-				"rename":           "test-torrent-rename",
+				"paused":             "false",
+				"skip_checking":      "true",
+				"autoTMM":            "false",
+				"firstLastPiecePrio": "false",
+				"ratioLimit":         "2.00",
+				"savepath":           "/home/test/torrents",
+				"seedingTimeLimit":   "100",
+				"category":           "test",
+				"tags":               "limited,slow",
+				"upLimit":            "102400000",
+				"dlLimit":            "102400000",
+				"rename":             "test-torrent-rename",
+			},
+		},
+		{
+			name: "test_06",
+			fields: fields{
+				Paused:                   false,
+				SkipHashCheck:            true,
+				ContentLayout:            ContentLayoutOriginal,
+				SavePath:                 "/home/test/torrents",
+				AutoTMM:                  false,
+				ToggleFirstLastPiecePrio: true,
+				Category:                 "test",
+				Tags:                     "limited,slow",
+				LimitUploadSpeed:         100000,
+				LimitDownloadSpeed:       100000,
+				LimitRatio:               2.0,
+				LimitSeedTime:            100,
+				Rename:                   "test-torrent-rename",
+			},
+			want: map[string]string{
+				"paused":             "false",
+				"skip_checking":      "true",
+				"autoTMM":            "false",
+				"firstLastPiecePrio": "true",
+				"ratioLimit":         "2.00",
+				"savepath":           "/home/test/torrents",
+				"seedingTimeLimit":   "100",
+				"category":           "test",
+				"tags":               "limited,slow",
+				"upLimit":            "102400000",
+				"dlLimit":            "102400000",
+				"rename":             "test-torrent-rename",
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			o := &TorrentAddOptions{
-				Paused:             tt.fields.Paused,
-				SkipHashCheck:      tt.fields.SkipHashCheck,
-				ContentLayout:      tt.fields.ContentLayout,
-				SavePath:           tt.fields.SavePath,
-				AutoTMM:            tt.fields.AutoTMM,
-				Category:           tt.fields.Category,
-				Tags:               tt.fields.Tags,
-				LimitUploadSpeed:   tt.fields.LimitUploadSpeed,
-				LimitDownloadSpeed: tt.fields.LimitDownloadSpeed,
-				LimitRatio:         tt.fields.LimitRatio,
-				LimitSeedTime:      tt.fields.LimitSeedTime,
-				Rename:             tt.fields.Rename,
+				Paused:                   tt.fields.Paused,
+				SkipHashCheck:            tt.fields.SkipHashCheck,
+				ContentLayout:            tt.fields.ContentLayout,
+				SavePath:                 tt.fields.SavePath,
+				AutoTMM:                  tt.fields.AutoTMM,
+				Category:                 tt.fields.Category,
+				Tags:                     tt.fields.Tags,
+				LimitUploadSpeed:         tt.fields.LimitUploadSpeed,
+				LimitDownloadSpeed:       tt.fields.LimitDownloadSpeed,
+				LimitRatio:               tt.fields.LimitRatio,
+				LimitSeedTime:            tt.fields.LimitSeedTime,
+				Rename:                   tt.fields.Rename,
+				ToggleFirstLastPiecePrio: tt.fields.ToggleFirstLastPiecePrio,
 			}
 
 			got := o.Prepare()
