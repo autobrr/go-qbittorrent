@@ -273,6 +273,7 @@ type TorrentAddOptions struct {
 	LimitRatio         float64
 	LimitSeedTime      int64
 	Rename             string
+	FirstLastPiecePrio bool
 }
 
 func (o *TorrentAddOptions) Prepare() map[string]string {
@@ -328,6 +329,8 @@ func (o *TorrentAddOptions) Prepare() map[string]string {
 	if o.Rename != "" {
 		options["rename"] = o.Rename
 	}
+
+	options["firstLastPiecePrio"] = strconv.FormatBool(o.FirstLastPiecePrio)
 
 	return options
 }
