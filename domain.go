@@ -402,7 +402,6 @@ type AppPreferences struct {
 	AsyncIoThreads                   int         `json:"async_io_threads"`
 	AutoDeleteMode                   int         `json:"auto_delete_mode"`
 	AutoTmmEnabled                   bool        `json:"auto_tmm_enabled"`
-	FirstLastPiecePrioEnabled        bool        `json:"first_last_piece_prio_enabled"`
 	AutorunEnabled                   bool        `json:"autorun_enabled"`
 	AutorunOnTorrentAddedEnabled     bool        `json:"autorun_on_torrent_added_enabled"`
 	AutorunOnTorrentAddedProgram     string      `json:"autorun_on_torrent_added_program"`
