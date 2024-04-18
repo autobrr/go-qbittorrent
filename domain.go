@@ -261,19 +261,19 @@ const (
 )
 
 type TorrentAddOptions struct {
-	Paused                   bool
-	SkipHashCheck            bool
-	ContentLayout            ContentLayout
-	SavePath                 string
-	AutoTMM                  bool
-	Category                 string
-	Tags                     string
-	LimitUploadSpeed         int64
-	LimitDownloadSpeed       int64
-	LimitRatio               float64
-	LimitSeedTime            int64
-	Rename                   string
-	ToggleFirstLastPiecePrio bool
+	Paused             bool
+	SkipHashCheck      bool
+	ContentLayout      ContentLayout
+	SavePath           string
+	AutoTMM            bool
+	Category           string
+	Tags               string
+	LimitUploadSpeed   int64
+	LimitDownloadSpeed int64
+	LimitRatio         float64
+	LimitSeedTime      int64
+	Rename             string
+	FirstLastPiecePrio bool
 }
 
 func (o *TorrentAddOptions) Prepare() map[string]string {
@@ -330,11 +330,7 @@ func (o *TorrentAddOptions) Prepare() map[string]string {
 		options["rename"] = o.Rename
 	}
 
-	if o.ToggleFirstLastPiecePrio {
-		options["toggleFirstLastPiecePrio"] = "true"
-	} else {
-		options["toggleFirstLastPiecePrio"] = "false"
-	}
+	options["firstLastPiecePrio"] = strconv.FormatBool(o.FirstLastPiecePrio)
 
 	return options
 }
@@ -406,7 +402,7 @@ type AppPreferences struct {
 	AsyncIoThreads                   int         `json:"async_io_threads"`
 	AutoDeleteMode                   int         `json:"auto_delete_mode"`
 	AutoTmmEnabled                   bool        `json:"auto_tmm_enabled"`
-	ToggleFirstLastPiecePrio         bool        `json:"toggle_first_last_piece_prio"`
+	FirstLastPiecePrioEnabled        bool        `json:"first_last_piece_prio_enabled"`
 	AutorunEnabled                   bool        `json:"autorun_enabled"`
 	AutorunOnTorrentAddedEnabled     bool        `json:"autorun_on_torrent_added_enabled"`
 	AutorunOnTorrentAddedProgram     string      `json:"autorun_on_torrent_added_program"`
