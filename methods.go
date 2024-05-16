@@ -1301,8 +1301,6 @@ func (c *Client) GetFreeSpaceonDiskCtx(ctx context.Context) (uint64, error) {
 		return 0, errors.Wrap(err, "could not get maindata")
 	}
 
-	defer resp.Body.Close()
-
 	var info MainData
 	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
 		return 0, errors.Wrap(err, "could not unmarshal body")
