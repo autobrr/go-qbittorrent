@@ -1303,10 +1303,8 @@ func (c *Client) GetFreeSpaceonDiskCtx(ctx context.Context) (uint64, error) {
 
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-
 	var info MainData
-	if err := json.Unmarshal(body, &info); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
 		return 0, errors.Wrap(err, "could not unmarshal body")
 	}
 
