@@ -567,9 +567,38 @@ type AppPreferences struct {
 }
 
 type MainData struct {
-	ServerState ServerState `json:"server_state"`
+	Rid         int           `json:"rid"`
+	FullUpdate  bool          `json:"full_update"`
+	Torrents    struct{}      `json:"torrents"`
+	Categories  struct{}      `json:"categories"`
+	Tags        []interface{} `json:"tags"`
+	Trackers    struct{}      `json:"trackers"`
+	ServerState ServerState   `json:"server_state"`
 }
 
 type ServerState struct {
-	FreeSpaceOnDisk uint64 `json:"free_space_on_disk"`
+	AlltimeDl            int64  `json:"alltime_dl"`
+	AlltimeUl            int64  `json:"alltime_ul"`
+	AverageTimeQueue     int    `json:"average_time_queue"`
+	ConnectionStatus     string `json:"connection_status"`
+	DhtNodes             int    `json:"dht_nodes"`
+	DlInfoData           int64  `json:"dl_info_data"`
+	DlInfoSpeed          int    `json:"dl_info_speed"`
+	DlRateLimit          int    `json:"dl_rate_limit"`
+	FreeSpaceOnDisk      uint64 `json:"free_space_on_disk"`
+	GlobalRatio          string `json:"global_ratio"`
+	QueuedIoJobs         int    `json:"queued_io_jobs"`
+	Queueing             bool   `json:"queueing"`
+	ReadCacheHits        string `json:"read_cache_hits"`
+	ReadCacheOverload    string `json:"read_cache_overload"`
+	RefreshInterval      int    `json:"refresh_interval"`
+	TotalBuffersSize     int    `json:"total_buffers_size"`
+	TotalPeerConnections int    `json:"total_peer_connections"`
+	TotalQueuedSize      int    `json:"total_queued_size"`
+	TotalWastedSession   int64  `json:"total_wasted_session"`
+	UpInfoData           int64  `json:"up_info_data"`
+	UpInfoSpeed          int    `json:"up_info_speed"`
+	UpRateLimit          int    `json:"up_rate_limit"`
+	UseAltSpeedLimits    bool   `json:"use_alt_speed_limits"`
+	WriteCacheOverload   string `json:"write_cache_overload"`
 }
