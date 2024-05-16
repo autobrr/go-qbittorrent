@@ -565,3 +565,11 @@ type AppPreferences struct {
 	WebUIUseCustomHTTPHeadersEnabled   bool   `json:"web_ui_use_custom_http_headers_enabled"`
 	WebUIUsername                      string `json:"web_ui_username"`
 }
+
+type MainData struct {
+	ServerState ServerState `json:"server_state"`
+}
+
+type ServerState struct {
+	FreeSpaceOnDisk uint64 `json:"free_space_on_disk"`
+}
