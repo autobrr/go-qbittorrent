@@ -177,6 +177,10 @@ func (c *Client) GetTorrentsCtx(ctx context.Context, o TorrentFilterOptions) ([]
 	return torrents, nil
 }
 
+func (c *Client) GetTorrentProperties(h string) (*TorrentProperties, error) {
+	return c.GetTorrentPropertiesCtx(context.Background(), h)
+}
+
 func (c *Client) GetTorrentPropertiesCtx(ctx context.Context, h string) (*TorrentProperties, error) {
 	opts := map[string]string{
 		"hash": h,
