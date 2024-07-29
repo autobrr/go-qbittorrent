@@ -1,11 +1,11 @@
 package qbittorrent
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"io"
 	"net/http"
-	"net/http/httputil"
 	"strconv"
 	"strings"
 	"time"
@@ -41,7 +41,7 @@ func (c *Client) LoginCtx(ctx context.Context) error {
 		return errors.New("qbittorrent login bad status %v", resp.StatusCode)
 	}
 
-	bodyBytes, err := io.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(bufio.NewReader(resp.Body))
 	if err != nil {
 		return err
 	}
@@ -79,12 +79,12 @@ func (c *Client) GetAppPreferencesCtx(ctx context.Context) (AppPreferences, erro
 
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
+	buf := bufio.NewReader(resp.Body)
+	if _, err := buf.Peek(0); err != nil && err != bufio.ErrBufferFull {
 		return app, errors.Wrap(err, "could not read body")
 	}
 
-	if err := json.Unmarshal(body, &app); err != nil {
+	if err := json.NewDecoder(buf).Decode(&app); err != nil {
 		return app, errors.Wrap(err, "could not unmarshal body")
 	}
 
@@ -164,13 +164,13 @@ func (c *Client) GetTorrentsCtx(ctx context.Context, o TorrentFilterOptions) ([]
 
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
+	buf := bufio.NewReader(resp.Body)
+	if _, err := buf.Peek(0); err != nil && err != bufio.ErrBufferFull {
 		return nil, errors.Wrap(err, "could not read body")
 	}
 
 	var torrents []Torrent
-	if err := json.Unmarshal(body, &torrents); err != nil {
+	if err := json.NewDecoder(buf).Decode(&torrents); err != nil {
 		return nil, errors.Wrap(err, "could not unmarshal body")
 	}
 
@@ -216,12 +216,12 @@ func (c *Client) GetTorrentPropertiesCtx(ctx context.Context, hash string) (Torr
 
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
+	buf := bufio.NewReader(resp.Body)
+	if _, err := buf.Peek(0); err != nil && err != bufio.ErrBufferFull {
 		return prop, errors.Wrap(err, "could not read body")
 	}
 
-	if err := json.Unmarshal(body, &prop); err != nil {
+	if err := json.NewDecoder(buf).Decode(&prop); err != nil {
 		return prop, errors.Wrap(err, "could not unmarshal body")
 	}
 
@@ -240,7 +240,7 @@ func (c *Client) GetTorrentsRawCtx(ctx context.Context) (string, error) {
 
 	defer resp.Body.Close()
 
-	data, err := io.ReadAll(resp.Body)
+	data, err := io.ReadAll(bufio.NewReader(resp.Body))
 	if err != nil {
 		return "", errors.Wrap(err, "could not get read body torrents raw")
 	}
@@ -264,29 +264,19 @@ func (c *Client) GetTorrentTrackersCtx(ctx context.Context, hash string) ([]Torr
 
 	defer resp.Body.Close()
 
-	dump, err := httputil.DumpResponse(resp, true)
-	if err != nil {
-		//c.log.Printf("get torrent trackers error dump response: %v\n", string(dump))
-		return nil, errors.Wrap(err, "could not dump response for hash: %v", hash)
-	}
-
-	c.log.Printf("get torrent trackers response dump: %q", dump)
-
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, nil
 	} else if resp.StatusCode == http.StatusForbidden {
 		return nil, nil
 	}
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
+	buf := bufio.NewReader(resp.Body)
+	if _, err := buf.Peek(0); err != nil && err != bufio.ErrBufferFull {
 		return nil, errors.Wrap(err, "could not read body")
 	}
 
-	c.log.Printf("get torrent trackers body: %v\n", string(body))
-
 	var trackers []TorrentTracker
-	if err := json.Unmarshal(body, &trackers); err != nil {
+	if err := json.NewDecoder(buf).Decode(&trackers); err != nil {
 		return nil, errors.Wrap(err, "could not unmarshal body")
 	}
 
@@ -424,13 +414,13 @@ func (c *Client) GetTransferInfoCtx(ctx context.Context) (*TransferInfo, error) 
 
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
+	buf := bufio.NewReader(resp.Body)
+	if _, err := buf.Peek(0); err != nil && err != bufio.ErrBufferFull {
 		return nil, errors.Wrap(err, "could not read body")
 	}
 
 	var info TransferInfo
-	if err := json.Unmarshal(body, &info); err != nil {
+	if err := json.NewDecoder(buf).Decode(&info); err != nil {
 		return nil, errors.Wrap(err, "could not unmarshal body")
 	}
 
@@ -699,13 +689,13 @@ func (c *Client) GetCategoriesCtx(ctx context.Context) (map[string]Category, err
 
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
+	buf := bufio.NewReader(resp.Body)
+	if _, err := buf.Peek(0); err != nil && err != bufio.ErrBufferFull {
 		return nil, errors.Wrap(err, "could not read body")
 	}
 
 	m := make(map[string]Category)
-	if err := json.Unmarshal(body, &m); err != nil {
+	if err := json.NewDecoder(buf).Decode(&m); err != nil {
 		return nil, errors.Wrap(err, "could not unmarshal body")
 	}
 
@@ -728,13 +718,13 @@ func (c *Client) GetFilesInformationCtx(ctx context.Context, hash string) (*Torr
 
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
+	buf := bufio.NewReader(resp.Body)
+	if _, err := buf.Peek(0); err != nil && err != bufio.ErrBufferFull {
 		return nil, errors.Wrap(err, "could not read body")
 	}
 
 	var info TorrentFiles
-	if err := json.Unmarshal(body, &info); err != nil {
+	if err := json.NewDecoder(buf).Decode(&info); err != nil {
 		return nil, errors.Wrap(err, "could not unmarshal body")
 	}
 
@@ -757,7 +747,7 @@ func (c *Client) ExportTorrentCtx(ctx context.Context, hash string) ([]byte, err
 
 	defer resp.Body.Close()
 
-	return io.ReadAll(resp.Body)
+	return io.ReadAll(bufio.NewReader(resp.Body))
 }
 
 func (c *Client) RenameFile(hash, oldPath, newPath string) error {
@@ -797,13 +787,13 @@ func (c *Client) GetTagsCtx(ctx context.Context) ([]string, error) {
 
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
+	buf := bufio.NewReader(resp.Body)
+	if _, err := buf.Peek(0); err != nil && err != bufio.ErrBufferFull {
 		return nil, errors.Wrap(err, "could not read body")
 	}
 
 	m := make([]string, 0)
-	if err := json.Unmarshal(body, &m); err != nil {
+	if err := json.NewDecoder(buf).Decode(&m); err != nil {
 		return nil, errors.Wrap(err, "could not unmarshal body")
 	}
 
@@ -1141,7 +1131,7 @@ func (c *Client) GetAppVersionCtx(ctx context.Context) (string, error) {
 
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(bufio.NewReader(resp.Body))
 	if err != nil {
 		return "", errors.Wrap(err, "could not read body")
 	}
@@ -1161,7 +1151,7 @@ func (c *Client) GetWebAPIVersionCtx(ctx context.Context) (string, error) {
 
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(bufio.NewReader(resp.Body))
 	if err != nil {
 		return "", errors.Wrap(err, "could not read body")
 	}
