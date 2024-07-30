@@ -80,7 +80,7 @@ func (c *Client) GetAppPreferencesCtx(ctx context.Context) (AppPreferences, erro
 	defer resp.Body.Close()
 
 	buf := bufio.NewReader(resp.Body)
-	if _, err := buf.Peek(0); err != nil && err != bufio.ErrBufferFull {
+	if _, err := buf.Peek(1); err != nil && err != bufio.ErrBufferFull {
 		return app, errors.Wrap(err, "could not read body")
 	}
 
@@ -165,7 +165,7 @@ func (c *Client) GetTorrentsCtx(ctx context.Context, o TorrentFilterOptions) ([]
 	defer resp.Body.Close()
 
 	buf := bufio.NewReader(resp.Body)
-	if _, err := buf.Peek(0); err != nil && err != bufio.ErrBufferFull {
+	if _, err := buf.Peek(1); err != nil && err != bufio.ErrBufferFull {
 		return nil, errors.Wrap(err, "could not read body")
 	}
 
@@ -217,7 +217,7 @@ func (c *Client) GetTorrentPropertiesCtx(ctx context.Context, hash string) (Torr
 	defer resp.Body.Close()
 
 	buf := bufio.NewReader(resp.Body)
-	if _, err := buf.Peek(0); err != nil && err != bufio.ErrBufferFull {
+	if _, err := buf.Peek(1); err != nil && err != bufio.ErrBufferFull {
 		return prop, errors.Wrap(err, "could not read body")
 	}
 
@@ -271,7 +271,7 @@ func (c *Client) GetTorrentTrackersCtx(ctx context.Context, hash string) ([]Torr
 	}
 
 	buf := bufio.NewReader(resp.Body)
-	if _, err := buf.Peek(0); err != nil && err != bufio.ErrBufferFull {
+	if _, err := buf.Peek(1); err != nil && err != bufio.ErrBufferFull {
 		return nil, errors.Wrap(err, "could not read body")
 	}
 
@@ -415,7 +415,7 @@ func (c *Client) GetTransferInfoCtx(ctx context.Context) (*TransferInfo, error) 
 	defer resp.Body.Close()
 
 	buf := bufio.NewReader(resp.Body)
-	if _, err := buf.Peek(0); err != nil && err != bufio.ErrBufferFull {
+	if _, err := buf.Peek(1); err != nil && err != bufio.ErrBufferFull {
 		return nil, errors.Wrap(err, "could not read body")
 	}
 
@@ -690,7 +690,7 @@ func (c *Client) GetCategoriesCtx(ctx context.Context) (map[string]Category, err
 	defer resp.Body.Close()
 
 	buf := bufio.NewReader(resp.Body)
-	if _, err := buf.Peek(0); err != nil && err != bufio.ErrBufferFull {
+	if _, err := buf.Peek(1); err != nil && err != bufio.ErrBufferFull {
 		return nil, errors.Wrap(err, "could not read body")
 	}
 
@@ -719,7 +719,7 @@ func (c *Client) GetFilesInformationCtx(ctx context.Context, hash string) (*Torr
 	defer resp.Body.Close()
 
 	buf := bufio.NewReader(resp.Body)
-	if _, err := buf.Peek(0); err != nil && err != bufio.ErrBufferFull {
+	if _, err := buf.Peek(1); err != nil && err != bufio.ErrBufferFull {
 		return nil, errors.Wrap(err, "could not read body")
 	}
 
@@ -788,7 +788,7 @@ func (c *Client) GetTagsCtx(ctx context.Context) ([]string, error) {
 	defer resp.Body.Close()
 
 	buf := bufio.NewReader(resp.Body)
-	if _, err := buf.Peek(0); err != nil && err != bufio.ErrBufferFull {
+	if _, err := buf.Peek(1); err != nil && err != bufio.ErrBufferFull {
 		return nil, errors.Wrap(err, "could not read body")
 	}
 
