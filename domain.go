@@ -274,6 +274,7 @@ type TorrentAddOptions struct {
 	LimitSeedTime      int64
 	Rename             string
 	FirstLastPiecePrio bool
+	SequentialDownload bool
 }
 
 func (o *TorrentAddOptions) Prepare() map[string]string {
@@ -331,6 +332,10 @@ func (o *TorrentAddOptions) Prepare() map[string]string {
 	}
 
 	options["firstLastPiecePrio"] = strconv.FormatBool(o.FirstLastPiecePrio)
+
+	if o.SequentialDownload {
+		options["sequentialDownload"] = "true"
+	}
 
 	return options
 }
