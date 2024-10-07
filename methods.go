@@ -1316,3 +1316,22 @@ func isUnregistered(msg string) bool {
 
 	return false
 }
+
+func (c *Client) GetFreeSpaceonDisk() (uint64, error) {
+	return c.GetFreeSpaceonDiskCtx(context.Background())
+}
+
+func (c *Client) GetFreeSpaceonDiskCtx(ctx context.Context) (uint64, error) {
+	resp, err := c.getCtx(ctx, "/sync/maindata", nil)
+	if err != nil {
+		return 0, errors.Wrap(err, "could not get maindata")
+	}
+
+	var info MainData
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		return 0, errors.Wrap(err, "could not unmarshal body")
+	}
+
+	return info.ServerState.FreeSpaceOnDisk, nil
+
+}
