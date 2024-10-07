@@ -108,6 +108,9 @@ const (
 	// Torrent is paused and has finished downloading
 	TorrentStatePausedUp TorrentState = "pausedUP"
 
+	// Torrent is stopped and has finished downloading
+	TorrentStateStoppedUp TorrentState = "stoppedUP"
+
 	// Queuing is enabled and torrent is queued for upload
 	TorrentStateQueuedUp TorrentState = "queuedUP"
 
@@ -131,6 +134,9 @@ const (
 
 	// Torrent is paused and has NOT finished downloading
 	TorrentStatePausedDl TorrentState = "pausedDL"
+
+	// Torrent is stopped and has NOT finished downloading
+	TorrentStateStoppedDl TorrentState = "stoppedDL"
 
 	// Queuing is enabled and torrent is queued for download
 	TorrentStateQueuedDl TorrentState = "queuedDL"
@@ -174,6 +180,9 @@ const (
 
 	// Torrent is paused
 	TorrentFilterPaused TorrentFilter = "paused"
+
+	// Torrent is stopped
+	TorrentFilterStopped TorrentFilter = "stopped"
 
 	// Torrent is stalled
 	TorrentFilterStalled TorrentFilter = "stalled"
@@ -261,6 +270,7 @@ const (
 )
 
 type TorrentAddOptions struct {
+	Stopped            bool // introduced in Web API v2.11.0 (v5.0.0)
 	Paused             bool
 	SkipHashCheck      bool
 	ContentLayout      ContentLayout
@@ -281,8 +291,14 @@ func (o *TorrentAddOptions) Prepare() map[string]string {
 	options := map[string]string{}
 
 	options["paused"] = "false"
+	options["stopped"] = "false"
 	if o.Paused {
 		options["paused"] = "true"
+		options["stopped"] = "true"
+	}
+	if o.Stopped {
+		options["paused"] = "true"
+		options["stopped"] = "true"
 	}
 	if o.SkipHashCheck {
 		options["skip_checking"] = "true"
