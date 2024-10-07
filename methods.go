@@ -437,6 +437,14 @@ func (c *Client) GetTransferInfoCtx(ctx context.Context) (*TransferInfo, error) 
 	return &info, nil
 }
 
+func (c *Client) Stop(hashes []string) error {
+	return c.PauseCtx(context.Background(), hashes)
+}
+
+func (c *Client) StopCtx(ctx context.Context, hashes []string) error {
+	return c.PauseCtx(ctx, hashes)
+}
+
 func (c *Client) Pause(hashes []string) error {
 	return c.PauseCtx(context.Background(), hashes)
 }
