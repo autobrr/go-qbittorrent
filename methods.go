@@ -63,11 +63,6 @@ func (c *Client) LoginCtx(ctx context.Context) error {
 
 	c.log.Printf("logged into client: %v", c.cfg.Host)
 
-	// set client version
-	if err := c.SetApiVersion(ctx); err != nil {
-		return errors.Wrap(err, "could not set api version")
-	}
-
 	return nil
 }
 
@@ -111,6 +106,10 @@ func (c *Client) SetApiVersion(ctx context.Context) error {
 }
 
 func (c *Client) GetApiVersion() ApiVersion {
+	if c.version.Major == 0 && c.version.Minor == 0 && c.version.Patch == 0 {
+		c.SetApiVersion(context.Background())
+	}
+
 	return c.version
 }
 
