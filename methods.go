@@ -105,12 +105,15 @@ func (c *Client) SetApiVersion(ctx context.Context) error {
 	return nil
 }
 
-func (c *Client) GetApiVersion() ApiVersion {
+func (c *Client) GetApiVersion() (ApiVersion, error) {
 	if c.version.Major == 0 && c.version.Minor == 0 && c.version.Patch == 0 {
-		c.SetApiVersion(context.Background())
+		err := c.SetApiVersion(context.Background())
+		if err != nil {
+			return ApiVersion{}, err
+		}
 	}
 
-	return c.version
+	return c.version, nil
 }
 
 func (c *Client) GetAppPreferences() (AppPreferences, error) {
@@ -502,7 +505,12 @@ func (c *Client) PauseCtx(ctx context.Context, hashes []string) error {
 	endpoint := "torrents/stop"
 
 	// Qbt WebAPI 2.11 changed pause with stop
-	version := c.GetApiVersion()
+	version, err := c.GetApiVersion()
+
+	if err != nil {
+		return errors.Wrap(err, "could not get api version")
+	}
+
 	if version.Major <= 2 && version.Minor < 11 {
 		endpoint = "torrents/pause"
 	}
@@ -539,7 +547,12 @@ func (c *Client) ResumeCtx(ctx context.Context, hashes []string) error {
 	endpoint := "torrents/start"
 
 	// Qbt WebAPI 2.11 changed resume with start
-	version := c.GetApiVersion()
+	version, err := c.GetApiVersion()
+
+	if err != nil {
+		return errors.Wrap(err, "could not get api version")
+	}
+
 	if version.Major <= 2 && version.Minor < 11 {
 		endpoint = "torrents/resume"
 	}
