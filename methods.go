@@ -495,6 +495,10 @@ func (c *Client) Stop(hashes []string) error {
 	return c.PauseCtx(context.Background(), hashes)
 }
 
+func (c *Client) StopCtx(ctx context.Context, hashes []string) error {
+	return c.PauseCtx(ctx, hashes)
+}
+
 func (c *Client) PauseCtx(ctx context.Context, hashes []string) error {
 	// Add hashes together with | separator
 	hv := strings.Join(hashes, "|")
@@ -535,6 +539,10 @@ func (c *Client) Resume(hashes []string) error {
 
 func (c *Client) Start(hashes []string) error {
 	return c.ResumeCtx(context.Background(), hashes)
+}
+
+func (c *Client) StartCtx(ctx context.Context, hashes []string) error {
+	return c.ResumeCtx(ctx, hashes)
 }
 
 func (c *Client) ResumeCtx(ctx context.Context, hashes []string) error {
