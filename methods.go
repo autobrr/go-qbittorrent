@@ -66,6 +66,56 @@ func (c *Client) LoginCtx(ctx context.Context) error {
 	return nil
 }
 
+func (c *Client) setApiVersion() error {
+	version, err := c.GetWebAPIVersionCtx(context.Background())
+	if err != nil {
+		return errors.Wrap(err, "could not get webapi version")
+	}
+
+	c.log.Printf("webapi version: %v", version)
+
+	// convert version string to version struct for easy comparison later
+	parts := strings.Split(version, ".")
+
+	if len(parts) != 3 {
+		return errors.New("webapi version is malformed")
+	}
+
+	major, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return errors.Wrap(err, "could not convert major version")
+	}
+
+	minor, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return errors.Wrap(err, "could not convert minor version")
+	}
+
+	patch, err := strconv.Atoi(parts[2])
+	if err != nil {
+		return errors.Wrap(err, "could not convert patch version")
+	}
+
+	c.version = ApiVersion{
+		Major: major,
+		Minor: minor,
+		Patch: patch,
+	}
+
+	return nil
+}
+
+func (c *Client) getApiVersion() (ApiVersion, error) {
+	if c.version.Major == 0 && c.version.Minor == 0 && c.version.Patch == 0 {
+		err := c.setApiVersion()
+		if err != nil {
+			return ApiVersion{}, err
+		}
+	}
+
+	return c.version, nil
+}
+
 func (c *Client) GetAppPreferences() (AppPreferences, error) {
 	return c.GetAppPreferencesCtx(context.Background())
 }
@@ -441,6 +491,14 @@ func (c *Client) Pause(hashes []string) error {
 	return c.PauseCtx(context.Background(), hashes)
 }
 
+func (c *Client) Stop(hashes []string) error {
+	return c.PauseCtx(context.Background(), hashes)
+}
+
+func (c *Client) StopCtx(ctx context.Context, hashes []string) error {
+	return c.PauseCtx(ctx, hashes)
+}
+
 func (c *Client) PauseCtx(ctx context.Context, hashes []string) error {
 	// Add hashes together with | separator
 	hv := strings.Join(hashes, "|")
@@ -448,7 +506,20 @@ func (c *Client) PauseCtx(ctx context.Context, hashes []string) error {
 		"hashes": hv,
 	}
 
-	resp, err := c.postCtx(ctx, "torrents/pause", opts)
+	endpoint := "torrents/stop"
+
+	// Qbt WebAPI 2.11 changed pause with stop
+	version, err := c.getApiVersion()
+
+	if err != nil {
+		return errors.Wrap(err, "could not get api version")
+	}
+
+	if version.Major == 2 && version.Minor < 11 {
+		endpoint = "torrents/pause"
+	}
+
+	resp, err := c.postCtx(ctx, endpoint, opts)
 	if err != nil {
 		return errors.Wrap(err, "could not pause torrents: %v", hashes)
 	}
@@ -466,6 +537,14 @@ func (c *Client) Resume(hashes []string) error {
 	return c.ResumeCtx(context.Background(), hashes)
 }
 
+func (c *Client) Start(hashes []string) error {
+	return c.ResumeCtx(context.Background(), hashes)
+}
+
+func (c *Client) StartCtx(ctx context.Context, hashes []string) error {
+	return c.ResumeCtx(ctx, hashes)
+}
+
 func (c *Client) ResumeCtx(ctx context.Context, hashes []string) error {
 	// Add hashes together with | separator
 	hv := strings.Join(hashes, "|")
@@ -473,7 +552,20 @@ func (c *Client) ResumeCtx(ctx context.Context, hashes []string) error {
 		"hashes": hv,
 	}
 
-	resp, err := c.postCtx(ctx, "torrents/resume", opts)
+	endpoint := "torrents/start"
+
+	// Qbt WebAPI 2.11 changed resume with start
+	version, err := c.getApiVersion()
+
+	if err != nil {
+		return errors.Wrap(err, "could not get api version")
+	}
+
+	if version.Major == 2 && version.Minor < 11 {
+		endpoint = "torrents/resume"
+	}
+
+	resp, err := c.postCtx(ctx, endpoint, opts)
 	if err != nil {
 		return errors.Wrap(err, "could not resume torrents: %v", hashes)
 	}

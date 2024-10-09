@@ -16,6 +16,12 @@ var (
 	DefaultTimeout = 60 * time.Second
 )
 
+type ApiVersion struct {
+	Major int
+	Minor int
+	Patch int
+}
+
 type Client struct {
 	cfg Config
 
@@ -23,6 +29,8 @@ type Client struct {
 	timeout time.Duration
 
 	log *log.Logger
+
+	version ApiVersion
 }
 
 type Config struct {
