@@ -66,7 +66,7 @@ func (c *Client) LoginCtx(ctx context.Context) error {
 	return nil
 }
 
-func (c *Client) SetApiVersion(ctx context.Context) error {
+func (c *Client) setApiVersion() error {
 	version, err := c.GetWebAPIVersionCtx(context.Background())
 	if err != nil {
 		return errors.Wrap(err, "could not get webapi version")
@@ -105,9 +105,9 @@ func (c *Client) SetApiVersion(ctx context.Context) error {
 	return nil
 }
 
-func (c *Client) GetApiVersion() (ApiVersion, error) {
+func (c *Client) getApiVersion() (ApiVersion, error) {
 	if c.version.Major == 0 && c.version.Minor == 0 && c.version.Patch == 0 {
-		err := c.SetApiVersion(context.Background())
+		err := c.setApiVersion()
 		if err != nil {
 			return ApiVersion{}, err
 		}
@@ -509,7 +509,7 @@ func (c *Client) PauseCtx(ctx context.Context, hashes []string) error {
 	endpoint := "torrents/stop"
 
 	// Qbt WebAPI 2.11 changed pause with stop
-	version, err := c.GetApiVersion()
+	version, err := c.getApiVersion()
 
 	if err != nil {
 		return errors.Wrap(err, "could not get api version")
@@ -555,7 +555,7 @@ func (c *Client) ResumeCtx(ctx context.Context, hashes []string) error {
 	endpoint := "torrents/start"
 
 	// Qbt WebAPI 2.11 changed resume with start
-	version, err := c.GetApiVersion()
+	version, err := c.getApiVersion()
 
 	if err != nil {
 		return errors.Wrap(err, "could not get api version")
