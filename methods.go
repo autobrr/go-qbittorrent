@@ -511,7 +511,7 @@ func (c *Client) PauseCtx(ctx context.Context, hashes []string) error {
 		return errors.Wrap(err, "could not get api version")
 	}
 
-	if version.Major <= 2 && version.Minor < 11 {
+	if version.Major == 2 && version.Minor < 11 {
 		endpoint = "torrents/pause"
 	}
 
@@ -553,7 +553,7 @@ func (c *Client) ResumeCtx(ctx context.Context, hashes []string) error {
 		return errors.Wrap(err, "could not get api version")
 	}
 
-	if version.Major <= 2 && version.Minor < 11 {
+	if version.Major == 2 && version.Minor < 11 {
 		endpoint = "torrents/resume"
 	}
 
