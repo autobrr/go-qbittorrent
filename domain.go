@@ -586,3 +586,43 @@ type AppPreferences struct {
 	WebUIUseCustomHTTPHeadersEnabled   bool   `json:"web_ui_use_custom_http_headers_enabled"`
 	WebUIUsername                      string `json:"web_ui_username"`
 }
+
+type MainData struct {
+	Rid               int                 `json:"rid"`
+	FullUpdate        bool                `json:"full_update"`
+	Torrents          map[string]Torrent  `json:"torrents"`
+	TorrentsRemoved   []string            `json:"torrents_removed"`
+	Categories        map[string]Category `json:"categories"`
+	CategoriesRemoved []string            `json:"categories_removed"`
+	Tags              []string            `json:"tags"`
+	TagsRemoved       []string            `json:"tags_removed"`
+	Trackers          map[string][]string `json:"trackers"`
+	ServerState       ServerState         `json:"server_state"`
+}
+
+type ServerState struct {
+	AlltimeDl            int64  `json:"alltime_dl"`
+	AlltimeUl            int64  `json:"alltime_ul"`
+	AverageTimeQueue     int    `json:"average_time_queue"`
+	ConnectionStatus     string `json:"connection_status"`
+	DhtNodes             int    `json:"dht_nodes"`
+	DlInfoData           int64  `json:"dl_info_data"`
+	DlInfoSpeed          int    `json:"dl_info_speed"`
+	DlRateLimit          int    `json:"dl_rate_limit"`
+	FreeSpaceOnDisk      uint64 `json:"free_space_on_disk"`
+	GlobalRatio          string `json:"global_ratio"`
+	QueuedIoJobs         int    `json:"queued_io_jobs"`
+	Queueing             bool   `json:"queueing"`
+	ReadCacheHits        string `json:"read_cache_hits"`
+	ReadCacheOverload    string `json:"read_cache_overload"`
+	RefreshInterval      int    `json:"refresh_interval"`
+	TotalBuffersSize     int    `json:"total_buffers_size"`
+	TotalPeerConnections int    `json:"total_peer_connections"`
+	TotalQueuedSize      int    `json:"total_queued_size"`
+	TotalWastedSession   int64  `json:"total_wasted_session"`
+	UpInfoData           int64  `json:"up_info_data"`
+	UpInfoSpeed          int    `json:"up_info_speed"`
+	UpRateLimit          int    `json:"up_rate_limit"`
+	UseAltSpeedLimits    bool   `json:"use_alt_speed_limits"`
+	WriteCacheOverload   string `json:"write_cache_overload"`
+}

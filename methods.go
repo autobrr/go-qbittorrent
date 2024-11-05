@@ -468,6 +468,27 @@ func (c *Client) GetTransferInfoCtx(ctx context.Context) (*TransferInfo, error) 
 	return &info, nil
 }
 
+// SyncMainDataCtx Sync API implements requests for obtaining changes since the last request.
+// Response ID. If not provided, rid=0 will be assumed. If the given rid is different from the one of last server reply, full_update will be true (see the server reply details for more info)
+func (c *Client) SyncMainDataCtx(ctx context.Context, rid int64) (*MainData, error) {
+	opts := map[string]string{
+		"rid": strconv.FormatInt(rid, 10),
+	}
+
+	resp, err := c.getCtx(ctx, "/sync/maindata", opts)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get main data")
+	}
+
+	var info MainData
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		return nil, errors.Wrap(err, "could not unmarshal body")
+	}
+
+	return &info, nil
+
+}
+
 func (c *Client) Pause(hashes []string) error {
 	return c.PauseCtx(context.Background(), hashes)
 }
@@ -1265,6 +1286,20 @@ func (c *Client) GetWebAPIVersionCtx(ctx context.Context) (string, error) {
 	}
 
 	return string(body), nil
+}
+
+func (c *Client) GetFreeSpaceOnDisk() (uint64, error) {
+	return c.GetFreeSpaceOnDiskCtx(context.Background())
+}
+
+// GetFreeSpaceOnDiskCtx get free space on disk for default download dir. Expensive call
+func (c *Client) GetFreeSpaceOnDiskCtx(ctx context.Context) (uint64, error) {
+	info, err := c.SyncMainDataCtx(ctx, 0)
+	if err != nil {
+		return 0, errors.Wrap(err, "could not get maindata")
+	}
+
+	return info.ServerState.FreeSpaceOnDisk, nil
 }
 
 const (
