@@ -588,13 +588,16 @@ type AppPreferences struct {
 }
 
 type MainData struct {
-	Rid         int           `json:"rid"`
-	FullUpdate  bool          `json:"full_update"`
-	Torrents    struct{}      `json:"torrents"`
-	Categories  struct{}      `json:"categories"`
-	Tags        []interface{} `json:"tags"`
-	Trackers    struct{}      `json:"trackers"`
-	ServerState ServerState   `json:"server_state"`
+	Rid               int                 `json:"rid"`
+	FullUpdate        bool                `json:"full_update"`
+	Torrents          map[string]Torrent  `json:"torrents"`
+	TorrentsRemoved   []string            `json:"torrents_removed"`
+	Categories        map[string]Category `json:"categories"`
+	CategoriesRemoved []string            `json:"categories_removed"`
+	Tags              []string            `json:"tags"`
+	TagsRemoved       []string            `json:"tags_removed"`
+	Trackers          map[string][]string `json:"trackers"`
+	ServerState       ServerState         `json:"server_state"`
 }
 
 type ServerState struct {
