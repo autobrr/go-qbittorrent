@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/autobrr/go-qbittorrent/errors"
+
+	"github.com/Masterminds/semver"
 )
 
 // Login https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-4.1)#authentication
@@ -64,6 +66,35 @@ func (c *Client) LoginCtx(ctx context.Context) error {
 	c.log.Printf("logged into client: %v", c.cfg.Host)
 
 	return nil
+}
+
+func (c *Client) setApiVersion() error {
+	versionString, err := c.GetWebAPIVersionCtx(context.Background())
+	if err != nil {
+		return errors.Wrap(err, "could not get webapi version")
+	}
+
+	c.log.Printf("webapi version: %v", versionString)
+
+	ver, err := semver.NewVersion(versionString)
+	if err != nil {
+		return errors.Wrap(err, "could not parse webapi version")
+	}
+
+	c.version = ver
+
+	return nil
+}
+
+func (c *Client) getApiVersion() (*semver.Version, error) {
+	if c.version == nil || (c.version.Major() == 0 && c.version.Minor() == 0 && c.version.Patch() == 0) {
+		err := c.setApiVersion()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return c.version, nil
 }
 
 func (c *Client) GetAppPreferences() (AppPreferences, error) {
@@ -427,8 +458,37 @@ func (c *Client) GetTransferInfoCtx(ctx context.Context) (*TransferInfo, error) 
 	return &info, nil
 }
 
+// SyncMainDataCtx Sync API implements requests for obtaining changes since the last request.
+// Response ID. If not provided, rid=0 will be assumed. If the given rid is different from the one of last server reply, full_update will be true (see the server reply details for more info)
+func (c *Client) SyncMainDataCtx(ctx context.Context, rid int64) (*MainData, error) {
+	opts := map[string]string{
+		"rid": strconv.FormatInt(rid, 10),
+	}
+
+	resp, err := c.getCtx(ctx, "/sync/maindata", opts)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get main data")
+	}
+
+	var info MainData
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		return nil, errors.Wrap(err, "could not unmarshal body")
+	}
+
+	return &info, nil
+
+}
+
 func (c *Client) Pause(hashes []string) error {
 	return c.PauseCtx(context.Background(), hashes)
+}
+
+func (c *Client) Stop(hashes []string) error {
+	return c.PauseCtx(context.Background(), hashes)
+}
+
+func (c *Client) StopCtx(ctx context.Context, hashes []string) error {
+	return c.PauseCtx(ctx, hashes)
 }
 
 func (c *Client) PauseCtx(ctx context.Context, hashes []string) error {
@@ -438,7 +498,19 @@ func (c *Client) PauseCtx(ctx context.Context, hashes []string) error {
 		"hashes": hv,
 	}
 
-	resp, err := c.postCtx(ctx, "torrents/pause", opts)
+	endpoint := "torrents/stop"
+
+	// Qbt WebAPI 2.11 changed pause with stop
+	version, err := c.getApiVersion()
+	if err != nil {
+		return errors.Wrap(err, "could not get api version")
+	}
+
+	if version.Major() == 2 && version.Minor() < 11 {
+		endpoint = "torrents/pause"
+	}
+
+	resp, err := c.postCtx(ctx, endpoint, opts)
 	if err != nil {
 		return errors.Wrap(err, "could not pause torrents: %v", hashes)
 	}
@@ -456,6 +528,14 @@ func (c *Client) Resume(hashes []string) error {
 	return c.ResumeCtx(context.Background(), hashes)
 }
 
+func (c *Client) Start(hashes []string) error {
+	return c.ResumeCtx(context.Background(), hashes)
+}
+
+func (c *Client) StartCtx(ctx context.Context, hashes []string) error {
+	return c.ResumeCtx(ctx, hashes)
+}
+
 func (c *Client) ResumeCtx(ctx context.Context, hashes []string) error {
 	// Add hashes together with | separator
 	hv := strings.Join(hashes, "|")
@@ -463,7 +543,20 @@ func (c *Client) ResumeCtx(ctx context.Context, hashes []string) error {
 		"hashes": hv,
 	}
 
-	resp, err := c.postCtx(ctx, "torrents/resume", opts)
+	endpoint := "torrents/start"
+
+	// Qbt WebAPI 2.11 changed resume with start
+	version, err := c.getApiVersion()
+
+	if err != nil {
+		return errors.Wrap(err, "could not get api version")
+	}
+
+	if version.Major() == 2 && version.Minor() < 11 {
+		endpoint = "torrents/resume"
+	}
+
+	resp, err := c.postCtx(ctx, endpoint, opts)
 	if err != nil {
 		return errors.Wrap(err, "could not resume torrents: %v", hashes)
 	}
@@ -1119,6 +1212,32 @@ func (c *Client) ToggleFirstLastPiecePrioCtx(ctx context.Context, hashes []strin
 	return nil
 }
 
+// SetTorrentUploadLimit set upload limit for torrent specified by hash
+func (c *Client) SetTorrentUploadLimit(hash string, limit int64) error {
+	return c.SetTorrentUploadLimitCtx(context.Background(), hash, limit)
+}
+
+// SetTorrentUploadLimitCtx set upload limit for torrent specified by hash
+func (c *Client) SetTorrentUploadLimitCtx(ctx context.Context, hash string, limit int64) error {
+	opts := map[string]string{
+		"hashes": hash,
+		"limit":  strconv.FormatInt(limit, 10),
+	}
+
+	resp, err := c.postCtx(ctx, "torrents/setUploadLimit", opts)
+	if err != nil {
+		return errors.Wrap(err, "could not set upload limit torrent: %v", hash)
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return errors.New("could not set upload limit torrent: %v unexpected status: %v", hash, resp.StatusCode)
+	}
+
+	return nil
+}
+
 func (c *Client) GetAppVersion() (string, error) {
 	return c.GetAppVersionCtx(context.Background())
 }
@@ -1157,6 +1276,20 @@ func (c *Client) GetWebAPIVersionCtx(ctx context.Context) (string, error) {
 	}
 
 	return string(body), nil
+}
+
+func (c *Client) GetFreeSpaceOnDisk() (uint64, error) {
+	return c.GetFreeSpaceOnDiskCtx(context.Background())
+}
+
+// GetFreeSpaceOnDiskCtx get free space on disk for default download dir. Expensive call
+func (c *Client) GetFreeSpaceOnDiskCtx(ctx context.Context) (uint64, error) {
+	info, err := c.SyncMainDataCtx(ctx, 0)
+	if err != nil {
+		return 0, errors.Wrap(err, "could not get maindata")
+	}
+
+	return info.ServerState.FreeSpaceOnDisk, nil
 }
 
 const (

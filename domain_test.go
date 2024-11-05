@@ -44,6 +44,7 @@ func TestTorrentAddOptions_Prepare(t *testing.T) {
 			},
 			want: map[string]string{
 				"paused":             "false",
+				"stopped":            "false",
 				"skip_checking":      "true",
 				"autoTMM":            "false",
 				"firstLastPiecePrio": "false",
@@ -73,6 +74,7 @@ func TestTorrentAddOptions_Prepare(t *testing.T) {
 			},
 			want: map[string]string{
 				"paused":             "false",
+				"stopped":            "false",
 				"skip_checking":      "true",
 				"root_folder":        "true",
 				"contentLayout":      "Subfolder",
@@ -104,6 +106,7 @@ func TestTorrentAddOptions_Prepare(t *testing.T) {
 			},
 			want: map[string]string{
 				"paused":             "false",
+				"stopped":            "false",
 				"skip_checking":      "true",
 				"root_folder":        "false",
 				"contentLayout":      "NoSubfolder",
@@ -135,6 +138,7 @@ func TestTorrentAddOptions_Prepare(t *testing.T) {
 			},
 			want: map[string]string{
 				"paused":             "false",
+				"stopped":            "false",
 				"skip_checking":      "true",
 				"autoTMM":            "false",
 				"firstLastPiecePrio": "false",
@@ -165,6 +169,7 @@ func TestTorrentAddOptions_Prepare(t *testing.T) {
 			},
 			want: map[string]string{
 				"paused":             "false",
+				"stopped":            "false",
 				"skip_checking":      "true",
 				"autoTMM":            "false",
 				"firstLastPiecePrio": "false",
@@ -197,6 +202,7 @@ func TestTorrentAddOptions_Prepare(t *testing.T) {
 			},
 			want: map[string]string{
 				"paused":             "false",
+				"stopped":            "false",
 				"skip_checking":      "true",
 				"autoTMM":            "false",
 				"firstLastPiecePrio": "true",

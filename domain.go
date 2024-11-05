@@ -108,6 +108,9 @@ const (
 	// Torrent is paused and has finished downloading
 	TorrentStatePausedUp TorrentState = "pausedUP"
 
+	// Torrent is stopped and has finished downloading
+	TorrentStateStoppedUp TorrentState = "stoppedUP"
+
 	// Queuing is enabled and torrent is queued for upload
 	TorrentStateQueuedUp TorrentState = "queuedUP"
 
@@ -131,6 +134,9 @@ const (
 
 	// Torrent is paused and has NOT finished downloading
 	TorrentStatePausedDl TorrentState = "pausedDL"
+
+	// Torrent is stopped and has NOT finished downloading
+	TorrentStateStoppedDl TorrentState = "stoppedDL"
 
 	// Queuing is enabled and torrent is queued for download
 	TorrentStateQueuedDl TorrentState = "queuedDL"
@@ -174,6 +180,9 @@ const (
 
 	// Torrent is paused
 	TorrentFilterPaused TorrentFilter = "paused"
+
+	// Torrent is stopped
+	TorrentFilterStopped TorrentFilter = "stopped"
 
 	// Torrent is stalled
 	TorrentFilterStalled TorrentFilter = "stalled"
@@ -261,6 +270,7 @@ const (
 )
 
 type TorrentAddOptions struct {
+	Stopped            bool // introduced in Web API v2.11.0 (v5.0.0)
 	Paused             bool
 	SkipHashCheck      bool
 	ContentLayout      ContentLayout
@@ -274,14 +284,21 @@ type TorrentAddOptions struct {
 	LimitSeedTime      int64
 	Rename             string
 	FirstLastPiecePrio bool
+	SequentialDownload bool
 }
 
 func (o *TorrentAddOptions) Prepare() map[string]string {
 	options := map[string]string{}
 
 	options["paused"] = "false"
+	options["stopped"] = "false"
 	if o.Paused {
 		options["paused"] = "true"
+		options["stopped"] = "true"
+	}
+	if o.Stopped {
+		options["paused"] = "true"
+		options["stopped"] = "true"
 	}
 	if o.SkipHashCheck {
 		options["skip_checking"] = "true"
@@ -331,6 +348,10 @@ func (o *TorrentAddOptions) Prepare() map[string]string {
 	}
 
 	options["firstLastPiecePrio"] = strconv.FormatBool(o.FirstLastPiecePrio)
+
+	if o.SequentialDownload {
+		options["sequentialDownload"] = "true"
+	}
 
 	return options
 }
@@ -564,4 +585,44 @@ type AppPreferences struct {
 	WebUIUpnp                          bool   `json:"web_ui_upnp"`
 	WebUIUseCustomHTTPHeadersEnabled   bool   `json:"web_ui_use_custom_http_headers_enabled"`
 	WebUIUsername                      string `json:"web_ui_username"`
+}
+
+type MainData struct {
+	Rid               int                 `json:"rid"`
+	FullUpdate        bool                `json:"full_update"`
+	Torrents          map[string]Torrent  `json:"torrents"`
+	TorrentsRemoved   []string            `json:"torrents_removed"`
+	Categories        map[string]Category `json:"categories"`
+	CategoriesRemoved []string            `json:"categories_removed"`
+	Tags              []string            `json:"tags"`
+	TagsRemoved       []string            `json:"tags_removed"`
+	Trackers          map[string][]string `json:"trackers"`
+	ServerState       ServerState         `json:"server_state"`
+}
+
+type ServerState struct {
+	AlltimeDl            int64  `json:"alltime_dl"`
+	AlltimeUl            int64  `json:"alltime_ul"`
+	AverageTimeQueue     int    `json:"average_time_queue"`
+	ConnectionStatus     string `json:"connection_status"`
+	DhtNodes             int    `json:"dht_nodes"`
+	DlInfoData           int64  `json:"dl_info_data"`
+	DlInfoSpeed          int    `json:"dl_info_speed"`
+	DlRateLimit          int    `json:"dl_rate_limit"`
+	FreeSpaceOnDisk      uint64 `json:"free_space_on_disk"`
+	GlobalRatio          string `json:"global_ratio"`
+	QueuedIoJobs         int    `json:"queued_io_jobs"`
+	Queueing             bool   `json:"queueing"`
+	ReadCacheHits        string `json:"read_cache_hits"`
+	ReadCacheOverload    string `json:"read_cache_overload"`
+	RefreshInterval      int    `json:"refresh_interval"`
+	TotalBuffersSize     int    `json:"total_buffers_size"`
+	TotalPeerConnections int    `json:"total_peer_connections"`
+	TotalQueuedSize      int    `json:"total_queued_size"`
+	TotalWastedSession   int64  `json:"total_wasted_session"`
+	UpInfoData           int64  `json:"up_info_data"`
+	UpInfoSpeed          int    `json:"up_info_speed"`
+	UpRateLimit          int    `json:"up_rate_limit"`
+	UseAltSpeedLimits    bool   `json:"use_alt_speed_limits"`
+	WriteCacheOverload   string `json:"write_cache_overload"`
 }

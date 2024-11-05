@@ -9,6 +9,7 @@ import (
 	"net/http/cookiejar"
 	"time"
 
+	"github.com/Masterminds/semver"
 	"golang.org/x/net/publicsuffix"
 )
 
@@ -23,6 +24,8 @@ type Client struct {
 	timeout time.Duration
 
 	log *log.Logger
+
+	version *semver.Version
 }
 
 type Config struct {
