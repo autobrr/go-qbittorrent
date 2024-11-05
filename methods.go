@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/autobrr/go-qbittorrent/errors"
+
+	"github.com/Masterminds/semver"
 )
 
 // Login https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-4.1)#authentication
@@ -67,49 +69,28 @@ func (c *Client) LoginCtx(ctx context.Context) error {
 }
 
 func (c *Client) setApiVersion() error {
-	version, err := c.GetWebAPIVersionCtx(context.Background())
+	versionString, err := c.GetWebAPIVersionCtx(context.Background())
 	if err != nil {
 		return errors.Wrap(err, "could not get webapi version")
 	}
 
-	c.log.Printf("webapi version: %v", version)
+	c.log.Printf("webapi version: %v", versionString)
 
-	// convert version string to version struct for easy comparison later
-	parts := strings.Split(version, ".")
-
-	if len(parts) != 3 {
-		return errors.New("webapi version is malformed")
-	}
-
-	major, err := strconv.Atoi(parts[0])
+	ver, err := semver.NewVersion(versionString)
 	if err != nil {
-		return errors.Wrap(err, "could not convert major version")
+		return errors.Wrap(err, "could not parse webapi version")
 	}
 
-	minor, err := strconv.Atoi(parts[1])
-	if err != nil {
-		return errors.Wrap(err, "could not convert minor version")
-	}
-
-	patch, err := strconv.Atoi(parts[2])
-	if err != nil {
-		return errors.Wrap(err, "could not convert patch version")
-	}
-
-	c.version = ApiVersion{
-		Major: major,
-		Minor: minor,
-		Patch: patch,
-	}
+	c.version = ver
 
 	return nil
 }
 
-func (c *Client) getApiVersion() (ApiVersion, error) {
-	if c.version.Major == 0 && c.version.Minor == 0 && c.version.Patch == 0 {
+func (c *Client) getApiVersion() (*semver.Version, error) {
+	if c.version == nil || (c.version.Major() == 0 && c.version.Minor() == 0 && c.version.Patch() == 0) {
 		err := c.setApiVersion()
 		if err != nil {
-			return ApiVersion{}, err
+			return nil, err
 		}
 	}
 
@@ -510,12 +491,11 @@ func (c *Client) PauseCtx(ctx context.Context, hashes []string) error {
 
 	// Qbt WebAPI 2.11 changed pause with stop
 	version, err := c.getApiVersion()
-
 	if err != nil {
 		return errors.Wrap(err, "could not get api version")
 	}
 
-	if version.Major == 2 && version.Minor < 11 {
+	if version.Major() == 2 && version.Minor() < 11 {
 		endpoint = "torrents/pause"
 	}
 
@@ -561,7 +541,7 @@ func (c *Client) ResumeCtx(ctx context.Context, hashes []string) error {
 		return errors.Wrap(err, "could not get api version")
 	}
 
-	if version.Major == 2 && version.Minor < 11 {
+	if version.Major() == 2 && version.Minor() < 11 {
 		endpoint = "torrents/resume"
 	}
 

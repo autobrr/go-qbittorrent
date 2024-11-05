@@ -9,18 +9,13 @@ import (
 	"net/http/cookiejar"
 	"time"
 
+	"github.com/Masterminds/semver"
 	"golang.org/x/net/publicsuffix"
 )
 
 var (
 	DefaultTimeout = 60 * time.Second
 )
-
-type ApiVersion struct {
-	Major int
-	Minor int
-	Patch int
-}
 
 type Client struct {
 	cfg Config
@@ -30,7 +25,7 @@ type Client struct {
 
 	log *log.Logger
 
-	version ApiVersion
+	version *semver.Version
 }
 
 type Config struct {
