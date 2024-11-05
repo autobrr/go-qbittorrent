@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/autobrr/go-qbittorrent/errors"
+
+	"github.com/Masterminds/semver"
 )
 
 // Login https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-4.1)#authentication
@@ -64,6 +66,35 @@ func (c *Client) LoginCtx(ctx context.Context) error {
 	c.log.Printf("logged into client: %v", c.cfg.Host)
 
 	return nil
+}
+
+func (c *Client) setApiVersion() error {
+	versionString, err := c.GetWebAPIVersionCtx(context.Background())
+	if err != nil {
+		return errors.Wrap(err, "could not get webapi version")
+	}
+
+	c.log.Printf("webapi version: %v", versionString)
+
+	ver, err := semver.NewVersion(versionString)
+	if err != nil {
+		return errors.Wrap(err, "could not parse webapi version")
+	}
+
+	c.version = ver
+
+	return nil
+}
+
+func (c *Client) getApiVersion() (*semver.Version, error) {
+	if c.version == nil || (c.version.Major() == 0 && c.version.Minor() == 0 && c.version.Patch() == 0) {
+		err := c.setApiVersion()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return c.version, nil
 }
 
 func (c *Client) GetAppPreferences() (AppPreferences, error) {
@@ -441,6 +472,14 @@ func (c *Client) Pause(hashes []string) error {
 	return c.PauseCtx(context.Background(), hashes)
 }
 
+func (c *Client) Stop(hashes []string) error {
+	return c.PauseCtx(context.Background(), hashes)
+}
+
+func (c *Client) StopCtx(ctx context.Context, hashes []string) error {
+	return c.PauseCtx(ctx, hashes)
+}
+
 func (c *Client) PauseCtx(ctx context.Context, hashes []string) error {
 	// Add hashes together with | separator
 	hv := strings.Join(hashes, "|")
@@ -448,7 +487,19 @@ func (c *Client) PauseCtx(ctx context.Context, hashes []string) error {
 		"hashes": hv,
 	}
 
-	resp, err := c.postCtx(ctx, "torrents/pause", opts)
+	endpoint := "torrents/stop"
+
+	// Qbt WebAPI 2.11 changed pause with stop
+	version, err := c.getApiVersion()
+	if err != nil {
+		return errors.Wrap(err, "could not get api version")
+	}
+
+	if version.Major() == 2 && version.Minor() < 11 {
+		endpoint = "torrents/pause"
+	}
+
+	resp, err := c.postCtx(ctx, endpoint, opts)
 	if err != nil {
 		return errors.Wrap(err, "could not pause torrents: %v", hashes)
 	}
@@ -466,6 +517,14 @@ func (c *Client) Resume(hashes []string) error {
 	return c.ResumeCtx(context.Background(), hashes)
 }
 
+func (c *Client) Start(hashes []string) error {
+	return c.ResumeCtx(context.Background(), hashes)
+}
+
+func (c *Client) StartCtx(ctx context.Context, hashes []string) error {
+	return c.ResumeCtx(ctx, hashes)
+}
+
 func (c *Client) ResumeCtx(ctx context.Context, hashes []string) error {
 	// Add hashes together with | separator
 	hv := strings.Join(hashes, "|")
@@ -473,7 +532,20 @@ func (c *Client) ResumeCtx(ctx context.Context, hashes []string) error {
 		"hashes": hv,
 	}
 
-	resp, err := c.postCtx(ctx, "torrents/resume", opts)
+	endpoint := "torrents/start"
+
+	// Qbt WebAPI 2.11 changed resume with start
+	version, err := c.getApiVersion()
+
+	if err != nil {
+		return errors.Wrap(err, "could not get api version")
+	}
+
+	if version.Major() == 2 && version.Minor() < 11 {
+		endpoint = "torrents/resume"
+	}
+
+	resp, err := c.postCtx(ctx, endpoint, opts)
 	if err != nil {
 		return errors.Wrap(err, "could not resume torrents: %v", hashes)
 	}
