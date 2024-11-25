@@ -1250,7 +1250,7 @@ func (c *Client) GetAppVersionCtx(ctx context.Context) (string, error) {
 
 	defer resp.Body.Close()
 
-	body, err := io.ReadAllresp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", errors.Wrap(err, "could not read body")
 	}
