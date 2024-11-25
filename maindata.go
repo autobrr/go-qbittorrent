@@ -13,8 +13,6 @@ func (dest *MainData) Update(ctx context.Context, c *Client) error {
 		return err
 	}
 
-	fmt.Printf("Update: %#v\n", source)
-
 	if source.FullUpdate {
 		*dest = *source
 		return nil
@@ -28,7 +26,7 @@ func (dest *MainData) Update(ctx context.Context, c *Client) error {
 	remove(source.CategoriesRemoved, &dest.Categories)
 	remove(source.TorrentsRemoved, &dest.Torrents)
 	mergeSlice(source.Tags, &dest.Tags)
-	removeSlice(source.Tags, &dest.TagsRemoved)
+	removeSlice(source.TagsRemoved, &dest.Tags)
 	return nil
 }
 
