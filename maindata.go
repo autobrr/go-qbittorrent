@@ -2,7 +2,6 @@ package qbittorrent
 
 import (
 	"context"
-	"fmt"
 
 	"golang.org/x/exp/slices"
 )
@@ -12,8 +11,6 @@ func (dest *MainData) Update(ctx context.Context, c *Client) error {
 	if err != nil {
 		return err
 	}
-
-	fmt.Printf("Update: %#v\n", source)
 
 	if source.FullUpdate {
 		*dest = *source
@@ -28,7 +25,7 @@ func (dest *MainData) Update(ctx context.Context, c *Client) error {
 	remove(source.CategoriesRemoved, &dest.Categories)
 	remove(source.TorrentsRemoved, &dest.Torrents)
 	mergeSlice(source.Tags, &dest.Tags)
-	removeSlice(source.Tags, &dest.TagsRemoved)
+	removeSlice(source.TagsRemoved, &dest.Tags)
 	return nil
 }
 
