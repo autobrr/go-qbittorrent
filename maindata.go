@@ -2,7 +2,6 @@ package qbittorrent
 
 import (
 	"context"
-	"fmt"
 
 	"golang.org/x/exp/slices"
 )
