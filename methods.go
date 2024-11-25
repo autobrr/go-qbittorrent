@@ -480,6 +480,8 @@ func (c *Client) SyncMainDataCtx(ctx context.Context, rid int64) (*MainData, err
 		return nil, errors.Wrap(err, "could not get main data")
 	}
 
+	defer resp.Body.Close()
+	
 	var info MainData
 	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
 		return nil, errors.Wrap(err, "could not unmarshal body")
