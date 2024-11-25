@@ -43,7 +43,7 @@ func (c *Client) LoginCtx(ctx context.Context) error {
 		return errors.New("qbittorrent login bad status %v", resp.StatusCode)
 	}
 
-	bodyBytes, err := io.ReadAll(bufio.NewReader(resp.Body))
+	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return err
 	}
@@ -840,7 +840,7 @@ func (c *Client) ExportTorrentCtx(ctx context.Context, hash string) ([]byte, err
 
 	defer resp.Body.Close()
 
-	return io.ReadAll(bufio.NewReader(resp.Body))
+	return io.ReadAll(resp.Body)
 }
 
 func (c *Client) RenameFile(hash, oldPath, newPath string) error {
@@ -1250,7 +1250,7 @@ func (c *Client) GetAppVersionCtx(ctx context.Context) (string, error) {
 
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(bufio.NewReader(resp.Body))
+	body, err := io.ReadAllresp.Body)
 	if err != nil {
 		return "", errors.Wrap(err, "could not read body")
 	}
@@ -1270,7 +1270,7 @@ func (c *Client) GetWebAPIVersionCtx(ctx context.Context) (string, error) {
 
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(bufio.NewReader(resp.Body))
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", errors.Wrap(err, "could not read body")
 	}
