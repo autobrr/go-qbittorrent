@@ -2,6 +2,7 @@ package qbittorrent
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 
 	"golang.org/x/exp/slices"
@@ -116,10 +117,16 @@ func mergeStruct[S any, D any](s S, d *D) {
 	svp := reflect.ValueOf(s)
 	for i := range t.NumField() {
 		sp := svp.Field(i)
-		if sp.IsNil() || !dvp.Field(i).CanSet() {
+		if sp.IsNil() {
 			continue
 		}
 
+		if !dvp.Field(i).CanSet() {
+			fmt.Printf("cannot set %s\n", dvp.Field(i).Type().Name())
+			continue
+		}
+
+		fmt.Printf("set %s\n", dvp.Field(i).Type().Name())
 		dvp.Field(i).Set(sp.Elem())
 	}
 }
