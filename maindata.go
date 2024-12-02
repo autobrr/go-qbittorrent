@@ -7,21 +7,24 @@ import (
 	"golang.org/x/exp/slices"
 )
 
-func (dest *MainData) Update(ctx context.Context, c *Client) error {
-	source, err := c.SyncMainDataCtx(ctx, dest.Rid)
+func InitializeMainData(ctx context.Context, c *Client) (*MainData, error) {
+	m := MainData{
+		client: c,
+	}
+
+	return &m, m.Update(ctx)
+}
+
+func (dest *MainData) Update(ctx context.Context) error {
+	source, err := dest.client.SyncMainDataCtx(ctx, dest.Rid)
 	if err != nil {
 		return err
 	}
 
-	if source.FullUpdate {
-		*dest = *source
-		return nil
-	}
-
 	dest.Rid = source.Rid
-	dest.ServerState = source.ServerState
+	mergeStruct(source.ServerState, &dest.ServerState)
 	merge(source.Categories, &dest.Categories)
-	merge(source.Torrents, &dest.Torrents)
+	mergePtr(source.Torrents, &dest.Torrents)
 	merge(source.Trackers, &dest.Trackers)
 	remove(source.CategoriesRemoved, &dest.Categories)
 	remove(source.TorrentsRemoved, &dest.Torrents)
@@ -35,25 +38,23 @@ func merge[T map[string]V, V any](s T, d *T) {
 		return
 	}
 
-	t := reflect.TypeFor[V]()
+	for k, sv := range s {
+		(*d)[k] = sv
+	}
+}
+
+func mergePtr[S map[string]SV, D map[string]DV, SV any, DV any](s S, d *D) {
+	if s == nil {
+		return
+	}
+
 	for k, sv := range s {
 		dv, ok := (*d)[k]
 		if !ok {
-			(*d)[k] = sv
-			continue
+			dv = *new(DV)
 		}
 
-		dvp := reflect.ValueOf(&dv).Elem()
-		svp := reflect.ValueOf(sv)
-		for i := range t.NumField() {
-			sp := svp.Field(i)
-			if sp.IsNil() || !dvp.Field(i).CanSet() {
-				continue
-			}
-
-			dvp.Field(i).Set(sp)
-		}
-
+		mergeStruct(sv, &dv)
 		(*d)[k] = dv
 	}
 }
@@ -101,5 +102,20 @@ func removeSlice[T []string](s T, d *T) {
 		(*d)[i] = (*d)[len(*d)-1]
 		(*d) = (*d)[:len(*d)-1]
 		i--
+	}
+}
+
+func mergeStruct[S any, D any](s S, d *D) {
+	t := reflect.TypeFor[S]()
+
+	dvp := reflect.ValueOf(d).Elem()
+	svp := reflect.ValueOf(s)
+	for i := range t.NumField() {
+		sp := svp.Field(i)
+		if sp.IsNil() || !dvp.Field(i).CanSet() {
+			continue
+		}
+
+		dvp.Field(i).Set(sp.Elem())
 	}
 }
