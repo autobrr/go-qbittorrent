@@ -9,7 +9,10 @@ import (
 
 func InitializeMainData(ctx context.Context, c *Client) (*MainData, error) {
 	m := &MainData{
-		client: c,
+		client:     c,
+		Torrents:   make(map[string]Torrent),
+		Categories: make(map[string]Category),
+		Trackers:   make(map[string][]string),
 	}
 
 	err := m.Update(ctx)
