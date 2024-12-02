@@ -481,7 +481,7 @@ func (c *Client) SyncMainDataCtx(ctx context.Context, rid int64) (*MainData, err
 	}
 
 	defer resp.Body.Close()
-	
+
 	var info MainData
 	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
 		return nil, errors.Wrap(err, "could not unmarshal body")
@@ -1301,7 +1301,11 @@ func (c *Client) GetFreeSpaceOnDiskCtx(ctx context.Context) (uint64, error) {
 		return 0, errors.Wrap(err, "could not get maindata")
 	}
 
-	return info.ServerState.FreeSpaceOnDisk, nil
+	if info.ServerState.FreeSpaceOnDisk == nil {
+		return 0, errors.Wrap(err, "freespace not sent in maindata")
+	}
+
+	return *info.ServerState.FreeSpaceOnDisk, nil
 }
 
 const (

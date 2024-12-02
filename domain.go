@@ -62,6 +62,58 @@ type Torrent struct {
 	UpSpeed            int64        `json:"upspeed"`
 }
 
+type TorrentPtr struct {
+	AddedOn            *int64        `json:"added_on"`
+	AmountLeft         *int64        `json:"amount_left"`
+	AutoManaged        *bool         `json:"auto_tmm"`
+	Availability       *float64      `json:"availability"`
+	Category           *string       `json:"category"`
+	Completed          *int64        `json:"completed"`
+	CompletionOn       *int64        `json:"completion_on"`
+	ContentPath        *string       `json:"content_path"`
+	DlLimit            *int64        `json:"dl_limit"`
+	DlSpeed            *int64        `json:"dlspeed"`
+	DownloadPath       *string       `json:"download_path"`
+	Downloaded         *int64        `json:"downloaded"`
+	DownloadedSession  *int64        `json:"downloaded_session"`
+	ETA                *int64        `json:"eta"`
+	FirstLastPiecePrio *bool         `json:"f_l_piece_prio"`
+	ForceStart         *bool         `json:"force_start"`
+	Hash               *string       `json:"hash"`
+	InfohashV1         *string       `json:"infohash_v1"`
+	InfohashV2         *string       `json:"infohash_v2"`
+	LastActivity       *int64        `json:"last_activity"`
+	MagnetURI          *string       `json:"magnet_uri"`
+	MaxRatio           *float64      `json:"max_ratio"`
+	MaxSeedingTime     *int64        `json:"max_seeding_time"`
+	Name               *string       `json:"name"`
+	NumComplete        *int64        `json:"num_complete"`
+	NumIncomplete      *int64        `json:"num_incomplete"`
+	NumLeechs          *int64        `json:"num_leechs"`
+	NumSeeds           *int64        `json:"num_seeds"`
+	Priority           *int64        `json:"priority"`
+	Progress           *float64      `json:"progress"`
+	Ratio              *float64      `json:"ratio"`
+	RatioLimit         *float64      `json:"ratio_limit"`
+	SavePath           *string       `json:"save_path"`
+	SeedingTime        *int64        `json:"seeding_time"`
+	SeedingTimeLimit   *int64        `json:"seeding_time_limit"`
+	SeenComplete       *int64        `json:"seen_complete"`
+	SequentialDownload *bool         `json:"seq_dl"`
+	Size               *int64        `json:"size"`
+	State              *TorrentState `json:"state"`
+	SuperSeeding       *bool         `json:"super_seeding"`
+	Tags               *string       `json:"tags"`
+	TimeActive         *int64        `json:"time_active"`
+	TotalSize          *int64        `json:"total_size"`
+	Tracker            *string       `json:"tracker"`
+	TrackersCount      *int64        `json:"trackers_count"`
+	UpLimit            *int64        `json:"up_limit"`
+	Uploaded           *int64        `json:"uploaded"`
+	UploadedSession    *int64        `json:"uploaded_session"`
+	UpSpeed            *int64        `json:"upspeed"`
+}
+
 type TorrentTrackersResponse struct {
 	Trackers []TorrentTracker `json:"trackers"`
 }
@@ -588,41 +640,41 @@ type AppPreferences struct {
 }
 
 type MainData struct {
-	Rid               int64               `json:"rid"`
-	FullUpdate        bool                `json:"full_update"`
-	Torrents          map[string]Torrent  `json:"torrents"`
-	TorrentsRemoved   []string            `json:"torrents_removed"`
-	Categories        map[string]Category `json:"categories"`
-	CategoriesRemoved []string            `json:"categories_removed"`
-	Tags              []string            `json:"tags"`
-	TagsRemoved       []string            `json:"tags_removed"`
-	Trackers          map[string][]string `json:"trackers"`
-	ServerState       ServerState         `json:"server_state"`
+	Rid               int64                 `json:"rid"`
+	FullUpdate        bool                  `json:"full_update"`
+	Torrents          map[string]TorrentPtr `json:"torrents"`
+	TorrentsRemoved   []string              `json:"torrents_removed"`
+	Categories        map[string]Category   `json:"categories"`
+	CategoriesRemoved []string              `json:"categories_removed"`
+	Tags              []string              `json:"tags"`
+	TagsRemoved       []string              `json:"tags_removed"`
+	Trackers          map[string][]string   `json:"trackers"`
+	ServerState       ServerState           `json:"server_state"`
 }
 
 type ServerState struct {
-	AlltimeDl            int64  `json:"alltime_dl"`
-	AlltimeUl            int64  `json:"alltime_ul"`
-	AverageTimeQueue     int64  `json:"average_time_queue"`
-	ConnectionStatus     string `json:"connection_status"`
-	DhtNodes             int64  `json:"dht_nodes"`
-	DlInfoData           int64  `json:"dl_info_data"`
-	DlInfoSpeed          int64  `json:"dl_info_speed"`
-	DlRateLimit          int64  `json:"dl_rate_limit"`
-	FreeSpaceOnDisk      uint64 `json:"free_space_on_disk"`
-	GlobalRatio          string `json:"global_ratio"`
-	QueuedIoJobs         int64  `json:"queued_io_jobs"`
-	Queueing             bool   `json:"queueing"`
-	ReadCacheHits        string `json:"read_cache_hits"`
-	ReadCacheOverload    string `json:"read_cache_overload"`
-	RefreshInterval      int64  `json:"refresh_interval"`
-	TotalBuffersSize     int64  `json:"total_buffers_size"`
-	TotalPeerConnections int64  `json:"total_peer_connections"`
-	TotalQueuedSize      int64  `json:"total_queued_size"`
-	TotalWastedSession   int64  `json:"total_wasted_session"`
-	UpInfoData           int64  `json:"up_info_data"`
-	UpInfoSpeed          int64  `json:"up_info_speed"`
-	UpRateLimit          int64  `json:"up_rate_limit"`
-	UseAltSpeedLimits    bool   `json:"use_alt_speed_limits"`
-	WriteCacheOverload   string `json:"write_cache_overload"`
+	AlltimeDl            *int64  `json:"alltime_dl"`
+	AlltimeUl            *int64  `json:"alltime_ul"`
+	AverageTimeQueue     *int64  `json:"average_time_queue"`
+	ConnectionStatus     *string `json:"connection_status"`
+	DhtNodes             *int64  `json:"dht_nodes"`
+	DlInfoData           *int64  `json:"dl_info_data"`
+	DlInfoSpeed          *int64  `json:"dl_info_speed"`
+	DlRateLimit          *int64  `json:"dl_rate_limit"`
+	FreeSpaceOnDisk      *uint64 `json:"free_space_on_disk"`
+	GlobalRatio          *string `json:"global_ratio"`
+	QueuedIoJobs         *int64  `json:"queued_io_jobs"`
+	Queueing             *bool   `json:"queueing"`
+	ReadCacheHits        *string `json:"read_cache_hits"`
+	ReadCacheOverload    *string `json:"read_cache_overload"`
+	RefreshInterval      *int64  `json:"refresh_interval"`
+	TotalBuffersSize     *int64  `json:"total_buffers_size"`
+	TotalPeerConnections *int64  `json:"total_peer_connections"`
+	TotalQueuedSize      *int64  `json:"total_queued_size"`
+	TotalWastedSession   *int64  `json:"total_wasted_session"`
+	UpInfoData           *int64  `json:"up_info_data"`
+	UpInfoSpeed          *int64  `json:"up_info_speed"`
+	UpRateLimit          *int64  `json:"up_rate_limit"`
+	UseAltSpeedLimits    *bool   `json:"use_alt_speed_limits"`
+	WriteCacheOverload   *string `json:"write_cache_overload"`
 }
