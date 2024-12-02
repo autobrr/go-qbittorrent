@@ -8,11 +8,12 @@ import (
 )
 
 func InitializeMainData(ctx context.Context, c *Client) (*MainData, error) {
-	m := MainData{
+	m := &MainData{
 		client: c,
 	}
 
-	return &m, m.Update(ctx)
+	err := m.Update(ctx)
+	return m, err
 }
 
 func (dest *MainData) Update(ctx context.Context) error {
