@@ -188,6 +188,11 @@ func (c *Client) GetTorrentsCtx(ctx context.Context, o TorrentFilterOptions) ([]
 		opts["hashes"] = strings.Join(o.Hashes, "|")
 	}
 
+	// qbit v5.1+
+	if o.IncludeTrackers {
+		opts["includeTrackers"] = strconv.FormatBool(o.IncludeTrackers)
+	}
+
 	resp, err := c.getCtx(ctx, "torrents/info", opts)
 	if err != nil {
 		return nil, errors.Wrap(err, "get torrents error")
@@ -481,7 +486,7 @@ func (c *Client) SyncMainDataCtx(ctx context.Context, rid int64) (*MainData, err
 	}
 
 	defer resp.Body.Close()
-	
+
 	var info MainData
 	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
 		return nil, errors.Wrap(err, "could not unmarshal body")
