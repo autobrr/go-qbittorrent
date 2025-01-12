@@ -1001,6 +1001,28 @@ func (c *Client) AddTagsCtx(ctx context.Context, hashes []string, tags string) e
 	return nil
 }
 
+func (c *Client) SetTags(ctx context.Context, hashes []string, tags string) error {
+	// Add hashes together with | separator
+	hv := strings.Join(hashes, "|")
+	opts := map[string]string{
+		"hashes": hv,
+		"tags":   tags,
+	}
+
+	resp, err := c.postCtx(ctx, "torrents/setTags", opts)
+	if err != nil {
+		return errors.Wrap(err, "could not setTags torrents: %v", hashes)
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return errors.New("could not setTags torrents: %v unexpected status: %v", hashes, resp.StatusCode)
+	}
+
+	return nil
+}
+
 // DeleteTags delete tags from qBittorrent
 func (c *Client) DeleteTags(tags []string) error {
 	return c.DeleteTagsCtx(context.Background(), tags)
