@@ -481,7 +481,7 @@ func (c *Client) SyncMainDataCtx(ctx context.Context, rid int64) (*MainData, err
 	}
 
 	defer resp.Body.Close()
-	
+
 	var info MainData
 	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
 		return nil, errors.Wrap(err, "could not unmarshal body")
@@ -951,6 +951,28 @@ func (c *Client) AddTagsCtx(ctx context.Context, hashes []string, tags string) e
 
 	if resp.StatusCode != http.StatusOK {
 		return errors.New("could not addTags torrents: %v unexpected status: %v", hashes, resp.StatusCode)
+	}
+
+	return nil
+}
+
+func (c *Client) SetTags(ctx context.Context, hashes []string, tags string) error {
+	// Add hashes together with | separator
+	hv := strings.Join(hashes, "|")
+	opts := map[string]string{
+		"hashes": hv,
+		"tags":   tags,
+	}
+
+	resp, err := c.postCtx(ctx, "torrents/setTags", opts)
+	if err != nil {
+		return errors.Wrap(err, "could not setTags torrents: %v", hashes)
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return errors.New("could not setTags torrents: %v unexpected status: %v", hashes, resp.StatusCode)
 	}
 
 	return nil
