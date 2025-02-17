@@ -837,15 +837,15 @@ func (c *Client) GetFilesInformationCtx(ctx context.Context, hash string) (*Torr
 }
 
 // SetFilePriority Set file priority
-func (c *Client) SetFilePriority(hash string, id, priority int) (error) {
-	return c.SetFilePriorityCtx(context.Background(), hash, id, priority)
+func (c *Client) SetFilePriority(hash string, IDs string, priority int) (error) {
+	return c.SetFilePriorityCtx(context.Background(), hash, IDs, priority)
 }
 
 // SetFilePriorityCtx Set file priority
-func (c *Client) SetFilePriorityCtx(ctx context.Context, hash string, id, priority int) (error) {
+func (c *Client) SetFilePriorityCtx(ctx context.Context, hash string, IDs string, priority int) (error) {
 	opts := map[string]string{
 		"hash": 	hash,
-		"id": 		strconv.Itoa(id),
+		"id": 		IDs,
 		"priority": strconv.Itoa(priority),
 	}
 
