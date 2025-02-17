@@ -836,6 +836,51 @@ func (c *Client) GetFilesInformationCtx(ctx context.Context, hash string) (*Torr
 	return &info, nil
 }
 
+// SetFilePriority Set file priority
+func (c *Client) SetFilePriority(hash string, id, priority int) (error) {
+	return c.SetFilePriorityCtx(context.Background(), hash, id, priority)
+}
+
+// SetFilePriorityCtx Set file priority
+func (c *Client) SetFilePriorityCtx(ctx context.Context, hash string, id, priority int) (error) {
+	opts := map[string]string{
+		"hash": 	hash,
+		"id": 		strconv.Itoa(id),
+		"priority": strconv.Itoa(priority),
+	}
+
+	resp, err := c.postCtx(ctx, "torrents/filePrio", opts)
+	if err != nil {
+		return errors.Wrap(err, "could not set file priority")
+	}
+
+	defer resp.Body.Close()
+
+	/*
+		HTTP Status Code 	Scenario
+		400		Priority is invalid
+		400 	At least one file id is not a valid integer
+		404 	Torrent hash was not found
+		409 	Torrent metadata hasn't downloaded yet
+		409 	At least one file id was not found
+		200 	All other scenarios
+	*/
+	switch resp.StatusCode {
+	case http.StatusBadRequest:
+		return errors.New("Priority is invalid")
+	case http.StatusNotFound:
+		return errors.New("torrent %s not found", hash)
+	case http.StatusConflict:
+		return errors.New("At least one file id was not found")
+	case http.StatusOK:
+		return nil
+	default:
+		return errors.New("could set file priority for torrent: %s unexpected status: %d", hash, resp.StatusCode)
+	}
+
+	return nil
+}
+
 func (c *Client) ExportTorrent(hash string) ([]byte, error) {
 	return c.ExportTorrentCtx(context.Background(), hash)
 }
