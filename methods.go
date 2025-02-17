@@ -1057,6 +1057,40 @@ func (c *Client) EditTrackerCtx(ctx context.Context, hash string, old, new strin
 	}
 }
 
+// AddTrackers add trackers of torrent
+func (c *Client) AddTrackers(hash string, urls string) error {
+	return c.AddTrackersCtx(context.Background(), hash, urls)
+}
+
+// AddTrackersCtx add trackers of torrent
+func (c *Client) AddTrackersCtx(ctx context.Context, hash string, urls string) error {
+	opts := map[string]string{
+		"hash": hash,
+		"urls": urls,
+	}
+	
+	resp, err := c.postCtx(ctx, "torrents/addTrackers", opts)
+	if err != nil {
+		return errors.Wrap(err, "could not edit tracker for torrent: %s", hash)
+	}
+
+	defer resp.Body.Close()
+
+	/*
+		HTTP Status Code 	Scenario
+		404 	Torrent hash was not found
+		200 	All other scenarios
+	*/
+	switch resp.StatusCode {
+	case http.StatusNotFound:
+		return errors.New("torrent %s not found", hash)
+	case http.StatusOK:
+		return nil
+	default:
+		return errors.New("could not add trackers for torrent: %s unexpected status: %d", hash, resp.StatusCode)
+	}
+}
+
 // SetPreferencesQueueingEnabled enable/disable torrent queueing
 func (c *Client) SetPreferencesQueueingEnabled(enabled bool) error {
 	return c.SetPreferences(map[string]interface{}{"queueing_enabled": enabled})
