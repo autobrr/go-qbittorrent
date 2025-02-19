@@ -96,3 +96,10 @@ func NewClient(cfg Config) *Client {
 
 	return c
 }
+
+// WithHTTPClient allows you to a provide a custom [http.Client].
+func (r *Client) WithHTTPClient(client *http.Client) *Client {
+	client.Jar = r.http.Jar
+	r.http = client
+	return r
+}
