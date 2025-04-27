@@ -481,7 +481,7 @@ func (c *Client) SyncMainDataCtx(ctx context.Context, rid int64) (*MainData, err
 	}
 
 	defer resp.Body.Close()
-	
+
 	var info MainData
 	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
 		return nil, errors.Wrap(err, "could not unmarshal body")
@@ -1303,27 +1303,81 @@ func (c *Client) ToggleFirstLastPiecePrioCtx(ctx context.Context, hashes []strin
 	return nil
 }
 
-// SetTorrentUploadLimit set upload limit for torrent specified by hash
-func (c *Client) SetTorrentUploadLimit(hash string, limit int64) error {
-	return c.SetTorrentUploadLimitCtx(context.Background(), hash, limit)
+// SetTorrentDownloadLimit set download limit for torrents specified by hashes
+func (c *Client) SetTorrentDownloadLimit(hashes []string, limit int64) error {
+	return c.SetTorrentDownloadLimitCtx(context.Background(), hashes, limit)
 }
 
-// SetTorrentUploadLimitCtx set upload limit for torrent specified by hash
-func (c *Client) SetTorrentUploadLimitCtx(ctx context.Context, hash string, limit int64) error {
+// SetTorrentDownloadLimitCtx set download limit for torrents specified by hashes
+func (c *Client) SetTorrentDownloadLimitCtx(ctx context.Context, hashes []string, limit int64) error {
 	opts := map[string]string{
-		"hashes": hash,
+		"hashes": strings.Join(hashes, "|"),
 		"limit":  strconv.FormatInt(limit, 10),
 	}
 
-	resp, err := c.postCtx(ctx, "torrents/setUploadLimit", opts)
+	resp, err := c.postCtx(ctx, "torrents/setDownloadLimit", opts)
 	if err != nil {
-		return errors.Wrap(err, "could not set upload limit torrent: %v", hash)
+		return errors.Wrap(err, "could not set download limit for torrents: %v", hashes)
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.New("could not set upload limit torrent: %v unexpected status: %v", hash, resp.StatusCode)
+		return errors.New("could not set download limit for torrents: %v unexpected status: %v", hashes, resp.StatusCode)
+	}
+
+	return nil
+}
+
+// SetTorrentShareLimit set share limits for torrents specified by hashes
+func (c *Client) SetTorrentShareLimit(hashes []string, ratioLimit float64, seedingTimeLimit int64, inactiveSeedingTimeLimit int64) error {
+	return c.SetTorrentShareLimitCtx(context.Background(), hashes, ratioLimit, seedingTimeLimit, inactiveSeedingTimeLimit)
+}
+
+// SetTorrentShareLimitCtx set share limits for torrents specified by hashes
+func (c *Client) SetTorrentShareLimitCtx(ctx context.Context, hashes []string, ratioLimit float64, seedingTimeLimit int64, inactiveSeedingTimeLimit int64) error {
+	opts := map[string]string{
+		"hashes":                   strings.Join(hashes, "|"),
+		"ratioLimit":               strconv.FormatFloat(ratioLimit, 'f', 2, 64),
+		"seedingTimeLimit":         strconv.FormatInt(seedingTimeLimit, 10),
+		"inactiveSeedingTimeLimit": strconv.FormatInt(inactiveSeedingTimeLimit, 10),
+	}
+
+	resp, err := c.postCtx(ctx, "torrents/setShareLimits", opts)
+	if err != nil {
+		return errors.Wrap(err, "could not set share limits for torrents: %v", hashes)
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return errors.New("could not set share limits for torrents: %v unexpected status: %v", hashes, resp.StatusCode)
+	}
+
+	return nil
+}
+
+// SetTorrentUploadLimit set upload limit for torrent specified by hashes
+func (c *Client) SetTorrentUploadLimit(hashes []string, limit int64) error {
+	return c.SetTorrentUploadLimitCtx(context.Background(), hashes, limit)
+}
+
+// SetTorrentUploadLimitCtx set upload limit for torrent specified by hashes
+func (c *Client) SetTorrentUploadLimitCtx(ctx context.Context, hashes []string, limit int64) error {
+	opts := map[string]string{
+		"hashes": strings.Join(hashes, "|"),
+		"limit":  strconv.FormatInt(limit, 10),
+	}
+
+	resp, err := c.postCtx(ctx, "torrents/setUploadLimit", opts)
+	if err != nil {
+		return errors.Wrap(err, "could not set upload limit for torrents: %v", hashes)
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return errors.New("could not set upload limit for torrents: %v unexpected status: %v", hashes, resp.StatusCode)
 	}
 
 	return nil
