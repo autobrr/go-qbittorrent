@@ -999,6 +999,9 @@ func (c *Client) AddTagsCtx(ctx context.Context, hashes []string, tags string) e
 	return nil
 }
 
+// SetTags is a new method in qBittorrent 5.1 WebAPI 2.11.4 that allows for upserting tags in one go, instead of having to remove and add tags in different calls.
+// For client instances with a lot of torrents, this will benefit a lot.
+// It checks for the required min version, and if it's less than the required version, it will error, and then the caller can handle it how they want.
 func (c *Client) SetTags(ctx context.Context, hashes []string, tags string) error {
 	if ok, err := c.RequiresMinVersion(semver.MustParse("2.11.4")); !ok {
 		return errors.Wrap(err, "SetTags requires qBittorrent 5.1 and WebAPI >= 2.11.4")
