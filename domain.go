@@ -8,6 +8,7 @@ import (
 
 var (
 	ErrReannounceTookTooLong = errors.New("reannounce took too long, deleted torrent")
+	ErrUnsupportedVersion    = errors.New("qBittorrent version too old, please upgrade to use this feature")
 )
 
 type Torrent struct {

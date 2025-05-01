@@ -837,15 +837,15 @@ func (c *Client) GetFilesInformationCtx(ctx context.Context, hash string) (*Torr
 }
 
 // SetFilePriority Set file priority
-func (c *Client) SetFilePriority(hash string, IDs string, priority int) (error) {
+func (c *Client) SetFilePriority(hash string, IDs string, priority int) error {
 	return c.SetFilePriorityCtx(context.Background(), hash, IDs, priority)
 }
 
 // SetFilePriorityCtx Set file priority
-func (c *Client) SetFilePriorityCtx(ctx context.Context, hash string, IDs string, priority int) (error) {
+func (c *Client) SetFilePriorityCtx(ctx context.Context, hash string, IDs string, priority int) error {
 	opts := map[string]string{
-		"hash": 	hash,
-		"id": 		IDs,
+		"hash":     hash,
+		"id":       IDs,
 		"priority": strconv.Itoa(priority),
 	}
 
@@ -875,10 +875,8 @@ func (c *Client) SetFilePriorityCtx(ctx context.Context, hash string, IDs string
 	case http.StatusOK:
 		return nil
 	default:
-		return errors.New("could set file priority for torrent: %s unexpected status: %d", hash, resp.StatusCode)
+		return errors.New("could not set file priority for torrent: %s unexpected status: %d", hash, resp.StatusCode)
 	}
-
-	return nil
 }
 
 func (c *Client) ExportTorrent(hash string) ([]byte, error) {
@@ -1001,6 +999,35 @@ func (c *Client) AddTagsCtx(ctx context.Context, hashes []string, tags string) e
 	return nil
 }
 
+// SetTags is a new method in qBittorrent 5.1 WebAPI 2.11.4 that allows for upserting tags in one go, instead of having to remove and add tags in different calls.
+// For client instances with a lot of torrents, this will benefit a lot.
+// It checks for the required min version, and if it's less than the required version, it will error, and then the caller can handle it how they want.
+func (c *Client) SetTags(ctx context.Context, hashes []string, tags string) error {
+	if ok, err := c.RequiresMinVersion(semver.MustParse("2.11.4")); !ok {
+		return errors.Wrap(err, "SetTags requires qBittorrent 5.1 and WebAPI >= 2.11.4")
+	}
+
+	// Add hashes together with | separator
+	hv := strings.Join(hashes, "|")
+	opts := map[string]string{
+		"hashes": hv,
+		"tags":   tags,
+	}
+
+	resp, err := c.postCtx(ctx, "torrents/setTags", opts)
+	if err != nil {
+		return errors.Wrap(err, "could not setTags torrents: %v", hashes)
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return errors.New("could not setTags torrents: %v unexpected status: %v", hashes, resp.StatusCode)
+	}
+
+	return nil
+}
+
 // DeleteTags delete tags from qBittorrent
 func (c *Client) DeleteTags(tags []string) error {
 	return c.DeleteTagsCtx(context.Background(), tags)
@@ -1113,7 +1140,7 @@ func (c *Client) AddTrackersCtx(ctx context.Context, hash string, urls string) e
 		"hash": hash,
 		"urls": urls,
 	}
-	
+
 	resp, err := c.postCtx(ctx, "torrents/addTrackers", opts)
 	if err != nil {
 		return errors.Wrap(err, "could not edit tracker for torrent: %s", hash)
@@ -1435,6 +1462,20 @@ func (c *Client) GetFreeSpaceOnDiskCtx(ctx context.Context) (uint64, error) {
 	}
 
 	return info.ServerState.FreeSpaceOnDisk, nil
+}
+
+// RequiresMinVersion checks the current version against version X and errors if the current version is older than X
+func (c *Client) RequiresMinVersion(minVersion *semver.Version) (bool, error) {
+	version, err := c.getApiVersion()
+	if err != nil {
+		return false, errors.Wrap(err, "could not get api version")
+	}
+
+	if version.LessThan(minVersion) {
+		return false, errors.Wrap(ErrUnsupportedVersion, "qBittorrent WebAPI version %s is older than required %s", version.String(), minVersion.String())
+	}
+
+	return true, nil
 }
 
 const (
