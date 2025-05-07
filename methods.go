@@ -928,6 +928,32 @@ func (c *Client) RenameFileCtx(ctx context.Context, hash, oldPath, newPath strin
 	return nil
 }
 
+// SetTorrentName set name for torrent specified by hash
+func (c *Client) SetTorrentName(hash string, name string) error {
+	return c.SetTorrentNameCtx(context.Background(), hash, name)
+}
+
+// SetTorrentNameCtx set name for torrent specified by hash
+func (c *Client) SetTorrentNameCtx(ctx context.Context, hash string, name string) error {
+	opts := map[string]string{
+		"hash": hash,
+		"name": name,
+	}
+
+	resp, err := c.postCtx(ctx, "torrents/rename", opts)
+	if err != nil {
+		return errors.Wrap(err, "could not rename torrent: %v | name: %v", hash, name)
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return errors.New("ould not rename torrent: %v unexpected status: %v", hash, resp.StatusCode)
+	}
+
+	return nil
+}
+
 func (c *Client) GetTags() ([]string, error) {
 	return c.GetTagsCtx(context.Background())
 }
