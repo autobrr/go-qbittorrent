@@ -947,11 +947,16 @@ func (c *Client) SetTorrentNameCtx(ctx context.Context, hash string, name string
 
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return errors.New("ould not rename torrent: %v unexpected status: %v", hash, resp.StatusCode)
+	switch sc := resp.StatusCode; sc {
+	case http.StatusOK:
+		return nil
+	case http.StatusNotFound:
+		return errors.New("torrent hash is invalid: %v", hash)
+	case http.StatusConflict:
+		return errors.New("torrent name is empty: %v", name)
+	default:
+		return errors.New("could not rename torrent: %v unexpected status: %v", hash, resp.StatusCode)
 	}
-
-	return nil
 }
 
 func (c *Client) GetTags() ([]string, error) {
