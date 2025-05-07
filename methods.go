@@ -76,7 +76,7 @@ func (c *Client) Shutdown() error {
 func (c *Client) ShutdownCtx(ctx context.Context) error {
 	resp, err := c.postCtx(ctx, "app/shutdown", nil)
 	if err != nil {
-		return errors.Wrap(err, "could not set shutdown")
+		return errors.Wrap(err, "could not trigger shutdown")
 	}
 	defer resp.Body.Close()
 
@@ -1375,12 +1375,12 @@ func (c *Client) ToggleAlternativeSpeedLimitsCtx(ctx context.Context) error {
 	return nil
 }
 
-// GetAlternativeSpeedLimitsMode get global upload limit
+// GetAlternativeSpeedLimitsMode get alternative speed limits mode
 func (c *Client) GetAlternativeSpeedLimitsMode() (bool, error) {
 	return c.GetAlternativeSpeedLimitsModeCtx(context.Background())
 }
 
-// GetAlternativeSpeedLimitsModeCtx get global upload limit
+// GetAlternativeSpeedLimitsModeCtx get alternative speed limits mode
 func (c *Client) GetAlternativeSpeedLimitsModeCtx(ctx context.Context) (bool, error) {
 	var m bool
 	resp, err := c.getCtx(ctx, "transfer/speedLimitsMode", nil)
@@ -1421,7 +1421,7 @@ func (c *Client) SetGlobalDownloadLimitCtx(ctx context.Context, limit int64) err
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.New("could not set download limit: %v unexpected status: %v", limit, resp.StatusCode)
+		return errors.New("could not set global download limit: %v unexpected status: %v", limit, resp.StatusCode)
 	}
 
 	return nil
@@ -1438,33 +1438,6 @@ func (c *Client) GetGlobalDownloadLimitCtx(ctx context.Context) (int64, error) {
 	resp, err := c.getCtx(ctx, "transfer/downloadLimit", nil)
 	if err != nil {
 		return m, errors.Wrap(err, "could not get global download limit")
-	}
-
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return m, errors.Wrap(err, "could not read body")
-	}
-
-	if err := json.Unmarshal(body, &m); err != nil {
-		return m, errors.Wrap(err, "could not unmarshal body")
-	}
-
-	return m, nil
-}
-
-// GetGlobalUploadLimit get global upload limit
-func (c *Client) GetGlobalUploadLimit() (int64, error) {
-	return c.GetGlobalDownloadLimitCtx(context.Background())
-}
-
-// GetGlobalUploadLimitCtx get global upload limit
-func (c *Client) GetGlobalUploadLimitCtx(ctx context.Context) (int64, error) {
-	var m int64
-	resp, err := c.getCtx(ctx, "transfer/uploadLimit", nil)
-	if err != nil {
-		return m, errors.Wrap(err, "could not get global upload limit")
 	}
 
 	defer resp.Body.Close()
@@ -1504,6 +1477,33 @@ func (c *Client) SetGlobalUploadLimitCtx(ctx context.Context, limit int64) error
 	}
 
 	return nil
+}
+
+// GetGlobalUploadLimit get global upload limit
+func (c *Client) GetGlobalUploadLimit() (int64, error) {
+	return c.GetGlobalUploadLimitCtx(context.Background())
+}
+
+// GetGlobalUploadLimitCtx get global upload limit
+func (c *Client) GetGlobalUploadLimitCtx(ctx context.Context) (int64, error) {
+	var m int64
+	resp, err := c.getCtx(ctx, "transfer/uploadLimit", nil)
+	if err != nil {
+		return m, errors.Wrap(err, "could not get global upload limit")
+	}
+
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return m, errors.Wrap(err, "could not read body")
+	}
+
+	if err := json.Unmarshal(body, &m); err != nil {
+		return m, errors.Wrap(err, "could not unmarshal body")
+	}
+
+	return m, nil
 }
 
 // SetTorrentDownloadLimit set download limit for torrents specified by hashes
@@ -1658,7 +1658,7 @@ func (c *Client) GetPeerLogs() ([]PeerLog, error) {
 	return c.GetPeerLogsCtx(context.Background())
 }
 
-// GetPeerLogsCtx get peert logs
+// GetPeerLogsCtx get peer logs
 func (c *Client) GetPeerLogsCtx(ctx context.Context) ([]PeerLog, error) {
 	resp, err := c.getCtx(ctx, "log/main", nil)
 	if err != nil {
