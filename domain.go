@@ -629,3 +629,20 @@ type ServerState struct {
 	UseAltSpeedLimits    bool   `json:"use_alt_speed_limits"`
 	WriteCacheOverload   string `json:"write_cache_overload"`
 }
+
+// Log
+type Log struct {
+	ID        int64  `json:"id"`
+	Message   string `json:"message"`
+	Timestamp int64  `json:"timestamp"`
+	Type      int64  `json:"type"`
+}
+
+// PeerLog
+type PeerLog struct {
+	ID        int64  `json:"id"`
+	IP        string `json:"ip"`
+	Blocked   bool   `json:"blocked"`
+	Timestamp int64  `json:"timestamp"`
+	Reason    string `json:"reason"`
+}
