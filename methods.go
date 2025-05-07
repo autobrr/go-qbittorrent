@@ -947,6 +947,37 @@ func (c *Client) RenameFileCtx(ctx context.Context, hash, oldPath, newPath strin
 	return nil
 }
 
+// SetTorrentName set name for torrent specified by hash
+func (c *Client) SetTorrentName(hash string, name string) error {
+	return c.SetTorrentNameCtx(context.Background(), hash, name)
+}
+
+// SetTorrentNameCtx set name for torrent specified by hash
+func (c *Client) SetTorrentNameCtx(ctx context.Context, hash string, name string) error {
+	opts := map[string]string{
+		"hash": hash,
+		"name": name,
+	}
+
+	resp, err := c.postCtx(ctx, "torrents/rename", opts)
+	if err != nil {
+		return errors.Wrap(err, "could not rename torrent: %v | name: %v", hash, name)
+	}
+
+	defer resp.Body.Close()
+
+	switch sc := resp.StatusCode; sc {
+	case http.StatusOK:
+		return nil
+	case http.StatusNotFound:
+		return errors.New("torrent hash is invalid: %v", hash)
+	case http.StatusConflict:
+		return errors.New("torrent name is empty: %v", name)
+	default:
+		return errors.New("could not rename torrent: %v unexpected status: %v", hash, resp.StatusCode)
+	}
+}
+
 func (c *Client) GetTags() ([]string, error) {
 	return c.GetTagsCtx(context.Background())
 }
@@ -1680,12 +1711,12 @@ func (c *Client) GetPeerLogsCtx(ctx context.Context) ([]PeerLog, error) {
 	return m, nil
 }
 
-func (c *Client) GetFreeSpaceOnDisk() (uint64, error) {
+func (c *Client) GetFreeSpaceOnDisk() (int64, error) {
 	return c.GetFreeSpaceOnDiskCtx(context.Background())
 }
 
 // GetFreeSpaceOnDiskCtx get free space on disk for default download dir. Expensive call
-func (c *Client) GetFreeSpaceOnDiskCtx(ctx context.Context) (uint64, error) {
+func (c *Client) GetFreeSpaceOnDiskCtx(ctx context.Context) (int64, error) {
 	info, err := c.SyncMainDataCtx(ctx, 0)
 	if err != nil {
 		return 0, errors.Wrap(err, "could not get maindata")

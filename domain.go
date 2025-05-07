@@ -612,7 +612,7 @@ type ServerState struct {
 	DlInfoData           int64  `json:"dl_info_data"`
 	DlInfoSpeed          int64  `json:"dl_info_speed"`
 	DlRateLimit          int64  `json:"dl_rate_limit"`
-	FreeSpaceOnDisk      uint64 `json:"free_space_on_disk"`
+	FreeSpaceOnDisk      int64  `json:"free_space_on_disk"`
 	GlobalRatio          string `json:"global_ratio"`
 	QueuedIoJobs         int64  `json:"queued_io_jobs"`
 	Queueing             bool   `json:"queueing"`
