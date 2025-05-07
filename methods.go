@@ -1486,12 +1486,12 @@ func (c *Client) GetWebAPIVersionCtx(ctx context.Context) (string, error) {
 	return string(body), nil
 }
 
-func (c *Client) GetFreeSpaceOnDisk() (uint64, error) {
+func (c *Client) GetFreeSpaceOnDisk() (int64, error) {
 	return c.GetFreeSpaceOnDiskCtx(context.Background())
 }
 
 // GetFreeSpaceOnDiskCtx get free space on disk for default download dir. Expensive call
-func (c *Client) GetFreeSpaceOnDiskCtx(ctx context.Context) (uint64, error) {
+func (c *Client) GetFreeSpaceOnDiskCtx(ctx context.Context) (int64, error) {
 	info, err := c.SyncMainDataCtx(ctx, 0)
 	if err != nil {
 		return 0, errors.Wrap(err, "could not get maindata")
