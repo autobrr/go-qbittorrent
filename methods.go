@@ -705,7 +705,7 @@ func (c *Client) SetLocationCtx(ctx context.Context, hashes []string, location s
 	/*
 		HTTP Status Code 	Scenario
 		400 	Save path is empty
-		403     User Doesn't have write access to directory
+		403     User does not have write access to directory
 		409     Unable to create save path directory
 		200 	All other scenarios
 	*/
@@ -837,7 +837,7 @@ func (c *Client) SetCategoryCtx(ctx context.Context, hashes []string, category s
 
 	/*
 		HTTP Status Code 	Scenario
-		409 	Categor name does not exist
+		409 	Category name does not exist
 		200 	All other scenarios
 	*/
 	switch resp.StatusCode {
@@ -994,7 +994,7 @@ func (c *Client) RenameFileCtx(ctx context.Context, hash, oldPath, newPath strin
 	case http.StatusBadRequest:
 		return errors.New("missing newPath parameter: %s", newPath)
 	case http.StatusConflict:
-		return errors.New("invalid newPath or oldPath, or newPath already in use: newPath: %s, oldPath: %s", newPath, oldPath)
+		return errors.New("invalid newPath or oldPath, or newPath already in use: old: %s | new: %s", oldPath, newPath)
 	case http.StatusOK:
 		return nil
 	default:
