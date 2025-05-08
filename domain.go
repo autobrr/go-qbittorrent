@@ -69,7 +69,7 @@ type TorrentTrackersResponse struct {
 }
 
 type TorrentTracker struct {
-	//Tier          int   `json:"tier"` // can be both empty "" and int
+	// Tier          int   `json:"tier"` // can be both empty "" and int
 	Url           string        `json:"url"`
 	Status        TrackerStatus `json:"status"`
 	NumPeers      int           `json:"num_peers"`
@@ -495,7 +495,7 @@ type AppPreferences struct {
 	MaxConcurrentHTTPAnnounces       int         `json:"max_concurrent_http_announces"`
 	MaxConnec                        int         `json:"max_connec"`
 	MaxConnecPerTorrent              int         `json:"max_connec_per_torrent"`
-	MaxRatio                         int         `json:"max_ratio"`
+	MaxRatio                         float64     `json:"max_ratio"`
 	MaxRatioAct                      int         `json:"max_ratio_act"`
 	MaxRatioEnabled                  bool        `json:"max_ratio_enabled"`
 	MaxSeedingTime                   int         `json:"max_seeding_time"`
