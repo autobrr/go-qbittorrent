@@ -702,11 +702,25 @@ func (c *Client) SetLocationCtx(ctx context.Context, hashes []string, location s
 
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
+	/*
+		HTTP Status Code 	Scenario
+		400 	Save path is empty
+		403     User Doesn't have write access to directory
+		409     Unable to create save path directory
+		200 	All other scenarios
+	*/
+	switch sc := (*resp).StatusCode; sc {
+	case http.StatusOK:
+		return nil
+	case http.StatusBadRequest:
+		return errors.New("save path is empty: %s", location)
+	case http.StatusForbidden:
+		return errors.New("user does not have write access to directory")
+	case http.StatusConflict:
+		return errors.New("unable to create save path directory")
+	default:
 		return errors.New("could not setLocation torrents: %v unexpected status: %v", hashes, resp.StatusCode)
 	}
-
-	return nil
 }
 
 func (c *Client) CreateCategory(category string, path string) error {
@@ -726,11 +740,22 @@ func (c *Client) CreateCategoryCtx(ctx context.Context, category string, path st
 
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
+	/*
+		HTTP Status Code 	Scenario
+		400     Category name is empty
+		409 	Category name is invalid
+		200 	All other scenarios
+	*/
+	switch resp.StatusCode {
+	case http.StatusOK:
+		return nil
+	case http.StatusBadRequest:
+		return errors.New("category name is empty: %s", category)
+	case http.StatusConflict:
+		return errors.New("category name is invalid: %s", category)
+	default:
 		return errors.New("could not createCategory torrents: %v unexpected status: %v", category, resp.StatusCode)
 	}
-
-	return nil
 }
 
 func (c *Client) EditCategory(category string, path string) error {
@@ -750,11 +775,22 @@ func (c *Client) EditCategoryCtx(ctx context.Context, category string, path stri
 
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
+	/*
+		HTTP Status Code 	Scenario
+		400     Category name is empty
+		409 	Category editing failed
+		200 	All other scenarios
+	*/
+	switch resp.StatusCode {
+	case http.StatusOK:
+		return nil
+	case http.StatusBadRequest:
+		return errors.New("category name is empty: %s", category)
+	case http.StatusConflict:
+		return errors.New("category editing failed")
+	default:
 		return errors.New("could not editCategory torrents: %v unexpected status: %v", category, resp.StatusCode)
 	}
-
-	return nil
 }
 
 func (c *Client) RemoveCategories(categories []string) error {
@@ -799,11 +835,19 @@ func (c *Client) SetCategoryCtx(ctx context.Context, hashes []string, category s
 
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
+	/*
+		HTTP Status Code 	Scenario
+		409 	Categor name does not exist
+		200 	All other scenarios
+	*/
+	switch resp.StatusCode {
+	case http.StatusOK:
+		return nil
+	case http.StatusConflict:
+		return errors.New("category name does not exist: %s", category)
+	default:
 		return errors.New("could not setCategory torrents: %v unexpected status: %v", hashes, resp.StatusCode)
 	}
-
-	return nil
 }
 
 func (c *Client) GetCategories() (map[string]Category, error) {
@@ -891,11 +935,11 @@ func (c *Client) SetFilePriorityCtx(ctx context.Context, hash string, IDs string
 	*/
 	switch resp.StatusCode {
 	case http.StatusBadRequest:
-		return errors.New("Priority is invalid")
+		return errors.New("priority is invalid or at least one id is not an integer")
 	case http.StatusNotFound:
 		return errors.New("torrent %s not found", hash)
 	case http.StatusConflict:
-		return errors.New("At least one file id was not found")
+		return errors.New("torrent metadata hasn't downloaded yet or at least one file id was not found")
 	case http.StatusOK:
 		return nil
 	default:
@@ -940,11 +984,22 @@ func (c *Client) RenameFileCtx(ctx context.Context, hash, oldPath, newPath strin
 
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
+	/*
+		HTTP Status Code 	Scenario
+		400 	Missing newPath parameter
+		409 	Invalid newPath or oldPath, or newPath already in use
+		200 	All other scenarios
+	*/
+	switch resp.StatusCode {
+	case http.StatusBadRequest:
+		return errors.New("missing newPath parameter: %s", newPath)
+	case http.StatusConflict:
+		return errors.New("invalid newPath or oldPath, or newPath already in use: newPath: %s, oldPath: %s", newPath, oldPath)
+	case http.StatusOK:
+		return nil
+	default:
 		return errors.New("could not renameFile: %v | old: %v | new: %v unexpected status: %v", hash, oldPath, newPath, resp.StatusCode)
 	}
-
-	return nil
 }
 
 // SetTorrentName set name for torrent specified by hash
@@ -1140,6 +1195,43 @@ func (c *Client) RemoveTagsCtx(ctx context.Context, hashes []string, tags string
 	}
 
 	return nil
+}
+
+// RemoveTracker remove trackers of torrent
+func (c *Client) RemoveTrackers(hash string, urls string) error {
+	return c.RemoveTrackersCtx(context.Background(), hash, urls)
+}
+
+// RemoveTrackersCtx remove trackers of torrent
+func (c *Client) RemoveTrackersCtx(ctx context.Context, hash string, urls string) error {
+	opts := map[string]string{
+		"hash": hash,
+		"urls": urls,
+	}
+
+	resp, err := c.postCtx(ctx, "torrents/removeTrackers", opts)
+	if err != nil {
+		return errors.Wrap(err, "could not remove trackers for torrent: %s", hash)
+	}
+
+	defer resp.Body.Close()
+
+	/*
+		HTTP Status Code 	Scenario
+		404 	Torrent hash was not found
+		409 	All URLs were not found
+		200 	All other scenarios
+	*/
+	switch resp.StatusCode {
+	case http.StatusNotFound:
+		return errors.New("torrent %s not found", hash)
+	case http.StatusConflict:
+		return errors.New("all urls were not found: %s", urls)
+	case http.StatusOK:
+		return nil
+	default:
+		return errors.New("could not remove trackers for torrent: %s unexpected status: %d", hash, resp.StatusCode)
+	}
 }
 
 // EditTracker edit tracker of torrent
@@ -1584,8 +1676,18 @@ func (c *Client) SetTorrentShareLimitCtx(ctx context.Context, hashes []string, r
 
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return errors.New("could not set share limits for torrents: %v unexpected status: %v", hashes, resp.StatusCode)
+	/*
+		HTTP Status Code 	Scenario
+		400 	Share limit or at least one id is invalid
+		200 	All other scenarios
+	*/
+	switch sc := (*resp).StatusCode; sc {
+	case http.StatusOK:
+		return nil
+	case http.StatusBadRequest:
+		return errors.New("a share limit or at least one id is invalid")
+	default:
+		errors.New("could not set share limits for torrents: %v unexpected status: %v", hashes, resp.StatusCode)
 	}
 
 	return nil
