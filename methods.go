@@ -168,6 +168,33 @@ func (c *Client) SetPreferencesCtx(ctx context.Context, prefs map[string]interfa
 	return nil
 }
 
+// GetDefaultSavePath get default save path.
+// e.g. C:/Users/Dayman/Downloads
+func (c *Client) GetDefaultSavePath() (string, error) {
+	return c.GetDefaultSavePathCtx(context.Background())
+}
+
+// GetDefaultSavePathCtx get default save path.
+// e.g. C:/Users/Dayman/Downloads
+func (c *Client) GetDefaultSavePathCtx(ctx context.Context) (string, error) {
+	resp, err := c.getCtx(ctx, "app/defaultSavePath", nil)
+	if err != nil {
+		return "", errors.Wrap(err, "could not set preferences")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", errors.New("unexpected status when setting preferences: %d", resp.StatusCode)
+	}
+
+	respData, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", errors.Wrap(err, "could not read body")
+	}
+
+	return string(respData), nil
+}
+
 func (c *Client) GetTorrents(o TorrentFilterOptions) ([]Torrent, error) {
 	return c.GetTorrentsCtx(context.Background(), o)
 }
@@ -321,7 +348,7 @@ func (c *Client) GetTorrentTrackersCtx(ctx context.Context, hash string) ([]Torr
 
 	dump, err := httputil.DumpResponse(resp, true)
 	if err != nil {
-		//c.log.Printf("get torrent trackers error dump response: %v\n", string(dump))
+		// c.log.Printf("get torrent trackers error dump response: %v\n", string(dump))
 		return nil, errors.Wrap(err, "could not dump response for hash: %v", hash)
 	}
 
