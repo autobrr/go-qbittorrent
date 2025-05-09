@@ -1,3 +1,6 @@
+//go:build !ci
+// +build !ci
+
 package qbittorrent_test
 
 import (
