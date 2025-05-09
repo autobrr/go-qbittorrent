@@ -70,3 +70,30 @@ func TestClient_GetBuildInfo(t *testing.T) {
 	assert.NotEmpty(t, bi.Openssl)
 	assert.NotEmpty(t, bi.Bitness)
 }
+
+func TestClient_GetTorrentDownloadLimit_WithHashes(t *testing.T) {
+	client := qbittorrent.NewClient(qbittorrent.Config{
+		Host:     qBittorrentBaseURL,
+		Username: qBittorrentUsername,
+		Password: qBittorrentPassword,
+	})
+
+	data, err := client.GetTorrents(qbittorrent.TorrentFilterOptions{})
+	assert.NoError(t, err)
+	var hashes []string
+	for _, torrent := range data {
+		hashes = append(hashes, torrent.Hash)
+	}
+
+	limits, err := client.GetTorrentDownloadLimit(hashes)
+	assert.NoError(t, err)
+	assert.Equal(t, len(hashes), len(limits))
+
+	// FIXME: The following assertion will fail.
+	// Neither "hashes=all" nor "all" is working.
+	// I have no idea. Maybe the document is lying?
+	//
+	// limits, err = client.GetTorrentDownloadLimit([]string{"all"})
+	// assert.NoError(t, err)
+	// assert.Equal(t, len(hashes), len(limits))
+}

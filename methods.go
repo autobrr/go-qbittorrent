@@ -1615,6 +1615,60 @@ func (c *Client) GetGlobalUploadLimitCtx(ctx context.Context) (int64, error) {
 	return m, nil
 }
 
+// GetTorrentDownloadLimit get download limit for torrents specified by hashes.
+//
+// example response:
+//
+//	{
+//		"8c212779b4abde7c6bc608063a0d008b7e40ce32":338944,
+//		"284b83c9c7935002391129fd97f43db5d7cc2ba0":123
+//	}
+//
+// 8c212779b4abde7c6bc608063a0d008b7e40ce32 is the hash of the torrent and
+// 338944 its download speed limit in bytes per second;
+// this value will be zero if no limit is applied.
+func (c *Client) GetTorrentDownloadLimit(hashes []string) (map[string]int64, error) {
+	return c.GetTorrentDownloadLimitCtx(context.Background(), hashes)
+}
+
+// GetTorrentDownloadLimitCtx get download limit for torrents specified by hashes.
+//
+// example response:
+//
+//	{
+//		"8c212779b4abde7c6bc608063a0d008b7e40ce32":338944,
+//		"284b83c9c7935002391129fd97f43db5d7cc2ba0":123
+//	}
+//
+// 8c212779b4abde7c6bc608063a0d008b7e40ce32 is the hash of the torrent and
+// 338944 its download speed limit in bytes per second;
+// this value will be zero if no limit is applied.
+func (c *Client) GetTorrentDownloadLimitCtx(ctx context.Context, hashes []string) (map[string]int64, error) {
+	opts := map[string]string{
+		"hashes": strings.Join(hashes, "|"),
+	}
+
+	resp, err := c.postCtx(ctx, "torrents/downloadLimit", opts)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get download limit for torrents: %v", hashes)
+	}
+
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.New("could not get download limit for torrents: %v unexpected status: %v", hashes, resp.StatusCode)
+	}
+
+	ret := make(map[string]int64)
+	if err = json.NewDecoder(resp.Body).Decode(&ret); err != nil {
+		return nil, errors.Wrap(err, "could not decode response body")
+	}
+
+	return ret, nil
+}
+
 // SetTorrentDownloadLimit set download limit for torrents specified by hashes
 func (c *Client) SetTorrentDownloadLimit(hashes []string, limit int64) error {
 	return c.SetTorrentDownloadLimitCtx(context.Background(), hashes, limit)
