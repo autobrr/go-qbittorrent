@@ -179,12 +179,12 @@ func (c *Client) GetDefaultSavePath() (string, error) {
 func (c *Client) GetDefaultSavePathCtx(ctx context.Context) (string, error) {
 	resp, err := c.getCtx(ctx, "app/defaultSavePath", nil)
 	if err != nil {
-		return "", errors.Wrap(err, "could not set preferences")
+		return "", errors.Wrap(err, "could not get default save path")
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", errors.New("unexpected status when setting preferences: %d", resp.StatusCode)
+		return "", errors.New("unexpected status when getting default save path: %d", resp.StatusCode)
 	}
 
 	respData, err := io.ReadAll(resp.Body)
