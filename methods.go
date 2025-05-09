@@ -1749,6 +1749,39 @@ func (c *Client) SetTorrentDownloadLimitCtx(ctx context.Context, hashes []string
 	return nil
 }
 
+// ToggleTorrentSequentialDownload toggles sequential download mode for torrents specified by hashes.
+//
+// hashes contains the hashes of the torrents to toggle sequential download mode for.
+// or you can set to "all" to toggle sequential download mode for all torrents.
+func (c *Client) ToggleTorrentSequentialDownload(hashes []string) error {
+	return c.ToggleTorrentSequentialDownloadCtx(context.Background(), hashes)
+}
+
+// ToggleTorrentSequentialDownloadCtx toggles sequential download mode for torrents specified by hashes.
+//
+// hashes contains the hashes of the torrents to toggle sequential download mode for.
+// or you can set to "all" to toggle sequential download mode for all torrents.
+func (c *Client) ToggleTorrentSequentialDownloadCtx(ctx context.Context, hashes []string) error {
+	opts := map[string]string{
+		"hashes": strings.Join(hashes, "|"),
+	}
+
+	resp, err := c.postCtx(ctx, "torrents/toggleSequentialDownload", opts)
+	if err != nil {
+		return errors.Wrap(err, "could not toggle sequential download mode for torrents: %v", hashes)
+	}
+
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		return errors.New("unexpected status while toggling sequential download mode for torrents: %v, status: %d", hashes, resp.StatusCode)
+	}
+
+	return nil
+}
+
 // SetTorrentShareLimit set share limits for torrents specified by hashes
 func (c *Client) SetTorrentShareLimit(hashes []string, ratioLimit float64, seedingTimeLimit int64, inactiveSeedingTimeLimit int64) error {
 	return c.SetTorrentShareLimitCtx(context.Background(), hashes, ratioLimit, seedingTimeLimit, inactiveSeedingTimeLimit)

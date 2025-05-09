@@ -71,7 +71,7 @@ func TestClient_GetBuildInfo(t *testing.T) {
 	assert.NotEmpty(t, bi.Bitness)
 }
 
-func TestClient_GetTorrentDownloadLimit_WithHashes(t *testing.T) {
+func TestClient_GetTorrentDownloadLimit(t *testing.T) {
 	client := qbittorrent.NewClient(qbittorrent.Config{
 		Host:     qBittorrentBaseURL,
 		Username: qBittorrentUsername,
@@ -98,7 +98,7 @@ func TestClient_GetTorrentDownloadLimit_WithHashes(t *testing.T) {
 	// assert.Equal(t, len(hashes), len(limits))
 }
 
-func TestClient_GetTorrentUploadLimit_WithHashes(t *testing.T) {
+func TestClient_GetTorrentUploadLimit(t *testing.T) {
 	client := qbittorrent.NewClient(qbittorrent.Config{
 		Host:     qBittorrentBaseURL,
 		Username: qBittorrentUsername,
@@ -124,4 +124,28 @@ func TestClient_GetTorrentUploadLimit_WithHashes(t *testing.T) {
 	// limits, err = client.GetTorrentDownloadLimit([]string{"all"})
 	// assert.NoError(t, err)
 	// assert.Equal(t, len(hashes), len(limits))
+}
+
+func TestClient_ToggleTorrentSequentialDownload(t *testing.T) {
+	client := qbittorrent.NewClient(qbittorrent.Config{
+		Host:     qBittorrentBaseURL,
+		Username: qBittorrentUsername,
+		Password: qBittorrentPassword,
+	})
+
+	var err error
+
+	data, err := client.GetTorrents(qbittorrent.TorrentFilterOptions{})
+	assert.NoError(t, err)
+	var hashes []string
+	for _, torrent := range data {
+		hashes = append(hashes, torrent.Hash)
+	}
+
+	err = client.ToggleTorrentSequentialDownload(hashes)
+	assert.NoError(t, err)
+
+	// No idea why this is working but downloadLimit/uploadLimit are not.
+	err = client.ToggleTorrentSequentialDownload([]string{"all"})
+	assert.NoError(t, err)
 }
