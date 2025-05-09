@@ -1782,6 +1782,44 @@ func (c *Client) ToggleTorrentSequentialDownloadCtx(ctx context.Context, hashes 
 	return nil
 }
 
+// SetTorrentSuperSeeding set super speeding mode for torrents specified by hashes.
+//
+// hashes contains the hashes of the torrents to set super seeding mode for.
+// or you can set to "all" to set super seeding mode for all torrents.
+func (c *Client) SetTorrentSuperSeeding(hashes []string, on bool) error {
+	return c.SetTorrentSuperSeedingCtx(context.Background(), hashes, on)
+}
+
+// SetTorrentSuperSeedingCtx set super seeding mode for torrents specified by hashes.
+//
+// hashes contains the hashes of the torrents to set super seeding mode for.
+// or you can set to "all" to set super seeding mode for all torrents.
+func (c *Client) SetTorrentSuperSeedingCtx(ctx context.Context, hashes []string, on bool) error {
+	value := "false"
+	if on {
+		value = "true"
+	}
+	opts := map[string]string{
+		"hashes": strings.Join(hashes, "|"),
+		"value":  value,
+	}
+
+	resp, err := c.postCtx(ctx, "torrents/setSuperSeeding", opts)
+	if err != nil {
+		return errors.Wrap(err, "could not set super seeding mode for torrents: %v", hashes)
+	}
+
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		return errors.New("unexpected status while set super seeding mode for torrents: %v, status: %d", hashes, resp.StatusCode)
+	}
+
+	return nil
+}
+
 // SetTorrentShareLimit set share limits for torrents specified by hashes
 func (c *Client) SetTorrentShareLimit(hashes []string, ratioLimit float64, seedingTimeLimit int64, inactiveSeedingTimeLimit int64) error {
 	return c.SetTorrentShareLimitCtx(context.Background(), hashes, ratioLimit, seedingTimeLimit, inactiveSeedingTimeLimit)

@@ -149,3 +149,29 @@ func TestClient_ToggleTorrentSequentialDownload(t *testing.T) {
 	err = client.ToggleTorrentSequentialDownload([]string{"all"})
 	assert.NoError(t, err)
 }
+
+func TestClient_SetTorrentSuperSeeding(t *testing.T) {
+	client := qbittorrent.NewClient(qbittorrent.Config{
+		Host:     qBittorrentBaseURL,
+		Username: qBittorrentUsername,
+		Password: qBittorrentPassword,
+	})
+
+	var err error
+
+	data, err := client.GetTorrents(qbittorrent.TorrentFilterOptions{})
+	assert.NoError(t, err)
+	var hashes []string
+	for _, torrent := range data {
+		hashes = append(hashes, torrent.Hash)
+	}
+
+	err = client.SetTorrentSuperSeeding(hashes, true)
+	assert.NoError(t, err)
+
+	// FIXME: following test not fail but has no effect.
+	// qBittorrent doesn't return any error but super seeding status is not changed.
+	// I tried specify hashes as "all" but it's not working too.
+	err = client.SetTorrentSuperSeeding([]string{"all"}, false)
+	assert.NoError(t, err)
+}
