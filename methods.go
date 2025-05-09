@@ -519,6 +519,32 @@ func (c *Client) GetTransferInfoCtx(ctx context.Context) (*TransferInfo, error) 
 	return &info, nil
 }
 
+// BanPeers bans peers.
+// Each peer is a colon-separated host:port pair
+func (c *Client) BanPeers(peers []string) error {
+	return c.BanPeersCtx(context.Background(), peers)
+}
+
+// BanPeersCtx bans peers.
+// Each peer is a colon-separated host:port pair
+func (c *Client) BanPeersCtx(ctx context.Context, peers []string) error {
+	data := map[string]string{
+		"peers": strings.Join(peers, "|"),
+	}
+
+	resp, err := c.postCtx(ctx, "transfer/banPeers", data)
+	if err != nil {
+		return errors.Wrap(err, "could not ban peers")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return errors.New("unexpected status when ban peers: %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
 // SyncMainDataCtx Sync API implements requests for obtaining changes since the last request.
 // Response ID. If not provided, rid=0 will be assumed. If the given rid is different from the one of last server reply, full_update will be true (see the server reply details for more info)
 func (c *Client) SyncMainDataCtx(ctx context.Context, rid int64) (*MainData, error) {

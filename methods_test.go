@@ -43,3 +43,14 @@ func TestClient_GetDefaultSavePath(t *testing.T) {
 	_, err := client.GetDefaultSavePath()
 	assert.NoError(t, err)
 }
+
+func TestClient_BanPeers(t *testing.T) {
+	client := qbittorrent.NewClient(qbittorrent.Config{
+		Host:     qBittorrentBaseURL,
+		Username: qBittorrentUsername,
+		Password: qBittorrentPassword,
+	})
+
+	err := client.BanPeers([]string{"127.0.0.1:80"})
+	assert.NoError(t, err)
+}
