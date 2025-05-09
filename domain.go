@@ -646,3 +646,11 @@ type PeerLog struct {
 	Timestamp int64  `json:"timestamp"`
 	Reason    string `json:"reason"`
 }
+
+type BuildInfo struct {
+	Qt         string `json:"qt"`         // QT version
+	Libtorrent string `json:"libtorrent"` // libtorrent version
+	Boost      string `json:"boost"`      // Boost version
+	Openssl    string `json:"openssl"`    // OpenSSL version
+	Bitness    int    `json:"bitness"`    // Application bitness (e.g.64-bit)
+}

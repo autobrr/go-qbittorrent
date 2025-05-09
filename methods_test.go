@@ -54,3 +54,19 @@ func TestClient_BanPeers(t *testing.T) {
 	err := client.BanPeers([]string{"127.0.0.1:80"})
 	assert.NoError(t, err)
 }
+
+func TestClient_GetBuildInfo(t *testing.T) {
+	client := qbittorrent.NewClient(qbittorrent.Config{
+		Host:     qBittorrentBaseURL,
+		Username: qBittorrentUsername,
+		Password: qBittorrentPassword,
+	})
+
+	bi, err := client.GetBuildInfo()
+	assert.NoError(t, err)
+	assert.NotEmpty(t, bi.Qt)
+	assert.NotEmpty(t, bi.Libtorrent)
+	assert.NotEmpty(t, bi.Boost)
+	assert.NotEmpty(t, bi.Openssl)
+	assert.NotEmpty(t, bi.Bitness)
+}

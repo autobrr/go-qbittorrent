@@ -68,6 +68,31 @@ func (c *Client) LoginCtx(ctx context.Context) error {
 	return nil
 }
 
+// GetBuildInfo get qBittorrent build information.
+func (c *Client) GetBuildInfo() (BuildInfo, error) {
+	return c.GetBuildInfoCtx(context.Background())
+}
+
+// GetBuildInfoCtx get qBittorrent build information.
+func (c *Client) GetBuildInfoCtx(ctx context.Context) (BuildInfo, error) {
+	var bi BuildInfo
+	resp, err := c.getCtx(ctx, "app/buildInfo", nil)
+	if err != nil {
+		return bi, errors.Wrap(err, "could not get app build info")
+	}
+
+	// prevent annoying unhandled error warning
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
+
+	if err = json.NewDecoder(resp.Body).Decode(&bi); err != nil {
+		return bi, errors.Wrap(err, "could not unmarshal body")
+	}
+
+	return bi, nil
+}
+
 // Shutdown  Shuts down the qBittorrent client
 func (c *Client) Shutdown() error {
 	return c.ShutdownCtx(context.Background())
