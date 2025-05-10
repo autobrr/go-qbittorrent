@@ -654,3 +654,11 @@ type BuildInfo struct {
 	Openssl    string `json:"openssl"`    // OpenSSL version
 	Bitness    int    `json:"bitness"`    // Application bitness (e.g.64-bit)
 }
+
+type Cookie struct {
+	Name           string `json:"name"`           // Cookie name
+	Domain         string `json:"domain"`         // Cookie domain
+	Path           string `json:"path"`           // Cookie path
+	Value          string `json:"value"`          // Cookie value
+	ExpirationDate int64  `json:"expirationDate"` // Seconds since epoch
+}

@@ -1894,6 +1894,74 @@ func (c *Client) GetAppVersionCtx(ctx context.Context) (string, error) {
 	return string(body), nil
 }
 
+// GetAppCookies get app cookies.
+// Cookies are used for downloading torrents.
+func (c *Client) GetAppCookies() ([]Cookie, error) {
+	return c.GetAppCookiesCtx(context.Background())
+}
+
+// GetAppCookiesCtx get app cookies.
+// Cookies are used for downloading torrents.
+func (c *Client) GetAppCookiesCtx(ctx context.Context) ([]Cookie, error) {
+	resp, err := c.getCtx(ctx, "app/cookies", nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get app cookies")
+	}
+
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.New("could not get app cookies unexpected status: %v", resp.StatusCode)
+	}
+
+	var cookies []Cookie
+	if err = json.NewDecoder(resp.Body).Decode(&cookies); err != nil {
+		return nil, errors.Wrap(err, "could not decode response body")
+	}
+
+	return cookies, nil
+}
+
+// SetAppCookies get app cookies.
+// Cookies are used for downloading torrents.
+func (c *Client) SetAppCookies(cookies []Cookie) error {
+	return c.SetAppCookiesCtx(context.Background(), cookies)
+}
+
+// SetAppCookiesCtx get app cookies.
+// Cookies are used for downloading torrents.
+func (c *Client) SetAppCookiesCtx(ctx context.Context, cookies []Cookie) error {
+	marshaled, err := json.Marshal(cookies)
+	if err != nil {
+		return errors.Wrap(err, "could not marshal cookies")
+	}
+
+	opts := map[string]string{
+		"cookies": string(marshaled),
+	}
+	resp, err := c.postCtx(ctx, "app/setCookies", opts)
+	if err != nil {
+		return errors.Wrap(err, "could not set app cookies")
+	}
+
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
+
+	switch resp.StatusCode {
+	case http.StatusBadRequest:
+		data, _ := io.ReadAll(resp.Body)
+		_ = data
+		return errors.New("request was not a valid json array of cookie objects")
+	case http.StatusOK:
+		return nil
+	default:
+		return errors.New("could not set app cookies unexpected status: %v", resp.StatusCode)
+	}
+}
+
 func (c *Client) GetWebAPIVersion() (string, error) {
 	return c.GetWebAPIVersionCtx(context.Background())
 }

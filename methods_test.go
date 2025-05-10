@@ -6,6 +6,7 @@ package qbittorrent_test
 import (
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -42,6 +43,44 @@ func TestClient_GetDefaultSavePath(t *testing.T) {
 
 	_, err := client.GetDefaultSavePath()
 	assert.NoError(t, err)
+}
+
+func TestClient_GetAppCookies(t *testing.T) {
+	client := qbittorrent.NewClient(qbittorrent.Config{
+		Host:     qBittorrentBaseURL,
+		Username: qBittorrentUsername,
+		Password: qBittorrentPassword,
+	})
+
+	cookies, err := client.GetAppCookies()
+	assert.NoError(t, err)
+	assert.NotEmpty(t, cookies)
+}
+
+func TestClient_SetAppCookies(t *testing.T) {
+	client := qbittorrent.NewClient(qbittorrent.Config{
+		Host:     qBittorrentBaseURL,
+		Username: qBittorrentUsername,
+		Password: qBittorrentPassword,
+	})
+
+	var err error
+	var cookies = []qbittorrent.Cookie{
+		{
+			Name:           "test",
+			Domain:         "example.com",
+			Path:           "/",
+			Value:          "test",
+			ExpirationDate: time.Now().Add(time.Hour).Unix(),
+		},
+	}
+	err = client.SetAppCookies(cookies)
+	assert.NoError(t, err)
+
+	resp, err := client.GetAppCookies()
+	assert.NoError(t, err)
+	assert.NotEmpty(t, cookies)
+	assert.Equal(t, cookies, resp)
 }
 
 func TestClient_BanPeers(t *testing.T) {
