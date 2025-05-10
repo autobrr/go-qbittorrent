@@ -2029,6 +2029,40 @@ func (c *Client) GetTorrentPieceHashesCtx(ctx context.Context, hash string) ([]s
 	return result, nil
 }
 
+// AddPeersForTorrents adds peers to torrents.
+// hashes is a list of torrent hashes.
+// peers is a list of peers. Each of peers list is a string in the form of `<ip>:<port>`.
+func (c *Client) AddPeersForTorrents(hashes, peers []string) error {
+	return c.AddPeersForTorrentsCtx(context.Background(), hashes, peers)
+}
+
+// AddPeersForTorrentsCtx adds peers to torrents.
+// hashes is a list of torrent hashes.
+// peers is a list of peers. Each of peers list is a string in the form of `<ip>:<port>`.
+func (c *Client) AddPeersForTorrentsCtx(ctx context.Context, hashes, peers []string) error {
+	opts := map[string]string{
+		"hashes": strings.Join(hashes, "|"),
+		"peers":  strings.Join(peers, "|"),
+	}
+	resp, err := c.postCtx(ctx, "torrents/addPeers", opts)
+	if err != nil {
+		return errors.Wrap(err, "could not add peers for torrents, hashes %v", hashes)
+	}
+
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
+
+	switch resp.StatusCode {
+	case http.StatusBadRequest:
+		return errors.New("none of the supplied peers are valid")
+	case http.StatusOK:
+		return nil
+	default:
+		return errors.New("could not add peers for torrents, torrent hashes %v, unexpected status: %v", hashes, resp.StatusCode)
+	}
+}
+
 func (c *Client) GetWebAPIVersion() (string, error) {
 	return c.GetWebAPIVersionCtx(context.Background())
 }

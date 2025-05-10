@@ -248,3 +248,21 @@ func TestClient_GetTorrentPieceHashes(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotEmpty(t, states)
 }
+
+func TestClient_AddPeersForTorrents(t *testing.T) {
+	client := qbittorrent.NewClient(qbittorrent.Config{
+		Host:     qBittorrentBaseURL,
+		Username: qBittorrentUsername,
+		Password: qBittorrentPassword,
+	})
+
+	data, err := client.GetTorrents(qbittorrent.TorrentFilterOptions{})
+	assert.NoError(t, err)
+	assert.NotEmpty(t, data)
+
+	hashes := []string{data[0].Hash}
+	peers := []string{"127.0.0.1:12345"}
+	err = client.AddPeersForTorrents(hashes, peers)
+	// It seems qBittorrent doesn't actually check whether given peers are available.
+	assert.NoError(t, err)
+}
