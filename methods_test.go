@@ -214,3 +214,37 @@ func TestClient_SetTorrentSuperSeeding(t *testing.T) {
 	err = client.SetTorrentSuperSeeding([]string{"all"}, false)
 	assert.NoError(t, err)
 }
+
+func TestClient_GetTorrentPieceStates(t *testing.T) {
+	client := qbittorrent.NewClient(qbittorrent.Config{
+		Host:     qBittorrentBaseURL,
+		Username: qBittorrentUsername,
+		Password: qBittorrentPassword,
+	})
+
+	data, err := client.GetTorrents(qbittorrent.TorrentFilterOptions{})
+	assert.NoError(t, err)
+	assert.NotEmpty(t, data)
+
+	hash := data[0].Hash
+	states, err := client.GetTorrentPieceStates(hash)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, states)
+}
+
+func TestClient_GetTorrentPieceHashes(t *testing.T) {
+	client := qbittorrent.NewClient(qbittorrent.Config{
+		Host:     qBittorrentBaseURL,
+		Username: qBittorrentUsername,
+		Password: qBittorrentPassword,
+	})
+
+	data, err := client.GetTorrents(qbittorrent.TorrentFilterOptions{})
+	assert.NoError(t, err)
+	assert.NotEmpty(t, data)
+
+	hash := data[0].Hash
+	states, err := client.GetTorrentPieceHashes(hash)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, states)
+}

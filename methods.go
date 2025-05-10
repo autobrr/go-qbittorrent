@@ -1962,6 +1962,73 @@ func (c *Client) SetAppCookiesCtx(ctx context.Context, cookies []Cookie) error {
 	}
 }
 
+// GetTorrentPieceStates returns an array of states (integers) of all pieces (in order) of a specific torrent.
+func (c *Client) GetTorrentPieceStates(hash string) ([]PieceState, error) {
+	return c.GetTorrentPieceStatesCtx(context.Background(), hash)
+}
+
+// GetTorrentPieceStatesCtx returns an array of states (integers) of all pieces (in order) of a specific torrent.
+func (c *Client) GetTorrentPieceStatesCtx(ctx context.Context, hash string) ([]PieceState, error) {
+	opts := map[string]string{
+		"hash": hash,
+	}
+	resp, err := c.getCtx(ctx, "torrents/pieceStates", opts)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get torrent piece states")
+	}
+
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.New("could not get torrent piece states, torrent hash %v, unexpected status: %v", hash, resp.StatusCode)
+	}
+
+	var result []PieceState
+	if err = json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, errors.Wrap(err, "could not decode response body")
+	}
+
+	return result, nil
+}
+
+// GetTorrentPieceHashes returns an array of hashes (in order) of all pieces (in order) of a specific torrent.
+func (c *Client) GetTorrentPieceHashes(hash string) ([]string, error) {
+	return c.GetTorrentPieceHashesCtx(context.Background(), hash)
+}
+
+// GetTorrentPieceHashesCtx returns an array of hashes (in order) of all pieces (in order) of a specific torrent.
+func (c *Client) GetTorrentPieceHashesCtx(ctx context.Context, hash string) ([]string, error) {
+	opts := map[string]string{
+		"hash": hash,
+	}
+	resp, err := c.getCtx(ctx, "torrents/pieceHashes", opts)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get torrent piece hashes")
+	}
+
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
+
+	switch resp.StatusCode {
+	case http.StatusNotFound:
+		return nil, errors.New("Torrent hash was not found")
+	case http.StatusOK:
+		break
+	default:
+		return nil, errors.New("could not get torrent piece states, torrent hash %v, unexpected status: %v", hash, resp.StatusCode)
+	}
+
+	var result []string
+	if err = json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, errors.Wrap(err, "could not decode response body")
+	}
+
+	return result, nil
+}
+
 func (c *Client) GetWebAPIVersion() (string, error) {
 	return c.GetWebAPIVersionCtx(context.Background())
 }

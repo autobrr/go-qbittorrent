@@ -662,3 +662,17 @@ type Cookie struct {
 	Value          string `json:"value"`          // Cookie value
 	ExpirationDate int64  `json:"expirationDate"` // Seconds since epoch
 }
+
+// PieceState represents download state of torrent pieces.
+type PieceState int
+
+const (
+	PieceStateNotDownloadYet    = 0
+	PieceStateNowDownloading    = 1
+	PieceStateAlreadyDownloaded = 2
+)
+
+// silence unused variable warnings
+var _ = PieceStateNotDownloadYet
+var _ = PieceStateNowDownloading
+var _ = PieceStateAlreadyDownloaded
