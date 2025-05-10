@@ -68,6 +68,31 @@ func (c *Client) LoginCtx(ctx context.Context) error {
 	return nil
 }
 
+// GetBuildInfo get qBittorrent build information.
+func (c *Client) GetBuildInfo() (BuildInfo, error) {
+	return c.GetBuildInfoCtx(context.Background())
+}
+
+// GetBuildInfoCtx get qBittorrent build information.
+func (c *Client) GetBuildInfoCtx(ctx context.Context) (BuildInfo, error) {
+	var bi BuildInfo
+	resp, err := c.getCtx(ctx, "app/buildInfo", nil)
+	if err != nil {
+		return bi, errors.Wrap(err, "could not get app build info")
+	}
+
+	// prevent annoying unhandled error warning
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
+
+	if err = json.NewDecoder(resp.Body).Decode(&bi); err != nil {
+		return bi, errors.Wrap(err, "could not unmarshal body")
+	}
+
+	return bi, nil
+}
+
 // Shutdown  Shuts down the qBittorrent client
 func (c *Client) Shutdown() error {
 	return c.ShutdownCtx(context.Background())
@@ -166,6 +191,33 @@ func (c *Client) SetPreferencesCtx(ctx context.Context, prefs map[string]interfa
 	}
 
 	return nil
+}
+
+// GetDefaultSavePath get default save path.
+// e.g. C:/Users/Dayman/Downloads
+func (c *Client) GetDefaultSavePath() (string, error) {
+	return c.GetDefaultSavePathCtx(context.Background())
+}
+
+// GetDefaultSavePathCtx get default save path.
+// e.g. C:/Users/Dayman/Downloads
+func (c *Client) GetDefaultSavePathCtx(ctx context.Context) (string, error) {
+	resp, err := c.getCtx(ctx, "app/defaultSavePath", nil)
+	if err != nil {
+		return "", errors.Wrap(err, "could not get default save path")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", errors.New("unexpected status when getting default save path: %d", resp.StatusCode)
+	}
+
+	respData, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", errors.Wrap(err, "could not read body")
+	}
+
+	return string(respData), nil
 }
 
 func (c *Client) GetTorrents(o TorrentFilterOptions) ([]Torrent, error) {
@@ -321,7 +373,7 @@ func (c *Client) GetTorrentTrackersCtx(ctx context.Context, hash string) ([]Torr
 
 	dump, err := httputil.DumpResponse(resp, true)
 	if err != nil {
-		//c.log.Printf("get torrent trackers error dump response: %v\n", string(dump))
+		// c.log.Printf("get torrent trackers error dump response: %v\n", string(dump))
 		return nil, errors.Wrap(err, "could not dump response for hash: %v", hash)
 	}
 
@@ -490,6 +542,32 @@ func (c *Client) GetTransferInfoCtx(ctx context.Context) (*TransferInfo, error) 
 	}
 
 	return &info, nil
+}
+
+// BanPeers bans peers.
+// Each peer is a colon-separated host:port pair
+func (c *Client) BanPeers(peers []string) error {
+	return c.BanPeersCtx(context.Background(), peers)
+}
+
+// BanPeersCtx bans peers.
+// Each peer is a colon-separated host:port pair
+func (c *Client) BanPeersCtx(ctx context.Context, peers []string) error {
+	data := map[string]string{
+		"peers": strings.Join(peers, "|"),
+	}
+
+	resp, err := c.postCtx(ctx, "transfer/banPeers", data)
+	if err != nil {
+		return errors.Wrap(err, "could not ban peers")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return errors.New("unexpected status when ban peers: %d", resp.StatusCode)
+	}
+
+	return nil
 }
 
 // SyncMainDataCtx Sync API implements requests for obtaining changes since the last request.
@@ -1629,6 +1707,114 @@ func (c *Client) GetGlobalUploadLimitCtx(ctx context.Context) (int64, error) {
 	return m, nil
 }
 
+// GetTorrentUploadLimit get upload speed limit for torrents specified by hashes.
+//
+// example response:
+//
+//	{
+//		"8c212779b4abde7c6bc608063a0d008b7e40ce32":338944,
+//		"284b83c9c7935002391129fd97f43db5d7cc2ba0":123
+//	}
+//
+// 8c212779b4abde7c6bc608063a0d008b7e40ce32 is the hash of the torrent and
+// 338944 its upload speed limit in bytes per second;
+// this value will be zero if no limit is applied.
+func (c *Client) GetTorrentUploadLimit(hashes []string) (map[string]int64, error) {
+	return c.GetTorrentUploadLimitCtx(context.Background(), hashes)
+}
+
+// GetTorrentUploadLimitCtx get upload speed limit for torrents specified by hashes.
+//
+// example response:
+//
+//	{
+//		"8c212779b4abde7c6bc608063a0d008b7e40ce32":338944,
+//		"284b83c9c7935002391129fd97f43db5d7cc2ba0":123
+//	}
+//
+// 8c212779b4abde7c6bc608063a0d008b7e40ce32 is the hash of the torrent and
+// 338944 its upload speed limit in bytes per second;
+// this value will be zero if no limit is applied.
+func (c *Client) GetTorrentUploadLimitCtx(ctx context.Context, hashes []string) (map[string]int64, error) {
+	opts := map[string]string{
+		"hashes": strings.Join(hashes, "|"),
+	}
+
+	resp, err := c.postCtx(ctx, "torrents/uploadLimit", opts)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get upload speed limit for torrents: %v", hashes)
+	}
+
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.New("could not get upload speed limit for torrents: %v unexpected status: %v", hashes, resp.StatusCode)
+	}
+
+	ret := make(map[string]int64)
+	if err = json.NewDecoder(resp.Body).Decode(&ret); err != nil {
+		return nil, errors.Wrap(err, "could not decode response body")
+	}
+
+	return ret, nil
+}
+
+// GetTorrentDownloadLimit get download limit for torrents specified by hashes.
+//
+// example response:
+//
+//	{
+//		"8c212779b4abde7c6bc608063a0d008b7e40ce32":338944,
+//		"284b83c9c7935002391129fd97f43db5d7cc2ba0":123
+//	}
+//
+// 8c212779b4abde7c6bc608063a0d008b7e40ce32 is the hash of the torrent and
+// 338944 its download speed limit in bytes per second;
+// this value will be zero if no limit is applied.
+func (c *Client) GetTorrentDownloadLimit(hashes []string) (map[string]int64, error) {
+	return c.GetTorrentDownloadLimitCtx(context.Background(), hashes)
+}
+
+// GetTorrentDownloadLimitCtx get download limit for torrents specified by hashes.
+//
+// example response:
+//
+//	{
+//		"8c212779b4abde7c6bc608063a0d008b7e40ce32":338944,
+//		"284b83c9c7935002391129fd97f43db5d7cc2ba0":123
+//	}
+//
+// 8c212779b4abde7c6bc608063a0d008b7e40ce32 is the hash of the torrent and
+// 338944 its download speed limit in bytes per second;
+// this value will be zero if no limit is applied.
+func (c *Client) GetTorrentDownloadLimitCtx(ctx context.Context, hashes []string) (map[string]int64, error) {
+	opts := map[string]string{
+		"hashes": strings.Join(hashes, "|"),
+	}
+
+	resp, err := c.postCtx(ctx, "torrents/downloadLimit", opts)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get download limit for torrents: %v", hashes)
+	}
+
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.New("could not get download limit for torrents: %v unexpected status: %v", hashes, resp.StatusCode)
+	}
+
+	ret := make(map[string]int64)
+	if err = json.NewDecoder(resp.Body).Decode(&ret); err != nil {
+		return nil, errors.Wrap(err, "could not decode response body")
+	}
+
+	return ret, nil
+}
+
 // SetTorrentDownloadLimit set download limit for torrents specified by hashes
 func (c *Client) SetTorrentDownloadLimit(hashes []string, limit int64) error {
 	return c.SetTorrentDownloadLimitCtx(context.Background(), hashes, limit)
@@ -1650,6 +1836,77 @@ func (c *Client) SetTorrentDownloadLimitCtx(ctx context.Context, hashes []string
 
 	if resp.StatusCode != http.StatusOK {
 		return errors.New("could not set download limit for torrents: %v unexpected status: %v", hashes, resp.StatusCode)
+	}
+
+	return nil
+}
+
+// ToggleTorrentSequentialDownload toggles sequential download mode for torrents specified by hashes.
+//
+// hashes contains the hashes of the torrents to toggle sequential download mode for.
+// or you can set to "all" to toggle sequential download mode for all torrents.
+func (c *Client) ToggleTorrentSequentialDownload(hashes []string) error {
+	return c.ToggleTorrentSequentialDownloadCtx(context.Background(), hashes)
+}
+
+// ToggleTorrentSequentialDownloadCtx toggles sequential download mode for torrents specified by hashes.
+//
+// hashes contains the hashes of the torrents to toggle sequential download mode for.
+// or you can set to "all" to toggle sequential download mode for all torrents.
+func (c *Client) ToggleTorrentSequentialDownloadCtx(ctx context.Context, hashes []string) error {
+	opts := map[string]string{
+		"hashes": strings.Join(hashes, "|"),
+	}
+
+	resp, err := c.postCtx(ctx, "torrents/toggleSequentialDownload", opts)
+	if err != nil {
+		return errors.Wrap(err, "could not toggle sequential download mode for torrents: %v", hashes)
+	}
+
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		return errors.New("unexpected status while toggling sequential download mode for torrents: %v, status: %d", hashes, resp.StatusCode)
+	}
+
+	return nil
+}
+
+// SetTorrentSuperSeeding set super speeding mode for torrents specified by hashes.
+//
+// hashes contains the hashes of the torrents to set super seeding mode for.
+// or you can set to "all" to set super seeding mode for all torrents.
+func (c *Client) SetTorrentSuperSeeding(hashes []string, on bool) error {
+	return c.SetTorrentSuperSeedingCtx(context.Background(), hashes, on)
+}
+
+// SetTorrentSuperSeedingCtx set super seeding mode for torrents specified by hashes.
+//
+// hashes contains the hashes of the torrents to set super seeding mode for.
+// or you can set to "all" to set super seeding mode for all torrents.
+func (c *Client) SetTorrentSuperSeedingCtx(ctx context.Context, hashes []string, on bool) error {
+	value := "false"
+	if on {
+		value = "true"
+	}
+	opts := map[string]string{
+		"hashes": strings.Join(hashes, "|"),
+		"value":  value,
+	}
+
+	resp, err := c.postCtx(ctx, "torrents/setSuperSeeding", opts)
+	if err != nil {
+		return errors.Wrap(err, "could not set super seeding mode for torrents: %v", hashes)
+	}
+
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		return errors.New("unexpected status while set super seeding mode for torrents: %v, status: %d", hashes, resp.StatusCode)
 	}
 
 	return nil
@@ -1737,6 +1994,175 @@ func (c *Client) GetAppVersionCtx(ctx context.Context) (string, error) {
 	}
 
 	return string(body), nil
+}
+
+// GetAppCookies get app cookies.
+// Cookies are used for downloading torrents.
+func (c *Client) GetAppCookies() ([]Cookie, error) {
+	return c.GetAppCookiesCtx(context.Background())
+}
+
+// GetAppCookiesCtx get app cookies.
+// Cookies are used for downloading torrents.
+func (c *Client) GetAppCookiesCtx(ctx context.Context) ([]Cookie, error) {
+	resp, err := c.getCtx(ctx, "app/cookies", nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get app cookies")
+	}
+
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.New("could not get app cookies unexpected status: %v", resp.StatusCode)
+	}
+
+	var cookies []Cookie
+	if err = json.NewDecoder(resp.Body).Decode(&cookies); err != nil {
+		return nil, errors.Wrap(err, "could not decode response body")
+	}
+
+	return cookies, nil
+}
+
+// SetAppCookies get app cookies.
+// Cookies are used for downloading torrents.
+func (c *Client) SetAppCookies(cookies []Cookie) error {
+	return c.SetAppCookiesCtx(context.Background(), cookies)
+}
+
+// SetAppCookiesCtx get app cookies.
+// Cookies are used for downloading torrents.
+func (c *Client) SetAppCookiesCtx(ctx context.Context, cookies []Cookie) error {
+	marshaled, err := json.Marshal(cookies)
+	if err != nil {
+		return errors.Wrap(err, "could not marshal cookies")
+	}
+
+	opts := map[string]string{
+		"cookies": string(marshaled),
+	}
+	resp, err := c.postCtx(ctx, "app/setCookies", opts)
+	if err != nil {
+		return errors.Wrap(err, "could not set app cookies")
+	}
+
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
+
+	switch resp.StatusCode {
+	case http.StatusBadRequest:
+		data, _ := io.ReadAll(resp.Body)
+		_ = data
+		return errors.New("request was not a valid json array of cookie objects")
+	case http.StatusOK:
+		return nil
+	default:
+		return errors.New("could not set app cookies unexpected status: %v", resp.StatusCode)
+	}
+}
+
+// GetTorrentPieceStates returns an array of states (integers) of all pieces (in order) of a specific torrent.
+func (c *Client) GetTorrentPieceStates(hash string) ([]PieceState, error) {
+	return c.GetTorrentPieceStatesCtx(context.Background(), hash)
+}
+
+// GetTorrentPieceStatesCtx returns an array of states (integers) of all pieces (in order) of a specific torrent.
+func (c *Client) GetTorrentPieceStatesCtx(ctx context.Context, hash string) ([]PieceState, error) {
+	opts := map[string]string{
+		"hash": hash,
+	}
+	resp, err := c.getCtx(ctx, "torrents/pieceStates", opts)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get torrent piece states")
+	}
+
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.New("could not get torrent piece states, torrent hash %v, unexpected status: %v", hash, resp.StatusCode)
+	}
+
+	var result []PieceState
+	if err = json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, errors.Wrap(err, "could not decode response body")
+	}
+
+	return result, nil
+}
+
+// GetTorrentPieceHashes returns an array of hashes (in order) of all pieces (in order) of a specific torrent.
+func (c *Client) GetTorrentPieceHashes(hash string) ([]string, error) {
+	return c.GetTorrentPieceHashesCtx(context.Background(), hash)
+}
+
+// GetTorrentPieceHashesCtx returns an array of hashes (in order) of all pieces (in order) of a specific torrent.
+func (c *Client) GetTorrentPieceHashesCtx(ctx context.Context, hash string) ([]string, error) {
+	opts := map[string]string{
+		"hash": hash,
+	}
+	resp, err := c.getCtx(ctx, "torrents/pieceHashes", opts)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get torrent piece hashes")
+	}
+
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
+
+	switch resp.StatusCode {
+	case http.StatusNotFound:
+		return nil, errors.New("Torrent hash was not found")
+	case http.StatusOK:
+		break
+	default:
+		return nil, errors.New("could not get torrent piece states, torrent hash %v, unexpected status: %v", hash, resp.StatusCode)
+	}
+
+	var result []string
+	if err = json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, errors.Wrap(err, "could not decode response body")
+	}
+
+	return result, nil
+}
+
+// AddPeersForTorrents adds peers to torrents.
+// hashes is a list of torrent hashes.
+// peers is a list of peers. Each of peers list is a string in the form of `<ip>:<port>`.
+func (c *Client) AddPeersForTorrents(hashes, peers []string) error {
+	return c.AddPeersForTorrentsCtx(context.Background(), hashes, peers)
+}
+
+// AddPeersForTorrentsCtx adds peers to torrents.
+// hashes is a list of torrent hashes.
+// peers is a list of peers. Each of peers list is a string in the form of `<ip>:<port>`.
+func (c *Client) AddPeersForTorrentsCtx(ctx context.Context, hashes, peers []string) error {
+	opts := map[string]string{
+		"hashes": strings.Join(hashes, "|"),
+		"peers":  strings.Join(peers, "|"),
+	}
+	resp, err := c.postCtx(ctx, "torrents/addPeers", opts)
+	if err != nil {
+		return errors.Wrap(err, "could not add peers for torrents, hashes %v", hashes)
+	}
+
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
+
+	switch resp.StatusCode {
+	case http.StatusBadRequest:
+		return errors.New("none of the supplied peers are valid")
+	case http.StatusOK:
+		return nil
+	default:
+		return errors.New("could not add peers for torrents, torrent hashes %v, unexpected status: %v", hashes, resp.StatusCode)
+	}
 }
 
 func (c *Client) GetWebAPIVersion() (string, error) {
