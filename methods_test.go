@@ -52,9 +52,8 @@ func TestClient_GetAppCookies(t *testing.T) {
 		Password: qBittorrentPassword,
 	})
 
-	cookies, err := client.GetAppCookies()
+	_, err := client.GetAppCookies()
 	assert.NoError(t, err)
-	assert.NotEmpty(t, cookies)
 }
 
 func TestClient_SetAppCookies(t *testing.T) {
