@@ -305,3 +305,19 @@ func TestClient_RenameFolder(t *testing.T) {
 	err = client.RenameFolder(sampleInfoHash, "untitled", "renamed")
 	assert.NoError(t, err)
 }
+
+func TestClient_GetTorrentsWebSeeds(t *testing.T) {
+	client := qbittorrent.NewClient(qbittorrent.Config{
+		Host:     qBittorrentBaseURL,
+		Username: qBittorrentUsername,
+		Password: qBittorrentPassword,
+	})
+
+	data, err := client.GetTorrents(qbittorrent.TorrentFilterOptions{})
+	assert.NoError(t, err)
+	assert.NotEmpty(t, data)
+
+	hash := data[0].Hash
+	_, err = client.GetTorrentsWebSeeds(hash)
+	assert.NoError(t, err)
+}

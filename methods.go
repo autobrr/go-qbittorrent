@@ -2280,6 +2280,39 @@ func (c *Client) ReannounceTorrentWithRetry(ctx context.Context, hash string, op
 	return nil
 }
 
+func (c *Client) GetTorrentsWebSeeds(hash string) ([]WebSeed, error) {
+	return c.GetTorrentsWebSeedsCtx(context.Background(), hash)
+}
+
+func (c *Client) GetTorrentsWebSeedsCtx(ctx context.Context, hash string) ([]WebSeed, error) {
+	opts := map[string]string{
+		"hash": hash,
+	}
+	resp, err := c.getCtx(ctx, "torrents/webseeds", opts)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get webseeds for torrent with hash: %s", hash)
+	}
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
+
+	switch resp.StatusCode {
+	case http.StatusNotFound:
+		return nil, errors.New("torrent hash was not found")
+	case http.StatusOK:
+		break
+	default:
+		return nil, errors.New("unexpected status code: %d", resp.StatusCode)
+	}
+
+	var m []WebSeed
+	if err = json.NewDecoder(resp.Body).Decode(&m); err != nil {
+		return nil, errors.Wrap(err, "could not decode response")
+	}
+
+	return m, nil
+}
+
 // Check if status not working or something else
 // https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-4.1)#get-torrent-trackers
 //
