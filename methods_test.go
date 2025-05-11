@@ -13,6 +13,12 @@ import (
 	"github.com/autobrr/go-qbittorrent"
 )
 
+const (
+	// a sample torrent that only contains one folder "untitled" and one file "untitled.txt".
+	sampleTorrent  = "d10:created by18:qBittorrent v5.1.013:creation datei1747004328e4:infod5:filesld6:lengthi21e4:pathl12:untitled.txteee4:name8:untitled12:piece lengthi16384e6:pieces20:\xb5|\x901\xce\xa3\xdb @$\xce\xbd\xd3\xb0\x0e\xd3\xba\xc0\xcc\xbd7:privatei1eee"
+	sampleInfoHash = "ead9241e611e9712f28b20b151f1a3ecd4a6178a"
+)
+
 var (
 	qBittorrentBaseURL  string
 	qBittorrentUsername string
@@ -263,5 +269,39 @@ func TestClient_AddPeersForTorrents(t *testing.T) {
 	peers := []string{"127.0.0.1:12345"}
 	err = client.AddPeersForTorrents(hashes, peers)
 	// It seems qBittorrent doesn't actually check whether given peers are available.
+	assert.NoError(t, err)
+}
+
+func TestClient_RenameFile(t *testing.T) {
+	client := qbittorrent.NewClient(qbittorrent.Config{
+		Host:     qBittorrentBaseURL,
+		Username: qBittorrentUsername,
+		Password: qBittorrentPassword,
+	})
+
+	err := client.AddTorrentFromMemory([]byte(sampleTorrent), nil)
+	assert.NoError(t, err)
+	defer func(client *qbittorrent.Client) {
+		_ = client.DeleteTorrents([]string{sampleInfoHash}, false)
+	}(client)
+
+	err = client.RenameFile(sampleInfoHash, "untitled/untitled.txt", "untitled/renamed.txt")
+	assert.NoError(t, err)
+}
+
+func TestClient_RenameFolder(t *testing.T) {
+	client := qbittorrent.NewClient(qbittorrent.Config{
+		Host:     qBittorrentBaseURL,
+		Username: qBittorrentUsername,
+		Password: qBittorrentPassword,
+	})
+
+	err := client.AddTorrentFromMemory([]byte(sampleTorrent), nil)
+	assert.NoError(t, err)
+	defer func(client *qbittorrent.Client) {
+		_ = client.DeleteTorrents([]string{sampleInfoHash}, false)
+	}(client)
+
+	err = client.RenameFolder(sampleInfoHash, "untitled", "renamed")
 	assert.NoError(t, err)
 }
