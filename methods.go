@@ -1098,7 +1098,7 @@ func (c *Client) RenameFolderCtx(ctx context.Context, hash, oldPath, newPath str
 
 	resp, err := c.postCtx(ctx, "torrents/renameFolder", opts)
 	if err != nil {
-		return errors.Wrap(err, "could not renameFolder: %v | old: %v | new: %v", hash, oldPath, newPath)
+		return errors.Wrap(err, "could not rename folder; hash: %v | oldPath: %v | newPath: %v", hash, oldPath, newPath)
 	}
 
 	defer func(Body io.ReadCloser) {
@@ -1106,14 +1106,14 @@ func (c *Client) RenameFolderCtx(ctx context.Context, hash, oldPath, newPath str
 	}(resp.Body)
 
 	switch resp.StatusCode {
-	case http.StatusConflict:
-		return errors.New("invalid newPath or oldPath, or oldPath is already in use")
 	case http.StatusBadRequest:
-		return errors.New("missing newPath parameter")
+		return errors.Wrap(ErrMissingNewPathParameter, "newPath: %v", newPath)
+	case http.StatusConflict:
+		return errors.Wrap(ErrInvalidPathParameter, "oldPath: %v | newPath: %v", oldPath, newPath)
 	case http.StatusOK:
 		return nil
 	default:
-		return errors.New("could not renameFolder: %v | old: %v | new: %v unexpected status: %v", hash, oldPath, newPath, resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not rename folder; hash %v | oldPath: %v | newPath: %v | status code: %d", hash, oldPath, newPath, resp.StatusCode)
 	}
 }
 
@@ -2395,7 +2395,7 @@ func (c *Client) GetTorrentsWebSeedsCtx(ctx context.Context, hash string) ([]Web
 	}
 	resp, err := c.getCtx(ctx, "torrents/webseeds", opts)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not get webseeds for torrent with hash: %s", hash)
+		return nil, errors.Wrap(err, "could not get webseeds for torrent; hash: %s", hash)
 	}
 	defer func(Body io.ReadCloser) {
 		_ = Body.Close()
@@ -2403,11 +2403,11 @@ func (c *Client) GetTorrentsWebSeedsCtx(ctx context.Context, hash string) ([]Web
 
 	switch resp.StatusCode {
 	case http.StatusNotFound:
-		return nil, errors.New("torrent hash was not found")
+		return nil, errors.Wrap(ErrTorrentNotFound, "hash: %s", hash)
 	case http.StatusOK:
 		break
 	default:
-		return nil, errors.New("unexpected status code: %d", resp.StatusCode)
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get webseeds for torrent; hash: %v, status code: %d", hash, resp.StatusCode)
 	}
 
 	var m []WebSeed

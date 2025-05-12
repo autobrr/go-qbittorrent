@@ -34,7 +34,7 @@ func init() {
 	if val := os.Getenv("QBIT_USERNAME"); val != "" {
 		qBittorrentUsername = val
 	}
-	qBittorrentPassword = "admin"
+	qBittorrentPassword = "password" // must be at least 6 characters
 	if val := os.Getenv("QBIT_PASSWORD"); val != "" {
 		qBittorrentPassword = val
 	}
