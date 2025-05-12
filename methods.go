@@ -1025,6 +1025,40 @@ func (c *Client) RenameFileCtx(ctx context.Context, hash, oldPath, newPath strin
 	return nil
 }
 
+// RenameFolder Rename folder in torrent
+func (c *Client) RenameFolder(hash, oldPath, newPath string) error {
+	return c.RenameFolderCtx(context.Background(), hash, oldPath, newPath)
+}
+
+// RenameFolderCtx Rename folder in torrent
+func (c *Client) RenameFolderCtx(ctx context.Context, hash, oldPath, newPath string) error {
+	opts := map[string]string{
+		"hash":    hash,
+		"oldPath": oldPath,
+		"newPath": newPath,
+	}
+
+	resp, err := c.postCtx(ctx, "torrents/renameFolder", opts)
+	if err != nil {
+		return errors.Wrap(err, "could not renameFolder: %v | old: %v | new: %v", hash, oldPath, newPath)
+	}
+
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
+
+	switch resp.StatusCode {
+	case http.StatusConflict:
+		return errors.New("invalid newPath or oldPath, or oldPath is already in use")
+	case http.StatusBadRequest:
+		return errors.New("missing newPath parameter")
+	case http.StatusOK:
+		return nil
+	default:
+		return errors.New("could not renameFolder: %v | old: %v | new: %v unexpected status: %v", hash, oldPath, newPath, resp.StatusCode)
+	}
+}
+
 // SetTorrentName set name for torrent specified by hash
 func (c *Client) SetTorrentName(hash string, name string) error {
 	return c.SetTorrentNameCtx(context.Background(), hash, name)
