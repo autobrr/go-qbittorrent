@@ -704,3 +704,7 @@ const (
 var _ = PieceStateNotDownloadYet
 var _ = PieceStateNowDownloading
 var _ = PieceStateAlreadyDownloaded
+
+type WebSeed struct {
+	URL string `json:"url"`
+}
