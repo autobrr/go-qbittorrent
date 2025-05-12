@@ -646,3 +646,33 @@ type PeerLog struct {
 	Timestamp int64  `json:"timestamp"`
 	Reason    string `json:"reason"`
 }
+
+type BuildInfo struct {
+	Qt         string `json:"qt"`         // QT version
+	Libtorrent string `json:"libtorrent"` // libtorrent version
+	Boost      string `json:"boost"`      // Boost version
+	Openssl    string `json:"openssl"`    // OpenSSL version
+	Bitness    int    `json:"bitness"`    // Application bitness (e.g.64-bit)
+}
+
+type Cookie struct {
+	Name           string `json:"name"`           // Cookie name
+	Domain         string `json:"domain"`         // Cookie domain
+	Path           string `json:"path"`           // Cookie path
+	Value          string `json:"value"`          // Cookie value
+	ExpirationDate int64  `json:"expirationDate"` // Seconds since epoch
+}
+
+// PieceState represents download state of torrent pieces.
+type PieceState int
+
+const (
+	PieceStateNotDownloadYet    = 0
+	PieceStateNowDownloading    = 1
+	PieceStateAlreadyDownloaded = 2
+)
+
+// silence unused variable warnings
+var _ = PieceStateNotDownloadYet
+var _ = PieceStateNowDownloading
+var _ = PieceStateAlreadyDownloaded
