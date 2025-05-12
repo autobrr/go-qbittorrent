@@ -709,7 +709,7 @@ func (c *Client) SetLocationCtx(ctx context.Context, hashes []string, location s
 		409     Unable to create save path directory
 		200 	All other scenarios
 	*/
-	switch sc := (*resp).StatusCode; sc {
+	switch sc := resp.StatusCode; sc {
 	case http.StatusOK:
 		return nil
 	case http.StatusBadRequest:
@@ -1681,7 +1681,7 @@ func (c *Client) SetTorrentShareLimitCtx(ctx context.Context, hashes []string, r
 		400 	Share limit or at least one id is invalid
 		200 	All other scenarios
 	*/
-	switch sc := (*resp).StatusCode; sc {
+	switch sc := resp.StatusCode; sc {
 	case http.StatusOK:
 		return nil
 	case http.StatusBadRequest:
