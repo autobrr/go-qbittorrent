@@ -37,10 +37,13 @@ func (c *Client) LoginCtx(ctx context.Context) error {
 
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusForbidden {
-		return errors.New("User's IP is banned for too many failed login attempts")
-	} else if resp.StatusCode != http.StatusOK { // check for correct status code
-		return errors.New("qbittorrent login bad status %v", resp.StatusCode)
+	switch resp.StatusCode {
+	case http.StatusForbidden:
+		return ErrIPBanned
+	case http.StatusOK:
+		break
+	default:
+		return errors.Wrap(ErrUnexpectedStatus, "login error; status code: %d", resp.StatusCode)
 	}
 
 	bodyBytes, err := io.ReadAll(resp.Body)
@@ -51,7 +54,7 @@ func (c *Client) LoginCtx(ctx context.Context) error {
 
 	// read output
 	if bodyString == "Fails." {
-		return errors.New("bad credentials")
+		return ErrBadCredentials
 	}
 
 	// good response == "Ok."
@@ -60,7 +63,7 @@ func (c *Client) LoginCtx(ctx context.Context) error {
 	if cookies := resp.Cookies(); len(cookies) > 0 {
 		c.setCookies(cookies)
 	} else if bodyString != "Ok." {
-		return errors.New("bad credentials")
+		return ErrBadCredentials
 	}
 
 	c.log.Printf("logged into client: %v", c.cfg.Host)
@@ -106,7 +109,7 @@ func (c *Client) ShutdownCtx(ctx context.Context) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.New("unexpected status when triggering shutdown: %d", resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not trigger shutdown; status code: %d", resp.StatusCode)
 	}
 
 	return nil
@@ -187,7 +190,7 @@ func (c *Client) SetPreferencesCtx(ctx context.Context, prefs map[string]interfa
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.New("unexpected status when setting preferences: %d", resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not set preferences; status code: %d", resp.StatusCode)
 	}
 
 	return nil
@@ -209,7 +212,7 @@ func (c *Client) GetDefaultSavePathCtx(ctx context.Context) (string, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", errors.New("unexpected status when getting default save path: %d", resp.StatusCode)
+		return "", errors.Wrap(ErrUnexpectedStatus, "could not get default save path; status code: %d", resp.StatusCode)
 	}
 
 	respData, err := io.ReadAll(resp.Body)
@@ -414,7 +417,7 @@ func (c *Client) AddTorrentFromMemoryCtx(ctx context.Context, buf []byte, option
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		return errors.New("could not add torrent, unexpected status: %v", res.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not add torrent; status code: %d", res.StatusCode)
 	}
 
 	return nil
@@ -429,13 +432,13 @@ func (c *Client) AddTorrentFromFileCtx(ctx context.Context, filePath string, opt
 
 	res, err := c.postFileCtx(ctx, "torrents/add", filePath, options)
 	if err != nil {
-		return errors.Wrap(err, "could not add torrent %v", filePath)
+		return errors.Wrap(err, "could not add torrent; filePath: %v", filePath)
 	}
 
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		return errors.New("could not add torrent %v unexpected status: %v", filePath, res.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not add torrent; filePath: %v | status code: %d", filePath, res.StatusCode)
 	}
 
 	return nil
@@ -448,20 +451,20 @@ func (c *Client) AddTorrentFromUrl(url string, options map[string]string) error 
 
 func (c *Client) AddTorrentFromUrlCtx(ctx context.Context, url string, options map[string]string) error {
 	if url == "" {
-		return errors.New("no torrent url provided")
+		return ErrNoTorrentURLProvided
 	}
 
 	options["urls"] = url
 
 	res, err := c.postCtx(ctx, "torrents/add", options)
 	if err != nil {
-		return errors.Wrap(err, "could not add torrent %v", url)
+		return errors.Wrap(err, "could not add torrent; url: %v", url)
 	}
 
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		return errors.New("could not add torrent %v unexpected status: %v", url, res.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not add torrent: url: %v | status code: %d", url, res.StatusCode)
 	}
 
 	return nil
@@ -482,13 +485,13 @@ func (c *Client) DeleteTorrentsCtx(ctx context.Context, hashes []string, deleteF
 
 	resp, err := c.postCtx(ctx, "torrents/delete", opts)
 	if err != nil {
-		return errors.Wrap(err, "could not delete torrents: %+v", hashes)
+		return errors.Wrap(err, "could not delete torrents; hashes: %v", hashes)
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.New("could not delete torrents %v unexpected status: %v", hashes, resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not delete torrents; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
 	return nil
@@ -507,13 +510,13 @@ func (c *Client) ReAnnounceTorrentsCtx(ctx context.Context, hashes []string) err
 
 	resp, err := c.postCtx(ctx, "torrents/reannounce", opts)
 	if err != nil {
-		return errors.Wrap(err, "could not re-announce torrents: %v", hashes)
+		return errors.Wrap(err, "could not re-announce torrents; hashes: %v", hashes)
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.New("could not re-announce torrents: %v unexpected status: %v", hashes, resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not re-announce torrents; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
 	return nil
@@ -559,12 +562,12 @@ func (c *Client) BanPeersCtx(ctx context.Context, peers []string) error {
 
 	resp, err := c.postCtx(ctx, "transfer/banPeers", data)
 	if err != nil {
-		return errors.Wrap(err, "could not ban peers")
+		return errors.Wrap(err, "could not ban peers; peers: %v", peers)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.New("unexpected status when ban peers: %d", resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not ban peers; peers: %v | status code: %d", peers, resp.StatusCode)
 	}
 
 	return nil
@@ -626,13 +629,13 @@ func (c *Client) PauseCtx(ctx context.Context, hashes []string) error {
 
 	resp, err := c.postCtx(ctx, endpoint, opts)
 	if err != nil {
-		return errors.Wrap(err, "could not pause torrents: %v", hashes)
+		return errors.Wrap(err, "could not pause torrents; hashes: %v", hashes)
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.New("could not pause torrents: %v unexpected status: %v", hashes, resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not pause torrents; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
 	return nil
@@ -672,13 +675,13 @@ func (c *Client) ResumeCtx(ctx context.Context, hashes []string) error {
 
 	resp, err := c.postCtx(ctx, endpoint, opts)
 	if err != nil {
-		return errors.Wrap(err, "could not resume torrents: %v", hashes)
+		return errors.Wrap(err, "could not resume torrents; hashes: %v", hashes)
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.New("could not resume torrents: %v unexpected status: %v", hashes, resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not resume torrents; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
 	return nil
@@ -698,13 +701,13 @@ func (c *Client) SetForceStartCtx(ctx context.Context, hashes []string, value bo
 
 	resp, err := c.postCtx(ctx, "torrents/setForceStart", opts)
 	if err != nil {
-		return errors.Wrap(err, "could not setForceStart torrents: %v", hashes)
+		return errors.Wrap(err, "could not set force start torrents; hashes: %v", hashes)
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.New("could not setForceStart torrents: %v unexpected status: %v", hashes, resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not set force start torrents; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
 	return nil
@@ -723,13 +726,13 @@ func (c *Client) RecheckCtx(ctx context.Context, hashes []string) error {
 
 	resp, err := c.postCtx(ctx, "torrents/recheck", opts)
 	if err != nil {
-		return errors.Wrap(err, "could not recheck torrents: %v", hashes)
+		return errors.Wrap(err, "could not recheck torrents; hashes: %v", hashes)
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.New("could not recheck torrents: %v unexpected status: %v", hashes, resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not recheck torrents; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
 	return nil
@@ -749,13 +752,13 @@ func (c *Client) SetAutoManagementCtx(ctx context.Context, hashes []string, enab
 
 	resp, err := c.postCtx(ctx, "torrents/setAutoManagement", opts)
 	if err != nil {
-		return errors.Wrap(err, "could not setAutoManagement torrents: %v", hashes)
+		return errors.Wrap(err, "could not set auto management; hashes: %v", hashes)
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.New("could not setAutoManagement torrents: %v unexpected status: %v", hashes, resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not set auto management; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
 	return nil
@@ -775,16 +778,30 @@ func (c *Client) SetLocationCtx(ctx context.Context, hashes []string, location s
 
 	resp, err := c.postCtx(ctx, "torrents/setLocation", opts)
 	if err != nil {
-		return errors.Wrap(err, "could not setLocation torrents: %v", hashes)
+		return errors.Wrap(err, "could not set location; hashes: %v | location: %s", hashes, location)
 	}
 
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return errors.New("could not setLocation torrents: %v unexpected status: %v", hashes, resp.StatusCode)
+	/*
+		HTTP Status Code 	Scenario
+		400 	Save path is empty
+		403     User does not have write access to directory
+		409     Unable to create save path directory
+		200 	All other scenarios
+	*/
+	switch sc := resp.StatusCode; sc {
+	case http.StatusOK:
+		return nil
+	case http.StatusBadRequest:
+		return errors.Wrap(ErrEmptySavePath, "save path: %s", location)
+	case http.StatusForbidden:
+		return ErrNoWriteAccessToPath
+	case http.StatusConflict:
+		return ErrCannotCreateSavePath
+	default:
+		return errors.Wrap(ErrUnexpectedStatus, "could not set location; hashes: %v | location: %v | status code: %d", hashes, location, resp.StatusCode)
 	}
-
-	return nil
 }
 
 func (c *Client) CreateCategory(category string, path string) error {
@@ -799,16 +816,27 @@ func (c *Client) CreateCategoryCtx(ctx context.Context, category string, path st
 
 	resp, err := c.postCtx(ctx, "torrents/createCategory", opts)
 	if err != nil {
-		return errors.Wrap(err, "could not createCategory torrents: %v", category)
+		return errors.Wrap(err, "could not create category; category: %v", category)
 	}
 
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return errors.New("could not createCategory torrents: %v unexpected status: %v", category, resp.StatusCode)
+	/*
+		HTTP Status Code 	Scenario
+		400     Category name is empty
+		409 	Category name is invalid
+		200 	All other scenarios
+	*/
+	switch resp.StatusCode {
+	case http.StatusOK:
+		return nil
+	case http.StatusBadRequest:
+		return errors.Wrap(ErrEmptyCategoryName, "category name: %s", category)
+	case http.StatusConflict:
+		return errors.Wrap(ErrInvalidCategoryName, "category name: %s", category)
+	default:
+		return errors.Wrap(ErrUnexpectedStatus, "could not create category; category: %v | status code: %d", category, resp.StatusCode)
 	}
-
-	return nil
 }
 
 func (c *Client) EditCategory(category string, path string) error {
@@ -823,16 +851,27 @@ func (c *Client) EditCategoryCtx(ctx context.Context, category string, path stri
 
 	resp, err := c.postCtx(ctx, "torrents/editCategory", opts)
 	if err != nil {
-		return errors.Wrap(err, "could not editCategory torrents: %v", category)
+		return errors.Wrap(err, "could not edit category; category: %v", category)
 	}
 
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return errors.New("could not editCategory torrents: %v unexpected status: %v", category, resp.StatusCode)
+	/*
+		HTTP Status Code 	Scenario
+		400     Category name is empty
+		409 	Category editing failed
+		200 	All other scenarios
+	*/
+	switch resp.StatusCode {
+	case http.StatusOK:
+		return nil
+	case http.StatusBadRequest:
+		return errors.Wrap(ErrEmptyCategoryName, "category name: %s", category)
+	case http.StatusConflict:
+		return ErrCategoryEditingFailed
+	default:
+		return errors.Wrap(ErrUnexpectedStatus, "could not edit category; category %v | status code: %d", category, resp.StatusCode)
 	}
-
-	return nil
 }
 
 func (c *Client) RemoveCategories(categories []string) error {
@@ -846,13 +885,13 @@ func (c *Client) RemoveCategoriesCtx(ctx context.Context, categories []string) e
 
 	resp, err := c.postCtx(ctx, "torrents/removeCategories", opts)
 	if err != nil {
-		return errors.Wrap(err, "could not removeCategories torrents: %v", opts["categories"])
+		return errors.Wrap(err, "could not remove categories; categories: %v", opts["categories"])
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.New("could not removeCategories torrents: %v unexpected status: %v", opts["categories"], resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not remove categories; categories: %v | status code: %d", opts["categories"], resp.StatusCode)
 	}
 
 	return nil
@@ -872,16 +911,24 @@ func (c *Client) SetCategoryCtx(ctx context.Context, hashes []string, category s
 
 	resp, err := c.postCtx(ctx, "torrents/setCategory", opts)
 	if err != nil {
-		return errors.Wrap(err, "could not setCategory torrents: %v", hashes)
+		return errors.Wrap(err, "could not set category; hashes: %v | category: %s", hashes, category)
 	}
 
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return errors.New("could not setCategory torrents: %v unexpected status: %v", hashes, resp.StatusCode)
+	/*
+		HTTP Status Code 	Scenario
+		409 	Category name does not exist
+		200 	All other scenarios
+	*/
+	switch resp.StatusCode {
+	case http.StatusOK:
+		return nil
+	case http.StatusConflict:
+		return errors.Wrap(ErrCategoryDoesNotExist, "category name: %s", category)
+	default:
+		return errors.Wrap(ErrUnexpectedStatus, "could not set category; hashes: %v | cateogry: %s | status code: %d", hashes, category, resp.StatusCode)
 	}
-
-	return nil
 }
 
 func (c *Client) GetCategories() (map[string]Category, error) {
@@ -953,7 +1000,7 @@ func (c *Client) SetFilePriorityCtx(ctx context.Context, hash string, IDs string
 
 	resp, err := c.postCtx(ctx, "torrents/filePrio", opts)
 	if err != nil {
-		return errors.Wrap(err, "could not set file priority")
+		return errors.Wrap(err, "could not set file priority; hash: %s | priority: %d", hash, priority)
 	}
 
 	defer resp.Body.Close()
@@ -969,15 +1016,15 @@ func (c *Client) SetFilePriorityCtx(ctx context.Context, hash string, IDs string
 	*/
 	switch resp.StatusCode {
 	case http.StatusBadRequest:
-		return errors.New("Priority is invalid")
+		return ErrInvalidPriority
 	case http.StatusNotFound:
-		return errors.New("torrent %s not found", hash)
+		return errors.Wrap(ErrTorrentNotFound, "hash: %s", hash)
 	case http.StatusConflict:
-		return errors.New("At least one file id was not found")
+		return ErrTorrentMetdataNotDownloadedYet
 	case http.StatusOK:
 		return nil
 	default:
-		return errors.New("could not set file priority for torrent: %s unexpected status: %d", hash, resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not set file priority; hash: %v | priority: %d | status code: %d", hash, priority, resp.StatusCode)
 	}
 }
 
@@ -1013,16 +1060,27 @@ func (c *Client) RenameFileCtx(ctx context.Context, hash, oldPath, newPath strin
 
 	resp, err := c.postCtx(ctx, "torrents/renameFile", opts)
 	if err != nil {
-		return errors.Wrap(err, "could not renameFile: %v | old: %v | new: %v", hash, oldPath, newPath)
+		return errors.Wrap(err, "could not rename file; hash: %v | oldPath: %v | newPath: %v", hash, oldPath, newPath)
 	}
 
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return errors.New("could not renameFile: %v | old: %v | new: %v unexpected status: %v", hash, oldPath, newPath, resp.StatusCode)
+	/*
+		HTTP Status Code 	Scenario
+		400 	Missing newPath parameter
+		409 	Invalid newPath or oldPath, or newPath already in use
+		200 	All other scenarios
+	*/
+	switch resp.StatusCode {
+	case http.StatusBadRequest:
+		return errors.Wrap(ErrMissingNewPathParameter, "newPath: %v", newPath)
+	case http.StatusConflict:
+		return errors.Wrap(ErrInvalidPathParameter, "oldPath: %v | newPath: %v", oldPath, newPath)
+	case http.StatusOK:
+		return nil
+	default:
+		return errors.Wrap(ErrUnexpectedStatus, "could not rename file; hash %v | oldPath: %v | newPath: %v | status code: %d", hash, oldPath, newPath, resp.StatusCode)
 	}
-
-	return nil
 }
 
 // RenameFolder Rename folder in torrent
@@ -1040,7 +1098,7 @@ func (c *Client) RenameFolderCtx(ctx context.Context, hash, oldPath, newPath str
 
 	resp, err := c.postCtx(ctx, "torrents/renameFolder", opts)
 	if err != nil {
-		return errors.Wrap(err, "could not renameFolder: %v | old: %v | new: %v", hash, oldPath, newPath)
+		return errors.Wrap(err, "could not rename folder; hash: %v | oldPath: %v | newPath: %v", hash, oldPath, newPath)
 	}
 
 	defer func(Body io.ReadCloser) {
@@ -1048,14 +1106,14 @@ func (c *Client) RenameFolderCtx(ctx context.Context, hash, oldPath, newPath str
 	}(resp.Body)
 
 	switch resp.StatusCode {
-	case http.StatusConflict:
-		return errors.New("invalid newPath or oldPath, or oldPath is already in use")
 	case http.StatusBadRequest:
-		return errors.New("missing newPath parameter")
+		return errors.Wrap(ErrMissingNewPathParameter, "newPath: %v", newPath)
+	case http.StatusConflict:
+		return errors.Wrap(ErrInvalidPathParameter, "oldPath: %v | newPath: %v", oldPath, newPath)
 	case http.StatusOK:
 		return nil
 	default:
-		return errors.New("could not renameFolder: %v | old: %v | new: %v unexpected status: %v", hash, oldPath, newPath, resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not rename folder; hash %v | oldPath: %v | newPath: %v | status code: %d", hash, oldPath, newPath, resp.StatusCode)
 	}
 }
 
@@ -1073,7 +1131,7 @@ func (c *Client) SetTorrentNameCtx(ctx context.Context, hash string, name string
 
 	resp, err := c.postCtx(ctx, "torrents/rename", opts)
 	if err != nil {
-		return errors.Wrap(err, "could not rename torrent: %v | name: %v", hash, name)
+		return errors.Wrap(err, "could not rename torrent; hash: %v | name: %v", hash, name)
 	}
 
 	defer resp.Body.Close()
@@ -1082,11 +1140,11 @@ func (c *Client) SetTorrentNameCtx(ctx context.Context, hash string, name string
 	case http.StatusOK:
 		return nil
 	case http.StatusNotFound:
-		return errors.New("torrent hash is invalid: %v", hash)
+		return errors.Wrap(ErrInvalidTorrentHash, "torrent hash: %v", hash)
 	case http.StatusConflict:
-		return errors.New("torrent name is empty: %v", name)
+		return errors.Wrap(ErrEmptyTorrentName, "torrent name: %v", name)
 	default:
-		return errors.New("could not rename torrent: %v unexpected status: %v", hash, resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not rename torrent; hash: %v | name: %s |status code: %d", hash, name, resp.StatusCode)
 	}
 }
 
@@ -1128,13 +1186,13 @@ func (c *Client) CreateTagsCtx(ctx context.Context, tags []string) error {
 
 	resp, err := c.postCtx(ctx, "torrents/createTags", opts)
 	if err != nil {
-		return errors.Wrap(err, "could not create tags: %s", t)
+		return errors.Wrap(err, "could not create tags; tags: %v", t)
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.New("could not create tags: %s unexpected status: %d", t, resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not create tags; tags: %v | status code: %d", t, resp.StatusCode)
 	}
 
 	return nil
@@ -1154,13 +1212,13 @@ func (c *Client) AddTagsCtx(ctx context.Context, hashes []string, tags string) e
 
 	resp, err := c.postCtx(ctx, "torrents/addTags", opts)
 	if err != nil {
-		return errors.Wrap(err, "could not addTags torrents: %v", hashes)
+		return errors.Wrap(err, "could not add tags; hashes: %v | tags: %v", hashes, tags)
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.New("could not addTags torrents: %v unexpected status: %v", hashes, resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not add tags; hashes: %v | tags: %v | status code: %d", hashes, tags, resp.StatusCode)
 	}
 
 	return nil
@@ -1183,13 +1241,13 @@ func (c *Client) SetTags(ctx context.Context, hashes []string, tags string) erro
 
 	resp, err := c.postCtx(ctx, "torrents/setTags", opts)
 	if err != nil {
-		return errors.Wrap(err, "could not setTags torrents: %v", hashes)
+		return errors.Wrap(err, "could not set tags; hashes: %v", hashes)
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.New("could not setTags torrents: %v unexpected status: %v", hashes, resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not set tags; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
 	return nil
@@ -1210,13 +1268,13 @@ func (c *Client) DeleteTagsCtx(ctx context.Context, tags []string) error {
 
 	resp, err := c.postCtx(ctx, "torrents/deleteTags", opts)
 	if err != nil {
-		return errors.Wrap(err, "could not delete tags: %s", t)
+		return errors.Wrap(err, "could not delete tags; tags: %s", t)
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.New("could not delete tags: %s unexpected status: %d", t, resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not delete tags; tags: %s | status code: %d", t, resp.StatusCode)
 	}
 
 	return nil
@@ -1242,16 +1300,53 @@ func (c *Client) RemoveTagsCtx(ctx context.Context, hashes []string, tags string
 
 	resp, err := c.postCtx(ctx, "torrents/removeTags", opts)
 	if err != nil {
-		return errors.Wrap(err, "could not removeTags torrents: %v", hashes)
+		return errors.Wrap(err, "could not remove tags; hashes: %v | tags %s", hashes, tags)
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.New("could not removeTags torrents: %v unexpected status: %v", hashes, resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not remove tags; hashes: %v | tags: %s | status code: %d", hashes, tags, resp.StatusCode)
 	}
 
 	return nil
+}
+
+// RemoveTracker remove trackers of torrent
+func (c *Client) RemoveTrackers(hash string, urls string) error {
+	return c.RemoveTrackersCtx(context.Background(), hash, urls)
+}
+
+// RemoveTrackersCtx remove trackers of torrent
+func (c *Client) RemoveTrackersCtx(ctx context.Context, hash string, urls string) error {
+	opts := map[string]string{
+		"hash": hash,
+		"urls": urls,
+	}
+
+	resp, err := c.postCtx(ctx, "torrents/removeTrackers", opts)
+	if err != nil {
+		return errors.Wrap(err, "could not remove trackers; hash: %s | urls: %s", hash, urls)
+	}
+
+	defer resp.Body.Close()
+
+	/*
+		HTTP Status Code 	Scenario
+		404 	Torrent hash was not found
+		409 	All URLs were not found
+		200 	All other scenarios
+	*/
+	switch resp.StatusCode {
+	case http.StatusNotFound:
+		return errors.Wrap(ErrTorrentNotFound, "torrent hash: %v", hash)
+	case http.StatusConflict:
+		return errors.Wrap(ErrAllURLsNotFound, "urls: %v", urls)
+	case http.StatusOK:
+		return nil
+	default:
+		return errors.Wrap(ErrUnexpectedStatus, "could not remove trackers; hash: %s | urls: %s | status code: %d", hash, urls, resp.StatusCode)
+	}
 }
 
 // EditTracker edit tracker of torrent
@@ -1269,7 +1364,7 @@ func (c *Client) EditTrackerCtx(ctx context.Context, hash string, old, new strin
 
 	resp, err := c.postCtx(ctx, "torrents/editTracker", opts)
 	if err != nil {
-		return errors.Wrap(err, "could not edit tracker for torrent: %s", hash)
+		return errors.Wrap(err, "could not edit tracker; hash: %s | old: %s | new: %s", hash, old, new)
 	}
 
 	defer resp.Body.Close()
@@ -1284,15 +1379,15 @@ func (c *Client) EditTrackerCtx(ctx context.Context, hash string, old, new strin
 	*/
 	switch resp.StatusCode {
 	case http.StatusBadRequest:
-		return errors.New("new url %s is not a valid URL", new)
+		return errors.Wrap(ErrInvalidURL, "new url: %v", new)
 	case http.StatusNotFound:
-		return errors.New("torrent %s not found", hash)
+		return errors.Wrap(ErrTorrentNotFound, "torrent hash: %v", hash)
 	case http.StatusConflict:
 		return nil
 	case http.StatusOK:
 		return nil
 	default:
-		return errors.New("could not edit tracker for torrent: %s unexpected status: %d", hash, resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not edit tracker; hash: %s | old: %s | new: %s | status code: %d", hash, old, new, resp.StatusCode)
 	}
 }
 
@@ -1310,7 +1405,7 @@ func (c *Client) AddTrackersCtx(ctx context.Context, hash string, urls string) e
 
 	resp, err := c.postCtx(ctx, "torrents/addTrackers", opts)
 	if err != nil {
-		return errors.Wrap(err, "could not edit tracker for torrent: %s", hash)
+		return errors.Wrap(err, "could not add trackers; hash: %s | urls: %s", hash, urls)
 	}
 
 	defer resp.Body.Close()
@@ -1322,11 +1417,11 @@ func (c *Client) AddTrackersCtx(ctx context.Context, hash string, urls string) e
 	*/
 	switch resp.StatusCode {
 	case http.StatusNotFound:
-		return errors.New("torrent %s not found", hash)
+		return errors.Wrap(ErrTorrentNotFound, "torrent hash: %v", hash)
 	case http.StatusOK:
 		return nil
 	default:
-		return errors.New("could not add trackers for torrent: %s unexpected status: %d", hash, resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not add trackers; hash: %s | urls: %s | status code: %d", hash, urls, resp.StatusCode)
 	}
 }
 
@@ -1366,15 +1461,15 @@ func (c *Client) SetMaxPriorityCtx(ctx context.Context, hashes []string) error {
 
 	resp, err := c.postCtx(ctx, "torrents/topPrio", opts)
 	if err != nil {
-		return errors.Wrap(err, "could not set torrents to maximum priority: %v", hashes)
+		return errors.Wrap(err, "could not set maximum priority; hashes: %v", hashes)
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusConflict {
-		return errors.New("torrent queueing is not enabled, could not set hashes %v to max priority unexpected status: %d", hashes, resp.StatusCode)
+		return errors.Wrap(ErrTorrentQueueingNotEnabled, "hashes: %v", hashes)
 	} else if resp.StatusCode != http.StatusOK {
-		return errors.New("could not set max priority for torrents: %v unexpected status: %d", hashes, resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not set maximum priority; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
 	return nil
@@ -1396,15 +1491,15 @@ func (c *Client) SetMinPriorityCtx(ctx context.Context, hashes []string) error {
 
 	resp, err := c.postCtx(ctx, "torrents/bottomPrio", opts)
 	if err != nil {
-		return errors.Wrap(err, "could not set torrents to minimum priority: %v", hashes)
+		return errors.Wrap(err, "could not set minimum priority; hashes: %v", hashes)
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusConflict {
-		return errors.New("torrent queueing is not enabled, could not set hashes %v to min priority unexpected status: %d", hashes, resp.StatusCode)
+		return errors.Wrap(ErrTorrentQueueingNotEnabled, "hashes: %v", hashes)
 	} else if resp.StatusCode != http.StatusOK {
-		return errors.New("could not set min priority for torrents: %v unexpected status: %d", hashes, resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not set minimum priority; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
 	return nil
@@ -1426,15 +1521,15 @@ func (c *Client) DecreasePriorityCtx(ctx context.Context, hashes []string) error
 
 	resp, err := c.postCtx(ctx, "torrents/decreasePrio", opts)
 	if err != nil {
-		return errors.Wrap(err, "could not decrease torrent priority: %v", hashes)
+		return errors.Wrap(err, "could not decrease priority; hashes: %v", hashes)
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusConflict {
-		return errors.New("torrent queueing is not enabled, could not decrease hashes %v priority unexpected status: %d", hashes, resp.StatusCode)
+		return errors.Wrap(ErrTorrentQueueingNotEnabled, "hashes: %v", hashes)
 	} else if resp.StatusCode != http.StatusOK {
-		return errors.New("could not decrease priority for torrents: %v unexpected status: %d", hashes, resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not decrease priority; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
 	return nil
@@ -1456,15 +1551,15 @@ func (c *Client) IncreasePriorityCtx(ctx context.Context, hashes []string) error
 
 	resp, err := c.postCtx(ctx, "torrents/increasePrio", opts)
 	if err != nil {
-		return errors.Wrap(err, "could not increase torrent priority: %v", hashes)
+		return errors.Wrap(err, "could not increase torrent priority; hashes: %v", hashes)
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusConflict {
-		return errors.New("torrent queueing is not enabled, could not increase hashes %v priority unexpected status: %d", hashes, resp.StatusCode)
+		return errors.Wrap(ErrTorrentQueueingNotEnabled, "hashes: %v", hashes)
 	} else if resp.StatusCode != http.StatusOK {
-		return errors.New("could not increase priority for torrents: %v unexpected status: %d", hashes, resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not increase priority; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
 	return nil
@@ -1485,13 +1580,13 @@ func (c *Client) ToggleFirstLastPiecePrioCtx(ctx context.Context, hashes []strin
 
 	resp, err := c.postCtx(ctx, "torrents/toggleFirstLastPiecePrio", opts)
 	if err != nil {
-		return errors.Wrap(err, "could not toggle first/last piece priority for torrents: %v", hashes)
+		return errors.Wrap(err, "could not toggle first/last piece priority; hashes: %v", hashes)
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.New("unexpected status while toggling first/last piece priority for torrents: %v, status: %d", hashes, resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not toggle first/last piece priority; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
 	return nil
@@ -1512,7 +1607,7 @@ func (c *Client) ToggleAlternativeSpeedLimitsCtx(ctx context.Context) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.New("could not stoggle alternative speed limits, unexpected status: %v", resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not stoggle alternative speed limits; status code: %d", resp.StatusCode)
 	}
 
 	return nil
@@ -1558,13 +1653,13 @@ func (c *Client) SetGlobalDownloadLimitCtx(ctx context.Context, limit int64) err
 
 	resp, err := c.postCtx(ctx, "transfer/setDownloadLimit", opts)
 	if err != nil {
-		return errors.Wrap(err, "could not set global download limit: %d", limit)
+		return errors.Wrap(err, "could not set global download limit; limit: %d", limit)
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.New("could not set global download limit: %v unexpected status: %v", limit, resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not set global download limit; limit: %d | status code: %d", limit, resp.StatusCode)
 	}
 
 	return nil
@@ -1610,13 +1705,13 @@ func (c *Client) SetGlobalUploadLimitCtx(ctx context.Context, limit int64) error
 
 	resp, err := c.postCtx(ctx, "transfer/setUploadLimit", opts)
 	if err != nil {
-		return errors.Wrap(err, "could not set global upload limit: %d", limit)
+		return errors.Wrap(err, "could not set global upload limit; limit %d", limit)
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.New("could not set upload limit: %v unexpected status: %v", limit, resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not set global upload limit; limit %d | status code: %d", limit, resp.StatusCode)
 	}
 
 	return nil
@@ -1684,7 +1779,7 @@ func (c *Client) GetTorrentUploadLimitCtx(ctx context.Context, hashes []string) 
 
 	resp, err := c.postCtx(ctx, "torrents/uploadLimit", opts)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not get upload speed limit for torrents: %v", hashes)
+		return nil, errors.Wrap(err, "could not get upload speed limit; hashes: %v", hashes)
 	}
 
 	defer func(Body io.ReadCloser) {
@@ -1692,7 +1787,7 @@ func (c *Client) GetTorrentUploadLimitCtx(ctx context.Context, hashes []string) 
 	}(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, errors.New("could not get upload speed limit for torrents: %v unexpected status: %v", hashes, resp.StatusCode)
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get upload speed limit; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
 	ret := make(map[string]int64)
@@ -1738,7 +1833,7 @@ func (c *Client) GetTorrentDownloadLimitCtx(ctx context.Context, hashes []string
 
 	resp, err := c.postCtx(ctx, "torrents/downloadLimit", opts)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not get download limit for torrents: %v", hashes)
+		return nil, errors.Wrap(err, "could not get download limit; hashes: %v", hashes)
 	}
 
 	defer func(Body io.ReadCloser) {
@@ -1746,7 +1841,7 @@ func (c *Client) GetTorrentDownloadLimitCtx(ctx context.Context, hashes []string
 	}(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, errors.New("could not get download limit for torrents: %v unexpected status: %v", hashes, resp.StatusCode)
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get download limit; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
 	ret := make(map[string]int64)
@@ -1771,13 +1866,13 @@ func (c *Client) SetTorrentDownloadLimitCtx(ctx context.Context, hashes []string
 
 	resp, err := c.postCtx(ctx, "torrents/setDownloadLimit", opts)
 	if err != nil {
-		return errors.Wrap(err, "could not set download limit for torrents: %v", hashes)
+		return errors.Wrap(err, "could not set download limit; hashes: %v", hashes)
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.New("could not set download limit for torrents: %v unexpected status: %v", hashes, resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not set download limit; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
 	return nil
@@ -1802,7 +1897,7 @@ func (c *Client) ToggleTorrentSequentialDownloadCtx(ctx context.Context, hashes 
 
 	resp, err := c.postCtx(ctx, "torrents/toggleSequentialDownload", opts)
 	if err != nil {
-		return errors.Wrap(err, "could not toggle sequential download mode for torrents: %v", hashes)
+		return errors.Wrap(err, "could not toggle sequential download mode; hashes: %v", hashes)
 	}
 
 	defer func(Body io.ReadCloser) {
@@ -1810,7 +1905,7 @@ func (c *Client) ToggleTorrentSequentialDownloadCtx(ctx context.Context, hashes 
 	}(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.New("unexpected status while toggling sequential download mode for torrents: %v, status: %d", hashes, resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not toggle sequential download mode; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
 	return nil
@@ -1840,7 +1935,7 @@ func (c *Client) SetTorrentSuperSeedingCtx(ctx context.Context, hashes []string,
 
 	resp, err := c.postCtx(ctx, "torrents/setSuperSeeding", opts)
 	if err != nil {
-		return errors.Wrap(err, "could not set super seeding mode for torrents: %v", hashes)
+		return errors.Wrap(err, "could not set super seeding mode; hashes: %v", hashes)
 	}
 
 	defer func(Body io.ReadCloser) {
@@ -1848,7 +1943,7 @@ func (c *Client) SetTorrentSuperSeedingCtx(ctx context.Context, hashes []string,
 	}(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.New("unexpected status while set super seeding mode for torrents: %v, status: %d", hashes, resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not set super seeding mode; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
 	return nil
@@ -1870,13 +1965,23 @@ func (c *Client) SetTorrentShareLimitCtx(ctx context.Context, hashes []string, r
 
 	resp, err := c.postCtx(ctx, "torrents/setShareLimits", opts)
 	if err != nil {
-		return errors.Wrap(err, "could not set share limits for torrents: %v", hashes)
+		return errors.Wrap(err, "could not set share limits; hashes: %v | ratioLimit: %v | seedingTimeLimit: %v | inactiveSeedingTimeLimit %v", hashes, ratioLimit, seedingTimeLimit, inactiveSeedingTimeLimit)
 	}
 
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return errors.New("could not set share limits for torrents: %v unexpected status: %v", hashes, resp.StatusCode)
+	/*
+		HTTP Status Code 	Scenario
+		400 	Share limit or at least one id is invalid
+		200 	All other scenarios
+	*/
+	switch sc := resp.StatusCode; sc {
+	case http.StatusOK:
+		return nil
+	case http.StatusBadRequest:
+		return ErrInvalidShareLimit
+	default:
+		errors.Wrap(ErrUnexpectedStatus, "could not set share limits; hashes: %v | ratioLimit: %v | seedingTimeLimit: %v | inactiveSeedingTimeLimit %v | status code: %d", hashes, ratioLimit, seedingTimeLimit, inactiveSeedingTimeLimit, resp.StatusCode)
 	}
 
 	return nil
@@ -1896,13 +2001,13 @@ func (c *Client) SetTorrentUploadLimitCtx(ctx context.Context, hashes []string, 
 
 	resp, err := c.postCtx(ctx, "torrents/setUploadLimit", opts)
 	if err != nil {
-		return errors.Wrap(err, "could not set upload limit for torrents: %v", hashes)
+		return errors.Wrap(err, "could not set upload limit; hashes: %v", hashes)
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.New("could not set upload limit for torrents: %v unexpected status: %v", hashes, resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not set upload limit; hahses: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
 	return nil
@@ -1947,7 +2052,7 @@ func (c *Client) GetAppCookiesCtx(ctx context.Context) ([]Cookie, error) {
 	}(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, errors.New("could not get app cookies unexpected status: %v", resp.StatusCode)
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get app cookies; status code: %d", resp.StatusCode)
 	}
 
 	var cookies []Cookie
@@ -1988,11 +2093,11 @@ func (c *Client) SetAppCookiesCtx(ctx context.Context, cookies []Cookie) error {
 	case http.StatusBadRequest:
 		data, _ := io.ReadAll(resp.Body)
 		_ = data
-		return errors.New("request was not a valid json array of cookie objects")
+		return ErrInvalidCookies
 	case http.StatusOK:
 		return nil
 	default:
-		return errors.New("could not set app cookies unexpected status: %v", resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not set app cookies; status code: %d", resp.StatusCode)
 	}
 }
 
@@ -2016,7 +2121,7 @@ func (c *Client) GetTorrentPieceStatesCtx(ctx context.Context, hash string) ([]P
 	}(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, errors.New("could not get torrent piece states, torrent hash %v, unexpected status: %v", hash, resp.StatusCode)
+		return nil, errors.Wrap(ErrCannotGetTorrentPieceStates, "torrent hash %v, unexpected status: %v", hash, resp.StatusCode)
 	}
 
 	var result []PieceState
@@ -2039,7 +2144,7 @@ func (c *Client) GetTorrentPieceHashesCtx(ctx context.Context, hash string) ([]s
 	}
 	resp, err := c.getCtx(ctx, "torrents/pieceHashes", opts)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not get torrent piece hashes")
+		return nil, errors.Wrap(err, "could not get torrent piece hashes: hashes %v", hash)
 	}
 
 	defer func(Body io.ReadCloser) {
@@ -2048,11 +2153,11 @@ func (c *Client) GetTorrentPieceHashesCtx(ctx context.Context, hash string) ([]s
 
 	switch resp.StatusCode {
 	case http.StatusNotFound:
-		return nil, errors.New("Torrent hash was not found")
+		return nil, errors.Wrap(ErrTorrentNotFound, "torrent hash %v", hash)
 	case http.StatusOK:
 		break
 	default:
-		return nil, errors.New("could not get torrent piece states, torrent hash %v, unexpected status: %v", hash, resp.StatusCode)
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get torrent piece hashes; hash: %v, status code: %d", hash, resp.StatusCode)
 	}
 
 	var result []string
@@ -2080,7 +2185,7 @@ func (c *Client) AddPeersForTorrentsCtx(ctx context.Context, hashes, peers []str
 	}
 	resp, err := c.postCtx(ctx, "torrents/addPeers", opts)
 	if err != nil {
-		return errors.Wrap(err, "could not add peers for torrents, hashes %v", hashes)
+		return errors.Wrap(err, "could not add peers; hashes: %v | peers: %v", hashes, peers)
 	}
 
 	defer func(Body io.ReadCloser) {
@@ -2089,11 +2194,11 @@ func (c *Client) AddPeersForTorrentsCtx(ctx context.Context, hashes, peers []str
 
 	switch resp.StatusCode {
 	case http.StatusBadRequest:
-		return errors.New("none of the supplied peers are valid")
+		return errors.Wrap(ErrInvalidPeers, "hashes: %v, peers: %v", hashes, peers)
 	case http.StatusOK:
 		return nil
 	default:
-		return errors.New("could not add peers for torrents, torrent hashes %v, unexpected status: %v", hashes, resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not add peers; hashes %v | peers: %v | status code: %d", hashes, peers, resp.StatusCode)
 	}
 }
 
@@ -2290,7 +2395,7 @@ func (c *Client) GetTorrentsWebSeedsCtx(ctx context.Context, hash string) ([]Web
 	}
 	resp, err := c.getCtx(ctx, "torrents/webseeds", opts)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not get webseeds for torrent with hash: %s", hash)
+		return nil, errors.Wrap(err, "could not get webseeds for torrent; hash: %s", hash)
 	}
 	defer func(Body io.ReadCloser) {
 		_ = Body.Close()
@@ -2298,11 +2403,11 @@ func (c *Client) GetTorrentsWebSeedsCtx(ctx context.Context, hash string) ([]Web
 
 	switch resp.StatusCode {
 	case http.StatusNotFound:
-		return nil, errors.New("torrent hash was not found")
+		return nil, errors.Wrap(ErrTorrentNotFound, "hash: %s", hash)
 	case http.StatusOK:
 		break
 	default:
-		return nil, errors.New("unexpected status code: %d", resp.StatusCode)
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get webseeds for torrent; hash: %v, status code: %d", hash, resp.StatusCode)
 	}
 
 	var m []WebSeed
