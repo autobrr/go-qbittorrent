@@ -103,3 +103,8 @@ func (c *Client) WithHTTPClient(client *http.Client) *Client {
 	c.http = client
 	return c
 }
+
+// NewSyncManager creates a new sync manager for this client
+func (c *Client) NewSyncManager(options ...SyncOptions) *SyncManager {
+	return NewSyncManager(c, options...)
+}
