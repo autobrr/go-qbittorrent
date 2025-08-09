@@ -14,10 +14,14 @@ import (
 type SyncManager struct {
 	client           *Client
 	mu               sync.RWMutex
+	syncMu           sync.Mutex
+	syncCond         *sync.Cond
+	syncing          bool
 	data             *MainData
 	rid              int64
 	lastSync         time.Time
 	lastSyncDuration time.Duration
+	lastError        error
 	options          SyncOptions
 }
 
@@ -67,10 +71,13 @@ func NewSyncManager(client *Client, options ...SyncOptions) *SyncManager {
 		opts.SyncInterval = 2 * time.Second
 	}
 
-	return &SyncManager{
+	sm := &SyncManager{
 		client:  client,
 		options: opts,
 	}
+	sm.syncCond = sync.NewCond(&sm.syncMu)
+
+	return sm
 }
 
 // Start initializes the sync manager and optionally starts auto-sync
@@ -89,19 +96,51 @@ func (sm *SyncManager) Start(ctx context.Context) error {
 }
 
 // Sync performs a synchronization with the qBittorrent server
+// If another sync is already in progress, this method will wait for it to complete
+// and return immediately without performing another sync
 func (sm *SyncManager) Sync(ctx context.Context) error {
+	// First, check if a sync is already in progress
+	sm.syncMu.Lock()
+	if sm.syncing {
+		// Another sync is in progress, wait for it to complete
+		sm.syncCond.Wait()
+		// Get the cached error from the last sync
+		sm.mu.RLock()
+		cachedError := sm.lastError
+		sm.mu.RUnlock()
+		sm.syncMu.Unlock()
+		// Return the cached error from the sync that just completed
+		return cachedError
+	}
+
+	// Mark that we're starting a sync
+	sm.syncing = true
+	sm.syncMu.Unlock()
+
+	// Ensure we clean up the syncing flag and notify waiting goroutines
+	defer func() {
+		sm.syncMu.Lock()
+		sm.syncing = false
+		sm.syncCond.Broadcast() // Wake up all waiting goroutines
+		sm.syncMu.Unlock()
+	}()
+
+	// Perform the actual sync with timing
 	startTime := time.Now()
-	
+	var syncError error
+
 	sm.mu.Lock()
 	defer func() {
 		sm.lastSyncDuration = time.Since(startTime)
 		sm.lastSync = time.Now()
+		sm.lastError = syncError // Store the error for future cached calls
 		sm.mu.Unlock()
 	}()
 
 	// Get raw JSON to detect field presence
 	rawData, err := sm.getRawMainData(ctx, sm.rid)
 	if err != nil {
+		syncError = err
 		if sm.options.OnError != nil {
 			sm.options.OnError(err)
 		}
@@ -111,6 +150,7 @@ func (sm *SyncManager) Sync(ctx context.Context) error {
 	// Also get parsed struct for convenience
 	source, err := sm.client.SyncMainDataCtx(ctx, sm.rid)
 	if err != nil {
+		syncError = err
 		if sm.options.OnError != nil {
 			sm.options.OnError(err)
 		}
@@ -141,6 +181,8 @@ func (sm *SyncManager) Sync(ctx context.Context) error {
 		sm.options.OnUpdate(sm.data)
 	}
 
+	// Success - clear any previous error
+	syncError = nil
 	return nil
 }
 
@@ -375,17 +417,25 @@ func (sm *SyncManager) LastSyncDuration() time.Duration {
 	return sm.lastSyncDuration
 }
 
+// LastError returns the error from the last sync operation, or nil if successful
+func (sm *SyncManager) LastError() error {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+
+	return sm.lastError
+}
+
 // autoSync runs the automatic sync loop with dynamic intervals
 func (sm *SyncManager) autoSync(ctx context.Context) {
 	interval := sm.options.SyncInterval
-	
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-time.After(interval):
 			_ = sm.Sync(ctx)
-			
+
 			// Calculate next interval based on sync options
 			if sm.options.DynamicSync {
 				interval = sm.calculateNextInterval()
@@ -401,10 +451,10 @@ func (sm *SyncManager) calculateNextInterval() time.Duration {
 	sm.mu.RLock()
 	lastDuration := sm.lastSyncDuration
 	sm.mu.RUnlock()
-	
+
 	// Base interval is double the last sync duration
 	baseInterval := lastDuration * 2
-	
+
 	// Apply bounds
 	if baseInterval < sm.options.MinSyncInterval {
 		baseInterval = sm.options.MinSyncInterval
@@ -412,7 +462,7 @@ func (sm *SyncManager) calculateNextInterval() time.Duration {
 	if baseInterval > sm.options.MaxSyncInterval {
 		baseInterval = sm.options.MaxSyncInterval
 	}
-	
+
 	// Add jitter to prevent thundering herd
 	if sm.options.JitterPercent > 0 && sm.options.JitterPercent <= 100 {
 		jitterRange := float64(baseInterval) * float64(sm.options.JitterPercent) / 100.0
@@ -423,13 +473,13 @@ func (sm *SyncManager) calculateNextInterval() time.Duration {
 		} else {
 			baseInterval -= jitter
 		}
-		
+
 		// Ensure we don't go below minimum after jitter
 		if baseInterval < sm.options.MinSyncInterval {
 			baseInterval = sm.options.MinSyncInterval
 		}
 	}
-	
+
 	return baseInterval
 }
 
