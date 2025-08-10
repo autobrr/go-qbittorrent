@@ -99,6 +99,7 @@ func (sm *SyncManager) Start(ctx context.Context) error {
 // If another sync is already in progress, this method will wait for it to complete
 // and return immediately without performing another sync
 func (sm *SyncManager) Sync(ctx context.Context) error {
+	fmt.Printf("Starting sync (RID: %d)\n", sm.rid)
 	// First, check if a sync is already in progress
 	sm.syncMu.Lock()
 	if sm.syncing {
@@ -147,6 +148,7 @@ func (sm *SyncManager) Sync(ctx context.Context) error {
 		return err
 	}
 
+	fmt.Printf("Raw data fields: %d\n", sm.rid)
 	// Also get parsed struct for convenience
 	source, err := sm.client.SyncMainDataCtx(ctx, sm.rid)
 	if err != nil {
@@ -162,13 +164,30 @@ func (sm *SyncManager) Sync(ctx context.Context) error {
 	if fullUpdateVal, exists := rawData["full_update"]; exists {
 		if fullUpdate, ok := fullUpdateVal.(bool); ok {
 			isFullUpdate = fullUpdate
+			fmt.Printf("Full Update!\n")
 		}
 	}
 
+	fmt.Printf("Update type: full_update=%v, data==nil=%v\n", isFullUpdate, sm.data == nil)
+
 	if sm.data == nil || isFullUpdate {
 		// First sync or full update - replace everything
+		torrentCount := len(source.Torrents)
+		fmt.Printf("Full update - replacing all data with %d torrents\n", torrentCount)
 		sm.data = source
-		sm.initializeMaps()
+		// Ensure maps are initialized for future partial updates
+		if sm.data.Torrents == nil {
+			sm.data.Torrents = make(map[string]Torrent)
+		}
+		if sm.data.Categories == nil {
+			sm.data.Categories = make(map[string]Category)
+		}
+		if sm.data.Trackers == nil {
+			sm.data.Trackers = make(map[string][]string)
+		}
+		if sm.data.Tags == nil {
+			sm.data.Tags = make([]string, 0)
+		}
 	} else {
 		// Partial update - merge intelligently
 		sm.mergePartialUpdate(rawData, source)
@@ -204,115 +223,239 @@ func (sm *SyncManager) getRawMainData(ctx context.Context, rid int64) (map[strin
 	return raw, nil
 }
 
-// initializeMaps ensures all maps are initialized and cleared
-func (sm *SyncManager) initializeMaps() {
-	if sm.data.Torrents == nil {
-		sm.data.Torrents = make(map[string]Torrent)
-	} else {
-		// Clear existing map to preserve capacity
-		clear(sm.data.Torrents)
-	}
-
-	if sm.data.Categories == nil {
-		sm.data.Categories = make(map[string]Category)
-	} else {
-		// Clear existing map to preserve capacity
-		clear(sm.data.Categories)
-	}
-
-	if sm.data.Trackers == nil {
-		sm.data.Trackers = make(map[string][]string)
-	} else {
-		// Clear existing map to preserve capacity
-		clear(sm.data.Trackers)
-	}
-
-	if sm.data.Tags == nil {
-		sm.data.Tags = make([]string, 0)
-	} else {
-		// Clear slice but preserve capacity
-		sm.data.Tags = sm.data.Tags[:0]
-	}
-}
-
-// mergePartialUpdate efficiently merges partial updates using JSON unmarshaling
+// mergePartialUpdate efficiently merges partial updates using field-level merging
 func (sm *SyncManager) mergePartialUpdate(rawData map[string]interface{}, source *MainData) {
+	fmt.Printf("Starting partial update - RID: %d\n", source.Rid)
+
 	// Update RID and server state
 	sm.data.Rid = source.Rid
 	sm.data.ServerState = source.ServerState
 
-	// Handle torrents with smart JSON merging
+	// Handle torrents ONLY if the torrents field is present AND not empty in the raw JSON
+	// This prevents clearing torrents when there's no torrent update
 	if torrentsRaw, exists := rawData["torrents"]; exists {
-		if torrentsMap, ok := torrentsRaw.(map[string]interface{}); ok {
-			sm.mergeTorrents(torrentsMap)
+		if torrentsMap, ok := torrentsRaw.(map[string]interface{}); ok && len(torrentsMap) > 0 {
+			fmt.Printf("Processing %d torrent updates\n", len(torrentsMap))
+			beforeCount := len(sm.data.Torrents)
+			sm.mergeTorrentsPartial(torrentsMap)
+			afterCount := len(sm.data.Torrents)
+			fmt.Printf("Torrent count after merge: %d -> %d\n", beforeCount, afterCount)
+		} else {
+			fmt.Printf("Skipping torrent updates - empty or invalid torrents field\n")
+		}
+	} else {
+		fmt.Printf("Skipping torrent updates - no torrents field in raw data\n")
+	}
+
+	// Remove deleted torrents ONLY if there are actually items to remove
+	if len(source.TorrentsRemoved) > 0 {
+		fmt.Printf("Removing %d torrents: %v\n", len(source.TorrentsRemoved), source.TorrentsRemoved)
+		beforeCount := len(sm.data.Torrents)
+		remove(source.TorrentsRemoved, &sm.data.Torrents)
+		afterCount := len(sm.data.Torrents)
+		fmt.Printf("Torrent count: %d -> %d (removed %d)\n", beforeCount, afterCount, beforeCount-afterCount)
+	}
+
+	// Handle categories ONLY if present in raw JSON AND not empty
+	if categoriesRaw, exists := rawData["categories"]; exists {
+		if categoriesMap, ok := categoriesRaw.(map[string]interface{}); ok && len(categoriesMap) > 0 {
+			merge(source.Categories, &sm.data.Categories)
+		}
+	}
+	if len(source.CategoriesRemoved) > 0 {
+		fmt.Printf("Removing %d categories: %v\n", len(source.CategoriesRemoved), source.CategoriesRemoved)
+		beforeCount := len(sm.data.Categories)
+		remove(source.CategoriesRemoved, &sm.data.Categories)
+		afterCount := len(sm.data.Categories)
+		fmt.Printf("Category count: %d -> %d (removed %d)\n", beforeCount, afterCount, beforeCount-afterCount)
+	}
+
+	// Handle trackers ONLY if present in raw JSON AND not empty
+	if trackersRaw, exists := rawData["trackers"]; exists {
+		if trackersMap, ok := trackersRaw.(map[string]interface{}); ok && len(trackersMap) > 0 {
+			merge(source.Trackers, &sm.data.Trackers)
 		}
 	}
 
-	// Remove deleted torrents
-	for _, hash := range source.TorrentsRemoved {
-		delete(sm.data.Torrents, hash)
-	}
-
-	// Handle other fields (these are typically complete updates)
-	if len(source.Categories) > 0 {
-		for name, category := range source.Categories {
-			sm.data.Categories[name] = category
+	// Handle tags ONLY if present in raw JSON AND not empty
+	if tagsRaw, exists := rawData["tags"]; exists {
+		if tagsList, ok := tagsRaw.([]interface{}); ok && len(tagsList) > 0 {
+			mergeSlice(source.Tags, &sm.data.Tags)
 		}
-	}
-	for _, name := range source.CategoriesRemoved {
-		delete(sm.data.Categories, name)
-	}
-
-	if len(source.Trackers) > 0 {
-		for hash, trackers := range source.Trackers {
-			trackersCopy := make([]string, len(trackers))
-			copy(trackersCopy, trackers)
-			sm.data.Trackers[hash] = trackersCopy
-		}
-	}
-
-	if len(source.Tags) > 0 {
-		sm.data.Tags = append(sm.data.Tags, source.Tags...)
-		sm.data.Tags = removeDuplicateStrings(sm.data.Tags)
 	}
 	if len(source.TagsRemoved) > 0 {
-		sm.data.Tags = removeStrings(sm.data.Tags, source.TagsRemoved)
+		fmt.Printf("Removing %d tags: %v\n", len(source.TagsRemoved), source.TagsRemoved)
+		beforeCount := len(sm.data.Tags)
+		removeSlice(source.TagsRemoved, &sm.data.Tags)
+		afterCount := len(sm.data.Tags)
+		fmt.Printf("Tag count: %d -> %d (removed %d)\n", beforeCount, afterCount, beforeCount-afterCount)
 	}
 }
 
-// mergeTorrents efficiently merges torrent updates using JSON unmarshaling
-func (sm *SyncManager) mergeTorrents(torrentsMap map[string]interface{}) {
+// mergeTorrentsPartial merges only the fields that are present in the update
+func (sm *SyncManager) mergeTorrentsPartial(torrentsMap map[string]interface{}) {
 	for hash, torrentRaw := range torrentsMap {
-		existing, exists := sm.data.Torrents[hash]
-
-		if !exists {
-			// New torrent - unmarshal directly
-			torrentBytes, _ := json.Marshal(torrentRaw)
-			var newTorrent Torrent
-			if err := json.Unmarshal(torrentBytes, &newTorrent); err == nil {
-				sm.data.Torrents[hash] = newTorrent
-			}
+		updateMap, ok := torrentRaw.(map[string]interface{})
+		if !ok {
+			fmt.Printf("Skipping torrent %s - invalid data format\n", hash)
 			continue
 		}
 
-		// Existing torrent - merge partial update
-		// Convert existing to map, merge with update, then convert back
-		existingBytes, _ := json.Marshal(existing)
-		var existingMap map[string]interface{}
-		json.Unmarshal(existingBytes, &existingMap)
-
-		// Merge the partial update into existing data
-		if updateMap, ok := torrentRaw.(map[string]interface{}); ok {
-			for key, value := range updateMap {
-				existingMap[key] = value
-			}
+		existing, exists := sm.data.Torrents[hash]
+		if !exists {
+			fmt.Printf("New torrent %s with fields: %v\n", hash, getMapKeys(updateMap))
+			// New torrent - create a minimal torrent with the hash at least
+			existing = Torrent{Hash: hash}
+		} else {
+			fmt.Printf("Updating existing torrent %s (name='%s') with fields: %v\n", hash, existing.Name, getMapKeys(updateMap))
 		}
 
-		// Convert back to Torrent struct
-		mergedBytes, _ := json.Marshal(existingMap)
-		var mergedTorrent Torrent
-		if err := json.Unmarshal(mergedBytes, &mergedTorrent); err == nil {
-			sm.data.Torrents[hash] = mergedTorrent
+		// Always start with existing data and update only provided fields
+		sm.updateTorrentFields(&existing, updateMap)
+		sm.data.Torrents[hash] = existing
+	}
+}
+
+// Helper function to get map keys for debugging
+func getMapKeys(m map[string]interface{}) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+// updateTorrentFields updates only the fields that are present in the update map
+func (sm *SyncManager) updateTorrentFields(torrent *Torrent, updateMap map[string]interface{}) {
+	// Only update fields that are explicitly present in the JSON
+	if val, exists := updateMap["name"]; exists {
+		if name, ok := val.(string); ok {
+			torrent.Name = name
+		}
+	}
+	if val, exists := updateMap["hash"]; exists {
+		if hash, ok := val.(string); ok {
+			torrent.Hash = hash
+		}
+	}
+	if val, exists := updateMap["progress"]; exists {
+		if progress, ok := val.(float64); ok {
+			torrent.Progress = progress
+		}
+	}
+	if val, exists := updateMap["dlspeed"]; exists {
+		if speed, ok := val.(float64); ok {
+			torrent.DlSpeed = int64(speed)
+		}
+	}
+	if val, exists := updateMap["upspeed"]; exists {
+		if speed, ok := val.(float64); ok {
+			torrent.UpSpeed = int64(speed)
+		}
+	}
+	if val, exists := updateMap["state"]; exists {
+		if state, ok := val.(string); ok {
+			torrent.State = TorrentState(state)
+		}
+	}
+	if val, exists := updateMap["category"]; exists {
+		if category, ok := val.(string); ok {
+			torrent.Category = category
+		}
+	}
+	if val, exists := updateMap["tags"]; exists {
+		if tags, ok := val.(string); ok {
+			torrent.Tags = tags
+		}
+	}
+	if val, exists := updateMap["size"]; exists {
+		if size, ok := val.(float64); ok {
+			torrent.Size = int64(size)
+		}
+	}
+	if val, exists := updateMap["completed"]; exists {
+		if completed, ok := val.(float64); ok {
+			torrent.Completed = int64(completed)
+		}
+	}
+	if val, exists := updateMap["ratio"]; exists {
+		if ratio, ok := val.(float64); ok {
+			torrent.Ratio = ratio
+		}
+	}
+	if val, exists := updateMap["priority"]; exists {
+		if priority, ok := val.(float64); ok {
+			torrent.Priority = int64(priority)
+		}
+	}
+	if val, exists := updateMap["num_seeds"]; exists {
+		if seeds, ok := val.(float64); ok {
+			torrent.NumSeeds = int64(seeds)
+		}
+	}
+	if val, exists := updateMap["num_leechs"]; exists {
+		if leechs, ok := val.(float64); ok {
+			torrent.NumLeechs = int64(leechs)
+		}
+	}
+	if val, exists := updateMap["eta"]; exists {
+		if eta, ok := val.(float64); ok {
+			torrent.ETA = int64(eta)
+		}
+	}
+	if val, exists := updateMap["seq_dl"]; exists {
+		if seqDl, ok := val.(bool); ok {
+			torrent.SequentialDownload = seqDl
+		}
+	}
+	if val, exists := updateMap["f_l_piece_prio"]; exists {
+		if flPiecePrio, ok := val.(bool); ok {
+			torrent.FirstLastPiecePrio = flPiecePrio
+		}
+	}
+	if val, exists := updateMap["force_start"]; exists {
+		if forceStart, ok := val.(bool); ok {
+			torrent.ForceStart = forceStart
+		}
+	}
+	if val, exists := updateMap["super_seeding"]; exists {
+		if superSeeding, ok := val.(bool); ok {
+			torrent.SuperSeeding = superSeeding
+		}
+	}
+	if val, exists := updateMap["added_on"]; exists {
+		if addedOn, ok := val.(float64); ok {
+			torrent.AddedOn = int64(addedOn)
+		}
+	}
+	if val, exists := updateMap["completion_on"]; exists {
+		if completionOn, ok := val.(float64); ok {
+			torrent.CompletionOn = int64(completionOn)
+		}
+	}
+	if val, exists := updateMap["tracker"]; exists {
+		if tracker, ok := val.(string); ok {
+			torrent.Tracker = tracker
+		}
+	}
+	if val, exists := updateMap["save_path"]; exists {
+		if savePath, ok := val.(string); ok {
+			torrent.SavePath = savePath
+		}
+	}
+	if val, exists := updateMap["content_path"]; exists {
+		if contentPath, ok := val.(string); ok {
+			torrent.ContentPath = contentPath
+		}
+	}
+	if val, exists := updateMap["seeding_time"]; exists {
+		if seedingTime, ok := val.(float64); ok {
+			torrent.SeedingTime = int64(seedingTime)
+		}
+	}
+	if val, exists := updateMap["time_active"]; exists {
+		if timeActive, ok := val.(float64); ok {
+			torrent.TimeActive = int64(timeActive)
 		}
 	}
 }
@@ -514,35 +657,4 @@ func (sm *SyncManager) copyMainData(src *MainData) *MainData {
 	}
 
 	return dst
-}
-
-// Helper functions
-func removeDuplicateStrings(slice []string) []string {
-	seen := make(map[string]bool)
-	result := make([]string, 0, len(slice))
-
-	for _, item := range slice {
-		if !seen[item] {
-			seen[item] = true
-			result = append(result, item)
-		}
-	}
-
-	return result
-}
-
-func removeStrings(slice, toRemove []string) []string {
-	removeMap := make(map[string]bool)
-	for _, item := range toRemove {
-		removeMap[item] = true
-	}
-
-	result := make([]string, 0, len(slice))
-	for _, item := range slice {
-		if !removeMap[item] {
-			result = append(result, item)
-		}
-	}
-
-	return result
 }
