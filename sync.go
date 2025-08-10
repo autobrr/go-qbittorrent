@@ -3,6 +3,7 @@ package qbittorrent
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"math/rand"
 	"sync"
 	"time"
@@ -201,7 +202,7 @@ func (sm *SyncManager) Sync(ctx context.Context) error {
 // getRawMainData fetches raw JSON to detect which fields are present
 func (sm *SyncManager) getRawMainData(ctx context.Context, rid int64) (map[string]interface{}, error) {
 	resp, err := sm.client.getCtx(ctx, "/sync/maindata", map[string]string{
-		"rid": string(rune(rid)), // replace fmt.Sprintf with string conversion if needed
+		"rid": fmt.Sprintf("%d", rid),
 	})
 	if err != nil {
 		return nil, err
@@ -276,7 +277,6 @@ func (sm *SyncManager) mergeTorrentsPartial(torrentsMap map[string]interface{}) 
 		if !exists {
 			// New torrent - create a minimal torrent with the hash at least
 			existing = Torrent{Hash: hash}
-		} else {
 		}
 
 		// Always start with existing data and update only provided fields
@@ -617,4 +617,36 @@ func (sm *SyncManager) copyMainData(src *MainData) *MainData {
 	}
 
 	return dst
+}
+
+// removeDuplicateStrings removes duplicate strings from a slice
+func removeDuplicateStrings(input []string) []string {
+	seen := make(map[string]bool)
+	result := make([]string, 0, len(input))
+	
+	for _, item := range input {
+		if !seen[item] {
+			seen[item] = true
+			result = append(result, item)
+		}
+	}
+	
+	return result
+}
+
+// removeStrings removes specified strings from a slice
+func removeStrings(input []string, toRemove []string) []string {
+	removeMap := make(map[string]bool)
+	for _, item := range toRemove {
+		removeMap[item] = true
+	}
+	
+	result := make([]string, 0, len(input))
+	for _, item := range input {
+		if !removeMap[item] {
+			result = append(result, item)
+		}
+	}
+	
+	return result
 }

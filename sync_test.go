@@ -296,7 +296,7 @@ func TestMergeTorrents(t *testing.T) {
 		},
 	}
 
-	sm.mergeTorrents(torrentsMap)
+	sm.mergeTorrentsPartial(torrentsMap)
 
 	merged := sm.data.Torrents["abc123"]
 
@@ -341,7 +341,7 @@ func TestMergeTorrents_NewTorrent(t *testing.T) {
 		},
 	}
 
-	sm.mergeTorrents(torrentsMap)
+	sm.mergeTorrentsPartial(torrentsMap)
 
 	if len(sm.data.Torrents) != 1 {
 		t.Errorf("Expected 1 torrent, got %d", len(sm.data.Torrents))
