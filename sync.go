@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/rand"
 	"sync"
 	"time"
@@ -137,18 +138,8 @@ func (sm *SyncManager) Sync(ctx context.Context) error {
 		sm.mu.Unlock()
 	}()
 
-	// Get raw JSON to detect field presence
-	rawData, err := sm.getRawMainData(ctx, sm.rid)
-	if err != nil {
-		syncError = err
-		if sm.options.OnError != nil {
-			sm.options.OnError(err)
-		}
-		return err
-	}
-
-	// Also get parsed struct for convenience
-	source, err := sm.client.SyncMainDataCtx(ctx, sm.rid)
+	// Get both raw JSON and parsed struct in a single request
+	rawData, source, err := sm.getSyncData(ctx, sm.rid)
 	if err != nil {
 		syncError = err
 		if sm.options.OnError != nil {
@@ -167,7 +158,6 @@ func (sm *SyncManager) Sync(ctx context.Context) error {
 
 	if sm.data == nil || isFullUpdate {
 		// First sync or full update - replace everything
-		_ = len(source.Torrents) // ensure side effect if needed, or remove if not used
 		sm.data = source
 		// Ensure maps are initialized for future partial updates
 		if sm.data.Torrents == nil {
@@ -199,35 +189,47 @@ func (sm *SyncManager) Sync(ctx context.Context) error {
 	return nil
 }
 
-// getRawMainData fetches raw JSON to detect which fields are present
-func (sm *SyncManager) getRawMainData(ctx context.Context, rid int64) (map[string]interface{}, error) {
+// getSyncData fetches and parses sync data in a single request
+func (sm *SyncManager) getSyncData(ctx context.Context, rid int64) (map[string]interface{}, *MainData, error) {
 	resp, err := sm.client.getCtx(ctx, "/sync/maindata", map[string]string{
 		"rid": fmt.Sprintf("%d", rid),
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer resp.Body.Close()
 
-	var raw map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
-		return nil, err
+	// Read the response body once
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	return raw, nil
+	// Parse raw JSON for field detection
+	var rawData map[string]interface{}
+	if err := json.Unmarshal(bodyBytes, &rawData); err != nil {
+		return nil, nil, err
+	}
+
+	// Parse structured data
+	var source MainData
+	if err := json.Unmarshal(bodyBytes, &source); err != nil {
+		return nil, nil, err
+	}
+
+	return rawData, &source, nil
 }
 
 // mergePartialUpdate efficiently merges partial updates using field-level merging
 func (sm *SyncManager) mergePartialUpdate(rawData map[string]interface{}, source *MainData) {
-
 	// Update RID and server state
 	sm.data.Rid = source.Rid
 	sm.data.ServerState = source.ServerState
 
-	// Handle torrents ONLY if the torrents field is present AND not empty in the raw JSON
+	// Handle torrents ONLY if the torrents field is present in the raw JSON
 	// This prevents clearing torrents when there's no torrent update
 	if torrentsRaw, exists := rawData["torrents"]; exists {
-		if torrentsMap, ok := torrentsRaw.(map[string]interface{}); ok && len(torrentsMap) > 0 {
+		if torrentsMap, ok := torrentsRaw.(map[string]interface{}); ok {
 			sm.mergeTorrentsPartial(torrentsMap)
 		}
 	}
@@ -237,9 +239,9 @@ func (sm *SyncManager) mergePartialUpdate(rawData map[string]interface{}, source
 		remove(source.TorrentsRemoved, &sm.data.Torrents)
 	}
 
-	// Handle categories ONLY if present in raw JSON AND not empty
+	// Handle categories ONLY if present in raw JSON
 	if categoriesRaw, exists := rawData["categories"]; exists {
-		if categoriesMap, ok := categoriesRaw.(map[string]interface{}); ok && len(categoriesMap) > 0 {
+		if _, ok := categoriesRaw.(map[string]interface{}); ok {
 			merge(source.Categories, &sm.data.Categories)
 		}
 	}
@@ -247,16 +249,16 @@ func (sm *SyncManager) mergePartialUpdate(rawData map[string]interface{}, source
 		remove(source.CategoriesRemoved, &sm.data.Categories)
 	}
 
-	// Handle trackers ONLY if present in raw JSON AND not empty
+	// Handle trackers ONLY if present in raw JSON
 	if trackersRaw, exists := rawData["trackers"]; exists {
-		if trackersMap, ok := trackersRaw.(map[string]interface{}); ok && len(trackersMap) > 0 {
+		if _, ok := trackersRaw.(map[string]interface{}); ok {
 			merge(source.Trackers, &sm.data.Trackers)
 		}
 	}
 
-	// Handle tags ONLY if present in raw JSON AND not empty
+	// Handle tags ONLY if present in raw JSON
 	if tagsRaw, exists := rawData["tags"]; exists {
-		if tagsList, ok := tagsRaw.([]interface{}); ok && len(tagsList) > 0 {
+		if _, ok := tagsRaw.([]interface{}); ok {
 			mergeSlice(source.Tags, &sm.data.Tags)
 		}
 	}
