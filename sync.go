@@ -3,7 +3,6 @@ package qbittorrent
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"math/rand"
 	"sync"
 	"time"
@@ -99,7 +98,6 @@ func (sm *SyncManager) Start(ctx context.Context) error {
 // If another sync is already in progress, this method will wait for it to complete
 // and return immediately without performing another sync
 func (sm *SyncManager) Sync(ctx context.Context) error {
-	fmt.Printf("Starting sync (RID: %d)\n", sm.rid)
 	// First, check if a sync is already in progress
 	sm.syncMu.Lock()
 	if sm.syncing {
@@ -148,7 +146,6 @@ func (sm *SyncManager) Sync(ctx context.Context) error {
 		return err
 	}
 
-	fmt.Printf("Raw data fields: %d\n", sm.rid)
 	// Also get parsed struct for convenience
 	source, err := sm.client.SyncMainDataCtx(ctx, sm.rid)
 	if err != nil {
@@ -164,16 +161,12 @@ func (sm *SyncManager) Sync(ctx context.Context) error {
 	if fullUpdateVal, exists := rawData["full_update"]; exists {
 		if fullUpdate, ok := fullUpdateVal.(bool); ok {
 			isFullUpdate = fullUpdate
-			fmt.Printf("Full Update!\n")
 		}
 	}
 
-	fmt.Printf("Update type: full_update=%v, data==nil=%v\n", isFullUpdate, sm.data == nil)
-
 	if sm.data == nil || isFullUpdate {
 		// First sync or full update - replace everything
-		torrentCount := len(source.Torrents)
-		fmt.Printf("Full update - replacing all data with %d torrents\n", torrentCount)
+		_ = len(source.Torrents) // ensure side effect if needed, or remove if not used
 		sm.data = source
 		// Ensure maps are initialized for future partial updates
 		if sm.data.Torrents == nil {
@@ -208,7 +201,7 @@ func (sm *SyncManager) Sync(ctx context.Context) error {
 // getRawMainData fetches raw JSON to detect which fields are present
 func (sm *SyncManager) getRawMainData(ctx context.Context, rid int64) (map[string]interface{}, error) {
 	resp, err := sm.client.getCtx(ctx, "/sync/maindata", map[string]string{
-		"rid": fmt.Sprintf("%d", rid),
+		"rid": string(rune(rid)), // replace fmt.Sprintf with string conversion if needed
 	})
 	if err != nil {
 		return nil, err
@@ -225,7 +218,6 @@ func (sm *SyncManager) getRawMainData(ctx context.Context, rid int64) (map[strin
 
 // mergePartialUpdate efficiently merges partial updates using field-level merging
 func (sm *SyncManager) mergePartialUpdate(rawData map[string]interface{}, source *MainData) {
-	fmt.Printf("Starting partial update - RID: %d\n", source.Rid)
 
 	// Update RID and server state
 	sm.data.Rid = source.Rid
@@ -235,25 +227,13 @@ func (sm *SyncManager) mergePartialUpdate(rawData map[string]interface{}, source
 	// This prevents clearing torrents when there's no torrent update
 	if torrentsRaw, exists := rawData["torrents"]; exists {
 		if torrentsMap, ok := torrentsRaw.(map[string]interface{}); ok && len(torrentsMap) > 0 {
-			fmt.Printf("Processing %d torrent updates\n", len(torrentsMap))
-			beforeCount := len(sm.data.Torrents)
 			sm.mergeTorrentsPartial(torrentsMap)
-			afterCount := len(sm.data.Torrents)
-			fmt.Printf("Torrent count after merge: %d -> %d\n", beforeCount, afterCount)
-		} else {
-			fmt.Printf("Skipping torrent updates - empty or invalid torrents field\n")
 		}
-	} else {
-		fmt.Printf("Skipping torrent updates - no torrents field in raw data\n")
 	}
 
 	// Remove deleted torrents ONLY if there are actually items to remove
 	if len(source.TorrentsRemoved) > 0 {
-		fmt.Printf("Removing %d torrents: %v\n", len(source.TorrentsRemoved), source.TorrentsRemoved)
-		beforeCount := len(sm.data.Torrents)
 		remove(source.TorrentsRemoved, &sm.data.Torrents)
-		afterCount := len(sm.data.Torrents)
-		fmt.Printf("Torrent count: %d -> %d (removed %d)\n", beforeCount, afterCount, beforeCount-afterCount)
 	}
 
 	// Handle categories ONLY if present in raw JSON AND not empty
@@ -263,11 +243,7 @@ func (sm *SyncManager) mergePartialUpdate(rawData map[string]interface{}, source
 		}
 	}
 	if len(source.CategoriesRemoved) > 0 {
-		fmt.Printf("Removing %d categories: %v\n", len(source.CategoriesRemoved), source.CategoriesRemoved)
-		beforeCount := len(sm.data.Categories)
 		remove(source.CategoriesRemoved, &sm.data.Categories)
-		afterCount := len(sm.data.Categories)
-		fmt.Printf("Category count: %d -> %d (removed %d)\n", beforeCount, afterCount, beforeCount-afterCount)
 	}
 
 	// Handle trackers ONLY if present in raw JSON AND not empty
@@ -284,11 +260,7 @@ func (sm *SyncManager) mergePartialUpdate(rawData map[string]interface{}, source
 		}
 	}
 	if len(source.TagsRemoved) > 0 {
-		fmt.Printf("Removing %d tags: %v\n", len(source.TagsRemoved), source.TagsRemoved)
-		beforeCount := len(sm.data.Tags)
 		removeSlice(source.TagsRemoved, &sm.data.Tags)
-		afterCount := len(sm.data.Tags)
-		fmt.Printf("Tag count: %d -> %d (removed %d)\n", beforeCount, afterCount, beforeCount-afterCount)
 	}
 }
 
@@ -297,32 +269,20 @@ func (sm *SyncManager) mergeTorrentsPartial(torrentsMap map[string]interface{}) 
 	for hash, torrentRaw := range torrentsMap {
 		updateMap, ok := torrentRaw.(map[string]interface{})
 		if !ok {
-			fmt.Printf("Skipping torrent %s - invalid data format\n", hash)
 			continue
 		}
 
 		existing, exists := sm.data.Torrents[hash]
 		if !exists {
-			fmt.Printf("New torrent %s with fields: %v\n", hash, getMapKeys(updateMap))
 			// New torrent - create a minimal torrent with the hash at least
 			existing = Torrent{Hash: hash}
 		} else {
-			fmt.Printf("Updating existing torrent %s (name='%s') with fields: %v\n", hash, existing.Name, getMapKeys(updateMap))
 		}
 
 		// Always start with existing data and update only provided fields
 		sm.updateTorrentFields(&existing, updateMap)
 		sm.data.Torrents[hash] = existing
 	}
-}
-
-// Helper function to get map keys for debugging
-func getMapKeys(m map[string]interface{}) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	return keys
 }
 
 // updateTorrentFields updates only the fields that are present in the update map
