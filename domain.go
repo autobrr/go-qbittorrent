@@ -305,6 +305,8 @@ type TorrentAddOptions struct {
 	SkipHashCheck      bool
 	ContentLayout      ContentLayout
 	SavePath           string
+	DownloadPath       string
+	UseDownloadPath    bool
 	AutoTMM            bool
 	Category           string
 	Tags               string
@@ -334,14 +336,14 @@ func (o *TorrentAddOptions) Prepare() map[string]string {
 		options["skip_checking"] = "true"
 	}
 
-	if o.ContentLayout == ContentLayoutSubfolderCreate {
+	switch o.ContentLayout {
+	case ContentLayoutSubfolderCreate:
 		// pre qBittorrent version 4.3.2
 		options["root_folder"] = "true"
 
 		// post version 4.3.2
 		options["contentLayout"] = string(ContentLayoutSubfolderCreate)
-
-	} else if o.ContentLayout == ContentLayoutSubfolderNone {
+	case ContentLayoutSubfolderNone:
 		// pre qBittorrent version 4.3.2
 		options["root_folder"] = "false"
 
@@ -352,6 +354,11 @@ func (o *TorrentAddOptions) Prepare() map[string]string {
 
 	if o.SavePath != "" {
 		options["savepath"] = o.SavePath
+		options["autoTMM"] = "false"
+	}
+	if o.DownloadPath != "" {
+		options["downloadPath"] = o.DownloadPath
+		options["useDownloadPath"] = "true"
 		options["autoTMM"] = "false"
 	}
 	if o.Category != "" {
