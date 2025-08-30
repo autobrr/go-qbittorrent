@@ -103,3 +103,8 @@ func (c *Client) WithHTTPClient(client *http.Client) *Client {
 	c.http = client
 	return c
 }
+
+// GetHTTPClient allows you to a receive the implemented [http.Client].
+func (c *Client) GetHTTPClient() *Client {
+	return c.http
+}
