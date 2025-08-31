@@ -364,9 +364,10 @@ func (c *Client) GetTorrentTrackersCtx(ctx context.Context, hash string) ([]Torr
 
 	c.log.Printf("get torrent trackers response dump: %q", dump)
 
-	if resp.StatusCode == http.StatusNotFound {
+	switch resp.StatusCode {
+	case http.StatusNotFound:
 		return nil, nil
-	} else if resp.StatusCode == http.StatusForbidden {
+	case http.StatusForbidden:
 		return nil, nil
 	}
 
