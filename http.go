@@ -232,9 +232,9 @@ func copyBody(src io.ReadCloser) ([]byte, error) {
 }
 
 func resetBody(request *http.Request, originalBody []byte) {
-	request.Body = io.NopCloser(bytes.NewBuffer(originalBody))
+	request.Body = io.NopCloser(bytes.NewReader(originalBody))
 	request.GetBody = func() (io.ReadCloser, error) {
-		return io.NopCloser(bytes.NewBuffer(originalBody)), nil
+		return io.NopCloser(bytes.NewReader(originalBody)), nil
 	}
 }
 
@@ -262,29 +262,32 @@ func (c *Client) retryDo(ctx context.Context, req *http.Request) (*http.Response
 
 		resp, err = c.http.Do(req)
 
-		if err == nil {
-			if resp.StatusCode == http.StatusForbidden {
-				if err := c.LoginCtx(ctx); err != nil {
-					return errors.Wrap(err, "qbit re-login failed")
-				}
-
-				retry.Delay(100 * time.Millisecond)
-
-				return errors.New("qbit re-login")
-			} else if resp.StatusCode < 500 {
-				return err
-			} else if resp.StatusCode >= 500 {
-				return retry.Unrecoverable(errors.New("unrecoverable status: %v", resp.StatusCode))
+		if err != nil {
+			if err == context.DeadlineExceeded || err == context.Canceled {
+				return retry.Unrecoverable(err)
 			}
+			retry.Delay(c.retryDelay)
+			return err
 		}
 
-		retry.Delay(time.Second * 3)
+		if resp.StatusCode == http.StatusForbidden {
+			if err := c.LoginCtx(ctx); err != nil {
+				return errors.Wrap(err, "qbit re-login failed")
+			}
 
-		return err
+			retry.Delay(100 * time.Millisecond)
+
+			return errors.New("qbit re-login")
+		} else if resp.StatusCode < 500 {
+			return nil
+		} else if resp.StatusCode >= 500 {
+			return retry.Unrecoverable(errors.New("unrecoverable status: %v", resp.StatusCode))
+		}
+
+		return nil
 	},
 		retry.OnRetry(func(n uint, err error) { c.log.Printf("%q: attempt %d - %v\n", err, n, req.URL.String()) }),
-		//retry.Delay(time.Second*3),
-		retry.Attempts(5),
+		retry.Attempts(uint(c.retryAttempts)),
 		retry.MaxJitter(time.Second*1),
 	)
 

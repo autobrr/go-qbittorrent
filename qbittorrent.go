@@ -23,6 +23,9 @@ type Client struct {
 	http    *http.Client
 	timeout time.Duration
 
+	retryAttempts int
+	retryDelay    time.Duration
+
 	log *log.Logger
 
 	version *semver.Version
@@ -44,6 +47,10 @@ type Config struct {
 
 	Timeout int
 	Log     *log.Logger
+
+	// Retry settings
+	RetryAttempts int
+	RetryDelay    int // in seconds
 }
 
 func NewClient(cfg Config) *Client {
@@ -60,6 +67,18 @@ func NewClient(cfg Config) *Client {
 
 	if cfg.Timeout > 0 {
 		c.timeout = time.Duration(cfg.Timeout) * time.Second
+	}
+
+	// set retry defaults
+	c.retryAttempts = 5
+	c.retryDelay = 1
+
+	if cfg.RetryAttempts > 0 {
+		c.retryAttempts = cfg.RetryAttempts
+	}
+
+	if cfg.RetryDelay > 0 {
+		c.retryDelay = time.Duration(cfg.RetryDelay) * time.Second
 	}
 
 	//store cookies in jar
