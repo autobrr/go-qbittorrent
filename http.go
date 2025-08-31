@@ -243,6 +243,13 @@ func resetBody(request *http.Request, originalBody []byte) {
 	}
 }
 
+func drainAndClose(resp *http.Response) {
+	if resp != nil && resp.Body != nil {
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+	}
+}
+
 func (c *Client) retryDo(ctx context.Context, req *http.Request) (*http.Response, error) {
 	var (
 		originalBody []byte
@@ -276,16 +283,16 @@ func (c *Client) retryDo(ctx context.Context, req *http.Request) (*http.Response
 		}
 
 		if resp.StatusCode == http.StatusForbidden {
+			drainAndClose(resp)
 			if err := c.LoginCtx(ctx); err != nil {
 				return errors.Wrap(err, "qbit re-login failed")
 			}
-
 			retry.Delay(100 * time.Millisecond)
-
 			return errors.New("qbit re-login")
 		} else if resp.StatusCode < 500 {
 			return nil
 		} else if resp.StatusCode >= 500 {
+			drainAndClose(resp)
 			return retry.Unrecoverable(errors.New("unrecoverable status: %v", resp.StatusCode))
 		}
 

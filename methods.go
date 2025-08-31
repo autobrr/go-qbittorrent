@@ -35,7 +35,7 @@ func (c *Client) LoginCtx(ctx context.Context) error {
 		return errors.Wrap(err, "login error")
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	switch resp.StatusCode {
 	case http.StatusForbidden:
@@ -84,7 +84,7 @@ func (c *Client) GetBuildInfoCtx(ctx context.Context) (BuildInfo, error) {
 		return bi, errors.Wrap(err, "could not get app build info")
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	if err = json.NewDecoder(resp.Body).Decode(&bi); err != nil {
 		return bi, errors.Wrap(err, "could not unmarshal body")
@@ -103,7 +103,7 @@ func (c *Client) ShutdownCtx(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "could not trigger shutdown")
 	}
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	if resp.StatusCode != http.StatusOK {
 		return errors.Wrap(ErrUnexpectedStatus, "could not trigger shutdown; status code: %d", resp.StatusCode)
@@ -152,7 +152,7 @@ func (c *Client) GetAppPreferencesCtx(ctx context.Context) (AppPreferences, erro
 		return app, errors.Wrap(err, "could not get app preferences")
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	if err := json.NewDecoder(resp.Body).Decode(&app); err != nil {
 		return app, errors.Wrap(err, "could not unmarshal body")
@@ -179,7 +179,7 @@ func (c *Client) SetPreferencesCtx(ctx context.Context, prefs map[string]interfa
 	if err != nil {
 		return errors.Wrap(err, "could not set preferences")
 	}
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	if resp.StatusCode != http.StatusOK {
 		return errors.Wrap(ErrUnexpectedStatus, "could not set preferences; status code: %d", resp.StatusCode)
@@ -201,7 +201,7 @@ func (c *Client) GetDefaultSavePathCtx(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", errors.Wrap(err, "could not get default save path")
 	}
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	if resp.StatusCode != http.StatusOK {
 		return "", errors.Wrap(ErrUnexpectedStatus, "could not get default save path; status code: %d", resp.StatusCode)
@@ -264,7 +264,7 @@ func (c *Client) GetTorrentsCtx(ctx context.Context, o TorrentFilterOptions) ([]
 		return nil, errors.Wrap(err, "get torrents error")
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	var torrents []Torrent
 	if err := json.NewDecoder(resp.Body).Decode(&torrents); err != nil {
@@ -311,7 +311,7 @@ func (c *Client) GetTorrentPropertiesCtx(ctx context.Context, hash string) (Torr
 		return prop, errors.Wrap(err, "could not get app preferences")
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	if err := json.NewDecoder(resp.Body).Decode(&prop); err != nil {
 		return prop, errors.Wrap(err, "could not unmarshal body")
@@ -330,7 +330,7 @@ func (c *Client) GetTorrentsRawCtx(ctx context.Context) (string, error) {
 		return "", errors.Wrap(err, "could not get torrents raw")
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -354,7 +354,7 @@ func (c *Client) GetTorrentTrackersCtx(ctx context.Context, hash string) ([]Torr
 		return nil, errors.Wrap(err, "could not get torrent trackers for hash: %v", hash)
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	dump, err := httputil.DumpResponse(resp, true)
 	if err != nil {
@@ -390,7 +390,7 @@ func (c *Client) AddTorrentFromMemoryCtx(ctx context.Context, buf []byte, option
 		return errors.Wrap(err, "could not add torrent")
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	if resp.StatusCode != http.StatusOK {
 		return errors.Wrap(ErrUnexpectedStatus, "could not add torrent; status code: %d", resp.StatusCode)
@@ -411,7 +411,7 @@ func (c *Client) AddTorrentFromFileCtx(ctx context.Context, filePath string, opt
 		return errors.Wrap(err, "could not add torrent; filePath: %v", filePath)
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	if resp.StatusCode != http.StatusOK {
 		return errors.Wrap(ErrUnexpectedStatus, "could not add torrent; filePath: %v | status code: %d", filePath, resp.StatusCode)
@@ -437,7 +437,7 @@ func (c *Client) AddTorrentFromUrlCtx(ctx context.Context, url string, options m
 		return errors.Wrap(err, "could not add torrent; url: %v", url)
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	if resp.StatusCode != http.StatusOK {
 		return errors.Wrap(ErrUnexpectedStatus, "could not add torrent: url: %v | status code: %d", url, resp.StatusCode)
@@ -464,7 +464,7 @@ func (c *Client) DeleteTorrentsCtx(ctx context.Context, hashes []string, deleteF
 		return errors.Wrap(err, "could not delete torrents; hashes: %v", hashes)
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	if resp.StatusCode != http.StatusOK {
 		return errors.Wrap(ErrUnexpectedStatus, "could not delete torrents; hashes: %v | status code: %d", hashes, resp.StatusCode)
@@ -489,7 +489,7 @@ func (c *Client) ReAnnounceTorrentsCtx(ctx context.Context, hashes []string) err
 		return errors.Wrap(err, "could not re-announce torrents; hashes: %v", hashes)
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	if resp.StatusCode != http.StatusOK {
 		return errors.Wrap(ErrUnexpectedStatus, "could not re-announce torrents; hashes: %v | status code: %d", hashes, resp.StatusCode)
@@ -508,7 +508,7 @@ func (c *Client) GetTransferInfoCtx(ctx context.Context) (*TransferInfo, error) 
 		return nil, errors.Wrap(err, "could not get transfer info")
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	var info TransferInfo
 	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
@@ -535,7 +535,7 @@ func (c *Client) BanPeersCtx(ctx context.Context, peers []string) error {
 	if err != nil {
 		return errors.Wrap(err, "could not ban peers; peers: %v", peers)
 	}
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	if resp.StatusCode != http.StatusOK {
 		return errors.Wrap(ErrUnexpectedStatus, "could not ban peers; peers: %v | status code: %d", peers, resp.StatusCode)
@@ -556,7 +556,7 @@ func (c *Client) SyncMainDataCtx(ctx context.Context, rid int64) (*MainData, err
 		return nil, errors.Wrap(err, "could not get main data")
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	var info MainData
 	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
@@ -603,7 +603,7 @@ func (c *Client) PauseCtx(ctx context.Context, hashes []string) error {
 		return errors.Wrap(err, "could not pause torrents; hashes: %v", hashes)
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	if resp.StatusCode != http.StatusOK {
 		return errors.Wrap(ErrUnexpectedStatus, "could not pause torrents; hashes: %v | status code: %d", hashes, resp.StatusCode)
@@ -649,7 +649,7 @@ func (c *Client) ResumeCtx(ctx context.Context, hashes []string) error {
 		return errors.Wrap(err, "could not resume torrents; hashes: %v", hashes)
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	if resp.StatusCode != http.StatusOK {
 		return errors.Wrap(ErrUnexpectedStatus, "could not resume torrents; hashes: %v | status code: %d", hashes, resp.StatusCode)
@@ -675,7 +675,7 @@ func (c *Client) SetForceStartCtx(ctx context.Context, hashes []string, value bo
 		return errors.Wrap(err, "could not set force start torrents; hashes: %v", hashes)
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	if resp.StatusCode != http.StatusOK {
 		return errors.Wrap(ErrUnexpectedStatus, "could not set force start torrents; hashes: %v | status code: %d", hashes, resp.StatusCode)
@@ -700,7 +700,7 @@ func (c *Client) RecheckCtx(ctx context.Context, hashes []string) error {
 		return errors.Wrap(err, "could not recheck torrents; hashes: %v", hashes)
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	if resp.StatusCode != http.StatusOK {
 		return errors.Wrap(ErrUnexpectedStatus, "could not recheck torrents; hashes: %v | status code: %d", hashes, resp.StatusCode)
@@ -726,7 +726,7 @@ func (c *Client) SetAutoManagementCtx(ctx context.Context, hashes []string, enab
 		return errors.Wrap(err, "could not set auto management; hashes: %v", hashes)
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	if resp.StatusCode != http.StatusOK {
 		return errors.Wrap(ErrUnexpectedStatus, "could not set auto management; hashes: %v | status code: %d", hashes, resp.StatusCode)
@@ -752,7 +752,7 @@ func (c *Client) SetLocationCtx(ctx context.Context, hashes []string, location s
 		return errors.Wrap(err, "could not set location; hashes: %v | location: %s", hashes, location)
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	/*
 		HTTP Status Code 	Scenario
@@ -790,7 +790,7 @@ func (c *Client) CreateCategoryCtx(ctx context.Context, category string, path st
 		return errors.Wrap(err, "could not create category; category: %v", category)
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	/*
 		HTTP Status Code 	Scenario
@@ -825,7 +825,7 @@ func (c *Client) EditCategoryCtx(ctx context.Context, category string, path stri
 		return errors.Wrap(err, "could not edit category; category: %v", category)
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	/*
 		HTTP Status Code 	Scenario
@@ -859,7 +859,7 @@ func (c *Client) RemoveCategoriesCtx(ctx context.Context, categories []string) e
 		return errors.Wrap(err, "could not remove categories; categories: %v", opts["categories"])
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	if resp.StatusCode != http.StatusOK {
 		return errors.Wrap(ErrUnexpectedStatus, "could not remove categories; categories: %v | status code: %d", opts["categories"], resp.StatusCode)
@@ -885,7 +885,7 @@ func (c *Client) SetCategoryCtx(ctx context.Context, hashes []string, category s
 		return errors.Wrap(err, "could not set category; hashes: %v | category: %s", hashes, category)
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	/*
 		HTTP Status Code 	Scenario
@@ -912,7 +912,7 @@ func (c *Client) GetCategoriesCtx(ctx context.Context) (map[string]Category, err
 		return nil, errors.Wrap(err, "could not get files info")
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	m := make(map[string]Category)
 	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
@@ -935,7 +935,7 @@ func (c *Client) GetFilesInformationCtx(ctx context.Context, hash string) (*Torr
 		return nil, errors.Wrap(err, "could not get files info")
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	var info TorrentFiles
 	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
@@ -962,7 +962,7 @@ func (c *Client) SetFilePriorityCtx(ctx context.Context, hash string, IDs string
 		return errors.Wrap(err, "could not set file priority; hash: %s | priority: %d", hash, priority)
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	/*
 		HTTP Status Code 	Scenario
@@ -1001,7 +1001,7 @@ func (c *Client) ExportTorrentCtx(ctx context.Context, hash string) ([]byte, err
 		return nil, errors.Wrap(err, "could not get export")
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	return io.ReadAll(resp.Body)
 }
@@ -1022,7 +1022,7 @@ func (c *Client) RenameFileCtx(ctx context.Context, hash, oldPath, newPath strin
 		return errors.Wrap(err, "could not rename file; hash: %v | oldPath: %v | newPath: %v", hash, oldPath, newPath)
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	/*
 		HTTP Status Code 	Scenario
@@ -1060,10 +1060,7 @@ func (c *Client) RenameFolderCtx(ctx context.Context, hash, oldPath, newPath str
 		return errors.Wrap(err, "could not rename folder; hash: %v | oldPath: %v | newPath: %v", hash, oldPath, newPath)
 	}
 
-	defer func() {
-		io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
-	}()
+	defer drainAndClose(resp)
 
 	switch resp.StatusCode {
 	case http.StatusBadRequest:
@@ -1094,7 +1091,7 @@ func (c *Client) SetTorrentNameCtx(ctx context.Context, hash string, name string
 		return errors.Wrap(err, "could not rename torrent; hash: %v | name: %v", hash, name)
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	switch sc := resp.StatusCode; sc {
 	case http.StatusOK:
@@ -1118,7 +1115,7 @@ func (c *Client) GetTagsCtx(ctx context.Context) ([]string, error) {
 		return nil, errors.Wrap(err, "could not get tags")
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	m := make([]string, 0)
 	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
@@ -1143,7 +1140,7 @@ func (c *Client) CreateTagsCtx(ctx context.Context, tags []string) error {
 		return errors.Wrap(err, "could not create tags; tags: %v", t)
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	if resp.StatusCode != http.StatusOK {
 		return errors.Wrap(ErrUnexpectedStatus, "could not create tags; tags: %v | status code: %d", t, resp.StatusCode)
@@ -1169,7 +1166,7 @@ func (c *Client) AddTagsCtx(ctx context.Context, hashes []string, tags string) e
 		return errors.Wrap(err, "could not add tags; hashes: %v | tags: %v", hashes, tags)
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	if resp.StatusCode != http.StatusOK {
 		return errors.Wrap(ErrUnexpectedStatus, "could not add tags; hashes: %v | tags: %v | status code: %d", hashes, tags, resp.StatusCode)
@@ -1198,7 +1195,7 @@ func (c *Client) SetTags(ctx context.Context, hashes []string, tags string) erro
 		return errors.Wrap(err, "could not set tags; hashes: %v", hashes)
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	if resp.StatusCode != http.StatusOK {
 		return errors.Wrap(ErrUnexpectedStatus, "could not set tags; hashes: %v | status code: %d", hashes, resp.StatusCode)
@@ -1225,7 +1222,7 @@ func (c *Client) DeleteTagsCtx(ctx context.Context, tags []string) error {
 		return errors.Wrap(err, "could not delete tags; tags: %s", t)
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	if resp.StatusCode != http.StatusOK {
 		return errors.Wrap(ErrUnexpectedStatus, "could not delete tags; tags: %s | status code: %d", t, resp.StatusCode)
@@ -1257,7 +1254,7 @@ func (c *Client) RemoveTagsCtx(ctx context.Context, hashes []string, tags string
 		return errors.Wrap(err, "could not remove tags; hashes: %v | tags %s", hashes, tags)
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	if resp.StatusCode != http.StatusOK {
 		return errors.Wrap(ErrUnexpectedStatus, "could not remove tags; hashes: %v | tags: %s | status code: %d", hashes, tags, resp.StatusCode)
@@ -1283,7 +1280,7 @@ func (c *Client) RemoveTrackersCtx(ctx context.Context, hash string, urls string
 		return errors.Wrap(err, "could not remove trackers; hash: %s | urls: %s", hash, urls)
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	/*
 		HTTP Status Code 	Scenario
@@ -1321,7 +1318,7 @@ func (c *Client) EditTrackerCtx(ctx context.Context, hash string, old, new strin
 		return errors.Wrap(err, "could not edit tracker; hash: %s | old: %s | new: %s", hash, old, new)
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	/*
 		HTTP Status Code 	Scenario
@@ -1362,7 +1359,7 @@ func (c *Client) AddTrackersCtx(ctx context.Context, hash string, urls string) e
 		return errors.Wrap(err, "could not add trackers; hash: %s | urls: %s", hash, urls)
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	/*
 		HTTP Status Code 	Scenario
@@ -1418,7 +1415,7 @@ func (c *Client) SetMaxPriorityCtx(ctx context.Context, hashes []string) error {
 		return errors.Wrap(err, "could not set maximum priority; hashes: %v", hashes)
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	if resp.StatusCode == http.StatusConflict {
 		return errors.Wrap(ErrTorrentQueueingNotEnabled, "hashes: %v", hashes)
@@ -1448,7 +1445,7 @@ func (c *Client) SetMinPriorityCtx(ctx context.Context, hashes []string) error {
 		return errors.Wrap(err, "could not set minimum priority; hashes: %v", hashes)
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	if resp.StatusCode == http.StatusConflict {
 		return errors.Wrap(ErrTorrentQueueingNotEnabled, "hashes: %v", hashes)
@@ -1478,7 +1475,7 @@ func (c *Client) DecreasePriorityCtx(ctx context.Context, hashes []string) error
 		return errors.Wrap(err, "could not decrease priority; hashes: %v", hashes)
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	if resp.StatusCode == http.StatusConflict {
 		return errors.Wrap(ErrTorrentQueueingNotEnabled, "hashes: %v", hashes)
@@ -1508,7 +1505,7 @@ func (c *Client) IncreasePriorityCtx(ctx context.Context, hashes []string) error
 		return errors.Wrap(err, "could not increase torrent priority; hashes: %v", hashes)
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	if resp.StatusCode == http.StatusConflict {
 		return errors.Wrap(ErrTorrentQueueingNotEnabled, "hashes: %v", hashes)
@@ -1537,7 +1534,7 @@ func (c *Client) ToggleFirstLastPiecePrioCtx(ctx context.Context, hashes []strin
 		return errors.Wrap(err, "could not toggle first/last piece priority; hashes: %v", hashes)
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	if resp.StatusCode != http.StatusOK {
 		return errors.Wrap(ErrUnexpectedStatus, "could not toggle first/last piece priority; hashes: %v | status code: %d", hashes, resp.StatusCode)
@@ -1558,7 +1555,7 @@ func (c *Client) ToggleAlternativeSpeedLimitsCtx(ctx context.Context) error {
 		return errors.Wrap(err, "could not toggle alternative speed limits")
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	if resp.StatusCode != http.StatusOK {
 		return errors.Wrap(ErrUnexpectedStatus, "could not stoggle alternative speed limits; status code: %d", resp.StatusCode)
@@ -1580,7 +1577,7 @@ func (c *Client) GetAlternativeSpeedLimitsModeCtx(ctx context.Context) (bool, er
 		return m, errors.Wrap(err, "could not get alternative speed limits mode")
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	var d int64
 	if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
@@ -1606,7 +1603,7 @@ func (c *Client) SetGlobalDownloadLimitCtx(ctx context.Context, limit int64) err
 		return errors.Wrap(err, "could not set global download limit; limit: %d", limit)
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	if resp.StatusCode != http.StatusOK {
 		return errors.Wrap(ErrUnexpectedStatus, "could not set global download limit; limit: %d | status code: %d", limit, resp.StatusCode)
@@ -1628,7 +1625,7 @@ func (c *Client) GetGlobalDownloadLimitCtx(ctx context.Context) (int64, error) {
 		return m, errors.Wrap(err, "could not get global download limit")
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
 		return m, errors.Wrap(err, "could not unmarshal body")
@@ -1652,7 +1649,7 @@ func (c *Client) SetGlobalUploadLimitCtx(ctx context.Context, limit int64) error
 		return errors.Wrap(err, "could not set global upload limit; limit %d", limit)
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	if resp.StatusCode != http.StatusOK {
 		return errors.Wrap(ErrUnexpectedStatus, "could not set global upload limit; limit %d | status code: %d", limit, resp.StatusCode)
@@ -1674,7 +1671,7 @@ func (c *Client) GetGlobalUploadLimitCtx(ctx context.Context) (int64, error) {
 		return m, errors.Wrap(err, "could not get global upload limit")
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
 		return m, errors.Wrap(err, "could not unmarshal body")
@@ -1720,7 +1717,7 @@ func (c *Client) GetTorrentUploadLimitCtx(ctx context.Context, hashes []string) 
 		return nil, errors.Wrap(err, "could not get upload speed limit; hashes: %v", hashes)
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get upload speed limit; hashes: %v | status code: %d", hashes, resp.StatusCode)
@@ -1772,7 +1769,7 @@ func (c *Client) GetTorrentDownloadLimitCtx(ctx context.Context, hashes []string
 		return nil, errors.Wrap(err, "could not get download limit; hashes: %v", hashes)
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get download limit; hashes: %v | status code: %d", hashes, resp.StatusCode)
@@ -1803,7 +1800,7 @@ func (c *Client) SetTorrentDownloadLimitCtx(ctx context.Context, hashes []string
 		return errors.Wrap(err, "could not set download limit; hashes: %v", hashes)
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	if resp.StatusCode != http.StatusOK {
 		return errors.Wrap(ErrUnexpectedStatus, "could not set download limit; hashes: %v | status code: %d", hashes, resp.StatusCode)
@@ -1834,10 +1831,7 @@ func (c *Client) ToggleTorrentSequentialDownloadCtx(ctx context.Context, hashes 
 		return errors.Wrap(err, "could not toggle sequential download mode; hashes: %v", hashes)
 	}
 
-	defer func() {
-		io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
-	}()
+	defer drainAndClose(resp)
 
 	if resp.StatusCode != http.StatusOK {
 		return errors.Wrap(ErrUnexpectedStatus, "could not toggle sequential download mode; hashes: %v | status code: %d", hashes, resp.StatusCode)
@@ -1873,10 +1867,7 @@ func (c *Client) SetTorrentSuperSeedingCtx(ctx context.Context, hashes []string,
 		return errors.Wrap(err, "could not set super seeding mode; hashes: %v", hashes)
 	}
 
-	defer func() {
-		io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
-	}()
+	defer drainAndClose(resp)
 
 	if resp.StatusCode != http.StatusOK {
 		return errors.Wrap(ErrUnexpectedStatus, "could not set super seeding mode; hashes: %v | status code: %d", hashes, resp.StatusCode)
@@ -1904,7 +1895,7 @@ func (c *Client) SetTorrentShareLimitCtx(ctx context.Context, hashes []string, r
 		return errors.Wrap(err, "could not set share limits; hashes: %v | ratioLimit: %v | seedingTimeLimit: %v | inactiveSeedingTimeLimit %v", hashes, ratioLimit, seedingTimeLimit, inactiveSeedingTimeLimit)
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	/*
 		HTTP Status Code 	Scenario
@@ -1940,7 +1931,7 @@ func (c *Client) SetTorrentUploadLimitCtx(ctx context.Context, hashes []string, 
 		return errors.Wrap(err, "could not set upload limit; hashes: %v", hashes)
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	if resp.StatusCode != http.StatusOK {
 		return errors.Wrap(ErrUnexpectedStatus, "could not set upload limit; hahses: %v | status code: %d", hashes, resp.StatusCode)
@@ -1959,7 +1950,7 @@ func (c *Client) GetAppVersionCtx(ctx context.Context) (string, error) {
 		return "", errors.Wrap(err, "could not get app version")
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -1983,10 +1974,7 @@ func (c *Client) GetAppCookiesCtx(ctx context.Context) ([]Cookie, error) {
 		return nil, errors.Wrap(err, "could not get app cookies")
 	}
 
-	defer func() {
-		io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
-	}()
+	defer drainAndClose(resp)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get app cookies; status code: %d", resp.StatusCode)
@@ -2022,10 +2010,7 @@ func (c *Client) SetAppCookiesCtx(ctx context.Context, cookies []Cookie) error {
 		return errors.Wrap(err, "could not set app cookies")
 	}
 
-	defer func() {
-		io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
-	}()
+	defer drainAndClose(resp)
 
 	switch resp.StatusCode {
 	case http.StatusBadRequest:
@@ -2052,7 +2037,7 @@ func (c *Client) GetTorrentPieceStatesCtx(ctx context.Context, hash string) ([]P
 		return nil, errors.Wrap(err, "could not get torrent piece states")
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, errors.Wrap(ErrCannotGetTorrentPieceStates, "torrent hash %v, unexpected status: %v", hash, resp.StatusCode)
@@ -2081,7 +2066,7 @@ func (c *Client) GetTorrentPieceHashesCtx(ctx context.Context, hash string) ([]s
 		return nil, errors.Wrap(err, "could not get torrent piece hashes: hashes %v", hash)
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	switch resp.StatusCode {
 	case http.StatusNotFound:
@@ -2120,7 +2105,7 @@ func (c *Client) AddPeersForTorrentsCtx(ctx context.Context, hashes, peers []str
 		return errors.Wrap(err, "could not add peers; hashes: %v | peers: %v", hashes, peers)
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	switch resp.StatusCode {
 	case http.StatusBadRequest:
@@ -2142,7 +2127,7 @@ func (c *Client) GetWebAPIVersionCtx(ctx context.Context) (string, error) {
 		return "", errors.Wrap(err, "could not get webapi version")
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -2164,7 +2149,7 @@ func (c *Client) GetLogsCtx(ctx context.Context) ([]Log, error) {
 		return nil, errors.Wrap(err, "could not get main client logs")
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	m := make([]Log, 0)
 	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
@@ -2185,7 +2170,7 @@ func (c *Client) GetPeerLogsCtx(ctx context.Context) ([]PeerLog, error) {
 		return nil, errors.Wrap(err, "could not get peer logs")
 	}
 
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drainAndClose(resp)
 
 	m := make([]PeerLog, 0)
 	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
@@ -2376,3 +2361,5 @@ func isUnregistered(msg string) bool {
 
 	return false
 }
+
+
