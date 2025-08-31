@@ -23,6 +23,9 @@ type Client struct {
 	http    *http.Client
 	timeout time.Duration
 
+	retryAttempts int
+	retryDelay    time.Duration
+
 	log *log.Logger
 
 	version *semver.Version
@@ -44,6 +47,10 @@ type Config struct {
 
 	Timeout int
 	Log     *log.Logger
+
+	// Retry settings
+	RetryAttempts int
+	RetryDelay    int // in seconds
 }
 
 func NewClient(cfg Config) *Client {
@@ -62,6 +69,18 @@ func NewClient(cfg Config) *Client {
 		c.timeout = time.Duration(cfg.Timeout) * time.Second
 	}
 
+	// set retry defaults
+	c.retryAttempts = 5
+	c.retryDelay = 1
+
+	if cfg.RetryAttempts > 0 {
+		c.retryAttempts = cfg.RetryAttempts
+	}
+
+	if cfg.RetryDelay > 0 {
+		c.retryDelay = time.Duration(cfg.RetryDelay) * time.Second
+	}
+
 	//store cookies in jar
 	jarOptions := &cookiejar.Options{PublicSuffixList: publicsuffix.List}
 	jar, err := cookiejar.New(jarOptions)
@@ -75,9 +94,9 @@ func NewClient(cfg Config) *Client {
 			Timeout:   30 * time.Second, // default transport value
 			KeepAlive: 30 * time.Second, // default transport value
 		}).DialContext,
-		ForceAttemptHTTP2:     true,             // default is true; since HTTP/2 multiplexes a single TCP connection. we'd want to use HTTP/1, which would use multiple TCP connections.
+		ForceAttemptHTTP2:     true,             // HTTP/2 provides better multiplexing for API calls to the same host
 		MaxIdleConns:          100,              // default transport value
-		MaxIdleConnsPerHost:   10,               // default is 2, so we want to increase the number to use establish more connections.
+		MaxIdleConnsPerHost:   10,               // increased from default 2 for better connection reuse
 		IdleConnTimeout:       90 * time.Second, // default transport value
 		TLSHandshakeTimeout:   10 * time.Second, // default transport value
 		ExpectContinueTimeout: 1 * time.Second,  // default transport value
@@ -107,4 +126,9 @@ func (c *Client) WithHTTPClient(client *http.Client) *Client {
 // NewSyncManager creates a new sync manager for this client
 func (c *Client) NewSyncManager(options ...SyncOptions) *SyncManager {
 	return NewSyncManager(c, options...)
+}
+
+// GetHTTPClient allows you to a receive the implemented [http.Client].
+func (c *Client) GetHTTPClient() *http.Client {
+	return c.http
 }

@@ -8,10 +8,13 @@ import (
 
 func TestTorrentAddOptions_Prepare(t *testing.T) {
 	type fields struct {
+		Stopped            bool
 		Paused             bool
 		SkipHashCheck      bool
 		ContentLayout      ContentLayout
 		SavePath           string
+		DownloadPath       string
+		UseDownloadPath    bool
 		AutoTMM            bool
 		Category           string
 		Tags               string
@@ -21,6 +24,7 @@ func TestTorrentAddOptions_Prepare(t *testing.T) {
 		LimitSeedTime      int64
 		Rename             string
 		FirstLastPiecePrio bool
+		SequentialDownload bool
 	}
 	tests := []struct {
 		name   string
@@ -216,14 +220,46 @@ func TestTorrentAddOptions_Prepare(t *testing.T) {
 				"rename":             "test-torrent-rename",
 			},
 		},
+		// Test paused and download path
+		{
+			name: "test_07",
+			fields: fields{
+				Paused:       true,
+				DownloadPath: "/home/test/torrents",
+				// This should get overriden because DownloadPath is set
+				AutoTMM: true,
+			},
+			want: map[string]string{
+				"paused":             "true",
+				"stopped":            "true",
+				"firstLastPiecePrio": "false",
+				"autoTMM":            "false",
+				"downloadPath":       "/home/test/torrents",
+				"useDownloadPath":    "true",
+			},
+		},
+		// Test stopped
+		{
+			name: "test_08",
+			fields: fields{
+				Stopped: true,
+			},
+			want: map[string]string{
+				"paused":             "true",
+				"stopped":            "true",
+				"firstLastPiecePrio": "false",
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			o := &TorrentAddOptions{
 				Paused:             tt.fields.Paused,
+				Stopped:            tt.fields.Stopped,
 				SkipHashCheck:      tt.fields.SkipHashCheck,
 				ContentLayout:      tt.fields.ContentLayout,
 				SavePath:           tt.fields.SavePath,
+				DownloadPath:       tt.fields.DownloadPath,
 				AutoTMM:            tt.fields.AutoTMM,
 				Category:           tt.fields.Category,
 				Tags:               tt.fields.Tags,
