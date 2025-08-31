@@ -217,6 +217,12 @@ func (sm *SyncManager) getSyncData(ctx context.Context, rid int64) (map[string]i
 		return nil, nil, err
 	}
 
+	// Populate hash fields from map keys since JSON doesn't include hash in the object
+	for hash, torrent := range source.Torrents {
+		torrent.Hash = hash
+		source.Torrents[hash] = torrent
+	}
+
 	return rawData, &source, nil
 }
 
@@ -625,14 +631,14 @@ func (sm *SyncManager) copyMainData(src *MainData) *MainData {
 func removeDuplicateStrings(input []string) []string {
 	seen := make(map[string]bool)
 	result := make([]string, 0, len(input))
-	
+
 	for _, item := range input {
 		if !seen[item] {
 			seen[item] = true
 			result = append(result, item)
 		}
 	}
-	
+
 	return result
 }
 
@@ -642,13 +648,13 @@ func removeStrings(input []string, toRemove []string) []string {
 	for _, item := range toRemove {
 		removeMap[item] = true
 	}
-	
+
 	result := make([]string, 0, len(input))
 	for _, item := range input {
 		if !removeMap[item] {
 			result = append(result, item)
 		}
 	}
-	
+
 	return result
 }
