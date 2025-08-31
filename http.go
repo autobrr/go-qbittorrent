@@ -114,15 +114,20 @@ func (c *Client) postBasicCtx(ctx context.Context, endpoint string, opts map[str
 }
 
 func (c *Client) postFileCtx(ctx context.Context, endpoint string, fileName string, opts map[string]string) (*http.Response, error) {
-	b, err := os.ReadFile(fileName)
+	file, err := os.Open(fileName)
 	if err != nil {
-		return nil, errors.Wrap(err, "error reading file %v", fileName)
+		return nil, errors.Wrap(err, "error opening file %v", fileName)
 	}
+	defer file.Close()
 
-	return c.postMemoryCtx(ctx, endpoint, b, opts)
+	return c.postReaderCtx(ctx, endpoint, file, opts)
 }
 
 func (c *Client) postMemoryCtx(ctx context.Context, endpoint string, buf []byte, opts map[string]string) (*http.Response, error) {
+	return c.postReaderCtx(ctx, endpoint, bytes.NewReader(buf), opts)
+}
+
+func (c *Client) postReaderCtx(ctx context.Context, endpoint string, reader io.Reader, opts map[string]string) (*http.Response, error) {
 	// Buffer to store our request body as bytes
 	var requestBody bytes.Buffer
 
@@ -137,7 +142,7 @@ func (c *Client) postMemoryCtx(ctx context.Context, endpoint string, buf []byte,
 	}
 
 	// Copy the actual file content to the fields writer
-	if _, err := io.Copy(fileWriter, bytes.NewBuffer(buf)); err != nil {
+	if _, err := io.Copy(fileWriter, reader); err != nil {
 		return nil, errors.Wrap(err, "error copy file contents to writer")
 	}
 

@@ -70,7 +70,7 @@ func NewClient(cfg Config) *Client {
 	}
 
 	// set retry defaults
-	c.retryAttempts = 5
+	c.retryAttempts = 3
 	c.retryDelay = 1
 
 	if cfg.RetryAttempts > 0 {
@@ -94,7 +94,7 @@ func NewClient(cfg Config) *Client {
 			Timeout:   30 * time.Second, // default transport value
 			KeepAlive: 30 * time.Second, // default transport value
 		}).DialContext,
-		ForceAttemptHTTP2:     true,             // default is true; since HTTP/2 multiplexes a single TCP connection. we'd want to use HTTP/1, which would use multiple TCP connections.
+		ForceAttemptHTTP2:     false,            // disable HTTP/2 for better connection reuse with HTTP/1.1
 		MaxIdleConns:          100,              // default transport value
 		MaxIdleConnsPerHost:   10,               // default is 2, so we want to increase the number to use establish more connections.
 		IdleConnTimeout:       90 * time.Second, // default transport value
