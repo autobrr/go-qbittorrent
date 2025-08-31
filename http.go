@@ -114,15 +114,20 @@ func (c *Client) postBasicCtx(ctx context.Context, endpoint string, opts map[str
 }
 
 func (c *Client) postFileCtx(ctx context.Context, endpoint string, fileName string, opts map[string]string) (*http.Response, error) {
-	b, err := os.ReadFile(fileName)
+	file, err := os.Open(fileName)
 	if err != nil {
-		return nil, errors.Wrap(err, "error reading file %v", fileName)
+		return nil, errors.Wrap(err, "error opening file %v", fileName)
 	}
+	defer file.Close()
 
-	return c.postMemoryCtx(ctx, endpoint, b, opts)
+	return c.postReaderCtx(ctx, endpoint, file, opts)
 }
 
 func (c *Client) postMemoryCtx(ctx context.Context, endpoint string, buf []byte, opts map[string]string) (*http.Response, error) {
+	return c.postReaderCtx(ctx, endpoint, bytes.NewReader(buf), opts)
+}
+
+func (c *Client) postReaderCtx(ctx context.Context, endpoint string, reader io.Reader, opts map[string]string) (*http.Response, error) {
 	// Buffer to store our request body as bytes
 	var requestBody bytes.Buffer
 
@@ -137,7 +142,7 @@ func (c *Client) postMemoryCtx(ctx context.Context, endpoint string, buf []byte,
 	}
 
 	// Copy the actual file content to the fields writer
-	if _, err := io.Copy(fileWriter, bytes.NewBuffer(buf)); err != nil {
+	if _, err := io.Copy(fileWriter, reader); err != nil {
 		return nil, errors.Wrap(err, "error copy file contents to writer")
 	}
 
@@ -232,9 +237,16 @@ func copyBody(src io.ReadCloser) ([]byte, error) {
 }
 
 func resetBody(request *http.Request, originalBody []byte) {
-	request.Body = io.NopCloser(bytes.NewBuffer(originalBody))
+	request.Body = io.NopCloser(bytes.NewReader(originalBody))
 	request.GetBody = func() (io.ReadCloser, error) {
-		return io.NopCloser(bytes.NewBuffer(originalBody)), nil
+		return io.NopCloser(bytes.NewReader(originalBody)), nil
+	}
+}
+
+func drainAndClose(resp *http.Response) {
+	if resp != nil && resp.Body != nil {
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
 	}
 }
 
@@ -262,29 +274,32 @@ func (c *Client) retryDo(ctx context.Context, req *http.Request) (*http.Response
 
 		resp, err = c.http.Do(req)
 
-		if err == nil {
-			if resp.StatusCode == http.StatusForbidden {
-				if err := c.LoginCtx(ctx); err != nil {
-					return errors.Wrap(err, "qbit re-login failed")
-				}
-
-				retry.Delay(100 * time.Millisecond)
-
-				return errors.New("qbit re-login")
-			} else if resp.StatusCode < 500 {
-				return err
-			} else if resp.StatusCode >= 500 {
-				return retry.Unrecoverable(errors.New("unrecoverable status: %v", resp.StatusCode))
+		if err != nil {
+			if err == context.DeadlineExceeded || err == context.Canceled {
+				return retry.Unrecoverable(err)
 			}
+			retry.Delay(c.retryDelay)
+			return err
 		}
 
-		retry.Delay(time.Second * 3)
+		if resp.StatusCode == http.StatusForbidden {
+			drainAndClose(resp)
+			if err := c.LoginCtx(ctx); err != nil {
+				return errors.Wrap(err, "qbit re-login failed")
+			}
+			retry.Delay(100 * time.Millisecond)
+			return errors.New("qbit re-login")
+		} else if resp.StatusCode < 500 {
+			return nil
+		} else if resp.StatusCode >= 500 {
+			drainAndClose(resp)
+			return retry.Unrecoverable(errors.New("unrecoverable status: %v", resp.StatusCode))
+		}
 
-		return err
+		return nil
 	},
 		retry.OnRetry(func(n uint, err error) { c.log.Printf("%q: attempt %d - %v\n", err, n, req.URL.String()) }),
-		//retry.Delay(time.Second*3),
-		retry.Attempts(5),
+		retry.Attempts(uint(c.retryAttempts)),
 		retry.MaxJitter(time.Second*1),
 	)
 
