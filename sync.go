@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -516,25 +517,22 @@ func (sm *SyncManager) GetTorrents(options TorrentFilterOptions) []Torrent {
 			count++
 		}
 	}
-	return result[:count]
+	filtered := result[:count]
+
+	filtered = sm.processFilteredTorrents(filtered, options)
+
+	return filtered
 }
 
 // GetTorrentMap returns a filtered map of torrents keyed by hash
 func (sm *SyncManager) GetTorrentMap(options TorrentFilterOptions) map[string]Torrent {
-	sm.ensureFreshData()
-
-	sm.mu.RLock()
-	defer sm.mu.RUnlock()
-
-	if sm.data == nil {
+	torrents := sm.GetTorrents(options)
+	if torrents == nil {
 		return nil
 	}
-
-	result := make(map[string]Torrent, len(sm.data.Torrents))
-	for _, torrent := range sm.data.Torrents {
-		if sm.matchesFilter(torrent, options) {
-			result[torrent.Hash] = torrent
-		}
+	result := make(map[string]Torrent, len(torrents))
+	for _, torrent := range torrents {
+		result[torrent.Hash] = torrent
 	}
 	return result
 }
@@ -593,6 +591,50 @@ func (sm *SyncManager) matchesStateFilter(state TorrentState, filter TorrentFilt
 	default:
 		return true
 	}
+}
+
+// processFilteredTorrents applies sorting, reverse, limit, and offset to the filtered torrents
+func (sm *SyncManager) processFilteredTorrents(filtered []Torrent, options TorrentFilterOptions) []Torrent {
+	// Sort
+	if options.Sort != "" {
+		sort.Slice(filtered, func(i, j int) bool {
+			var less bool
+			switch options.Sort {
+			case "name":
+				less = filtered[i].Name < filtered[j].Name
+			case "size":
+				less = filtered[i].Size < filtered[j].Size
+			case "progress":
+				less = filtered[i].Progress < filtered[j].Progress
+			case "added_on":
+				less = filtered[i].AddedOn < filtered[j].AddedOn
+			case "state":
+				less = string(filtered[i].State) < string(filtered[j].State)
+			default:
+				less = filtered[i].Name < filtered[j].Name // default to name
+			}
+			if options.Reverse {
+				return !less
+			}
+			return less
+		})
+	}
+
+	// Apply offset and limit
+	if options.Offset > 0 || options.Limit > 0 {
+		start := options.Offset
+		if start >= len(filtered) {
+			filtered = filtered[:0]
+		} else {
+			end := len(filtered)
+			if options.Limit > 0 && start+options.Limit < end {
+				end = start + options.Limit
+			}
+			filtered = filtered[start:end]
+		}
+	}
+
+	return filtered
 }
 
 // GetTorrent returns a specific torrent by hash
