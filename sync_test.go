@@ -217,6 +217,13 @@ func TestSyncManager_InitializeData(t *testing.T) {
 			DlInfoSpeed:      100000,
 			UpInfoSpeed:      50000,
 		},
+		CacheMetadata: &CacheMetadata{
+			Source:      "fresh",
+			Age:         0,
+			IsStale:     false,
+			NextRefresh: time.Now().Add(10 * time.Minute),
+			HasMore:     false,
+		},
 	}
 
 	// Test GetData returns a copy
@@ -521,6 +528,13 @@ func TestSyncManager_CopyMainData(t *testing.T) {
 		ServerState: ServerState{
 			ConnectionStatus: "connected",
 		},
+		CacheMetadata: &CacheMetadata{
+			Source:      "fresh",
+			Age:         0,
+			IsStale:     false,
+			NextRefresh: time.Now().Add(5 * time.Minute),
+			HasMore:     false,
+		},
 	}
 
 	copy := sm.copyMainData(original)
@@ -536,6 +550,15 @@ func TestSyncManager_CopyMainData(t *testing.T) {
 
 	if copy.FullUpdate != original.FullUpdate {
 		t.Error("FullUpdate not copied correctly")
+	}
+
+	// Test CacheMetadata is copied correctly
+	if copy.CacheMetadata == nil {
+		t.Error("CacheMetadata not copied")
+	} else if copy.CacheMetadata == original.CacheMetadata {
+		t.Error("CacheMetadata should be a deep copy")
+	} else if copy.CacheMetadata.Source != original.CacheMetadata.Source {
+		t.Error("CacheMetadata Source not copied correctly")
 	}
 
 	// Test maps are different instances but same content
