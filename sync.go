@@ -428,8 +428,60 @@ func (sm *SyncManager) updateTorrentFields(torrent *Torrent, updateMap map[strin
 	}
 }
 
+// ensureFreshData checks if data is stale or missing and syncs if needed
+func (sm *SyncManager) ensureFreshData() {
+	sm.mu.RLock()
+
+	// Check if data is stale or nil and we should sync
+	shouldSync := sm.data == nil
+	if !shouldSync && sm.options.DynamicSync {
+		// Only check staleness if DynamicSync is enabled
+		staleThreshold := sm.calculateStaleThreshold()
+		if time.Since(sm.lastSync) > staleThreshold {
+			shouldSync = true
+		}
+	}
+	sm.mu.RUnlock()
+
+	// Perform sync if data is stale or nil
+	if shouldSync {
+		_ = sm.Sync(context.Background()) // Use background context, ignore error
+	}
+}
+
+// calculateStaleThreshold determines how old data can be before it's considered stale
+func (sm *SyncManager) calculateStaleThreshold() time.Duration {
+	// If SyncInterval is set and > 0, use it
+	if sm.options.SyncInterval > 0 {
+		return sm.options.SyncInterval
+	}
+
+	// Otherwise, use dynamic calculation based on last sync duration
+	if sm.options.DynamicSync && sm.lastSyncDuration > 0 {
+		// Use 2x the last sync duration as threshold, but respect bounds
+		dynamicThreshold := sm.lastSyncDuration * 2
+		if dynamicThreshold < sm.options.MinSyncInterval {
+			dynamicThreshold = sm.options.MinSyncInterval
+		}
+		if dynamicThreshold > sm.options.MaxSyncInterval {
+			dynamicThreshold = sm.options.MaxSyncInterval
+		}
+		return dynamicThreshold
+	}
+
+	// Fallback to MinSyncInterval or default
+	if sm.options.MinSyncInterval > 0 {
+		return sm.options.MinSyncInterval
+	}
+
+	// Ultimate fallback
+	return 2 * time.Second
+}
+
 // GetData returns a deep copy of the current synchronized data
 func (sm *SyncManager) GetData() *MainData {
+	sm.ensureFreshData()
+
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 
@@ -443,6 +495,8 @@ func (sm *SyncManager) GetData() *MainData {
 
 // GetTorrents returns a copy of all torrents
 func (sm *SyncManager) GetTorrents() map[string]Torrent {
+	sm.ensureFreshData()
+
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 
@@ -458,7 +512,10 @@ func (sm *SyncManager) GetTorrents() map[string]Torrent {
 }
 
 // GetTorrent returns a specific torrent by hash
+// GetTorrent returns a specific torrent by hash
 func (sm *SyncManager) GetTorrent(hash string) (Torrent, bool) {
+	sm.ensureFreshData()
+
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 
@@ -471,7 +528,10 @@ func (sm *SyncManager) GetTorrent(hash string) (Torrent, bool) {
 }
 
 // GetServerState returns the current server state
+// GetServerState returns the current server state
 func (sm *SyncManager) GetServerState() ServerState {
+	sm.ensureFreshData()
+
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 
@@ -483,7 +543,10 @@ func (sm *SyncManager) GetServerState() ServerState {
 }
 
 // GetCategories returns a copy of all categories
+// GetCategories returns a copy of all categories
 func (sm *SyncManager) GetCategories() map[string]Category {
+	sm.ensureFreshData()
+
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 
@@ -499,7 +562,10 @@ func (sm *SyncManager) GetCategories() map[string]Category {
 }
 
 // GetTags returns a copy of all tags
+// GetTags returns a copy of all tags
 func (sm *SyncManager) GetTags() []string {
+	sm.ensureFreshData()
+
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 
