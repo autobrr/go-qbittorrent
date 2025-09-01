@@ -515,7 +515,6 @@ func (sm *SyncManager) GetTorrents() map[string]Torrent {
 }
 
 // GetTorrent returns a specific torrent by hash
-// GetTorrent returns a specific torrent by hash
 func (sm *SyncManager) GetTorrent(hash string) (Torrent, bool) {
 	sm.ensureFreshData()
 
@@ -528,6 +527,26 @@ func (sm *SyncManager) GetTorrent(hash string) (Torrent, bool) {
 
 	torrent, exists := sm.data.Torrents[hash]
 	return torrent, exists
+}
+
+// GetTorrentHashes returns a map of torrents for the given hashes
+func (sm *SyncManager) GetTorrentHashes(hashes []string) map[string]Torrent {
+	sm.ensureFreshData()
+
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+
+	if sm.data == nil {
+		return nil
+	}
+
+	result := make(map[string]Torrent)
+	for _, hash := range hashes {
+		if torrent, exists := sm.data.Torrents[hash]; exists {
+			result[hash] = torrent
+		}
+	}
+	return result
 }
 
 // GetServerState returns the current server state
