@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"strings"
 	"sync"
 	"time"
 )
@@ -496,8 +497,8 @@ func (sm *SyncManager) GetData() *MainData {
 	return sm.copyMainData(sm.data)
 }
 
-// GetTorrents returns a copy of all torrents
-func (sm *SyncManager) GetTorrents() map[string]Torrent {
+// GetTorrents returns a filtered list of torrents
+func (sm *SyncManager) GetTorrents(options TorrentFilterOptions) []Torrent {
 	sm.ensureFreshData()
 
 	sm.mu.RLock()
@@ -507,11 +508,71 @@ func (sm *SyncManager) GetTorrents() map[string]Torrent {
 		return nil
 	}
 
-	result := make(map[string]Torrent, len(sm.data.Torrents))
-	for k, v := range sm.data.Torrents {
-		result[k] = v
+	result := make([]Torrent, len(sm.data.Torrents))
+	count := 0
+	for _, torrent := range sm.data.Torrents {
+		if sm.matchesFilter(torrent, options) {
+			result[count] = torrent
+			count++
+		}
 	}
-	return result
+	return result[:count]
+}
+
+func (sm *SyncManager) matchesFilter(torrent Torrent, options TorrentFilterOptions) bool {
+	if len(options.Hashes) > 0 {
+		found := false
+		for _, h := range options.Hashes {
+			if h == torrent.Hash {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	if options.Category != "" && torrent.Category != options.Category {
+		return false
+	}
+	if options.Tag != "" && !strings.Contains(torrent.Tags, options.Tag) {
+		return false
+	}
+	if options.Filter != "" && !sm.matchesStateFilter(torrent.State, options.Filter) {
+		return false
+	}
+	return true
+}
+
+func (sm *SyncManager) matchesStateFilter(state TorrentState, filter TorrentFilter) bool {
+	switch filter {
+	case TorrentFilterAll:
+		return true
+	case TorrentFilterDownloading:
+		return state == TorrentStateDownloading || state == TorrentStateMetaDl || state == TorrentStateStalledDl || state == TorrentStateCheckingDl || state == TorrentStateForcedDl || state == TorrentStateAllocating
+	case TorrentFilterUploading:
+		return state == TorrentStateUploading || state == TorrentStateStalledUp || state == TorrentStateCheckingUp || state == TorrentStateForcedUp
+	case TorrentFilterCompleted:
+		return state == TorrentStatePausedUp || state == TorrentStateStoppedUp || state == TorrentStateQueuedUp || state == TorrentStateStalledUp || state == TorrentStateCheckingUp || state == TorrentStateForcedUp
+	case TorrentFilterPaused:
+		return state == TorrentStatePausedDl || state == TorrentStatePausedUp
+	case TorrentFilterActive:
+		return state == TorrentStateDownloading || state == TorrentStateUploading || state == TorrentStateMetaDl || state == TorrentStateStalledDl || state == TorrentStateStalledUp || state == TorrentStateCheckingDl || state == TorrentStateCheckingUp || state == TorrentStateForcedDl || state == TorrentStateForcedUp || state == TorrentStateAllocating
+	case TorrentFilterInactive:
+		return state == TorrentStatePausedDl || state == TorrentStatePausedUp || state == TorrentStateStoppedDl || state == TorrentStateStoppedUp || state == TorrentStateQueuedDl || state == TorrentStateQueuedUp || state == TorrentStateStalledDl || state == TorrentStateStalledUp
+	case TorrentFilterResumed:
+		return state == TorrentStateDownloading || state == TorrentStateUploading || state == TorrentStateMetaDl || state == TorrentStateStalledDl || state == TorrentStateStalledUp || state == TorrentStateCheckingDl || state == TorrentStateCheckingUp || state == TorrentStateForcedDl || state == TorrentStateForcedUp || state == TorrentStateAllocating
+	case TorrentFilterStopped:
+		return state == TorrentStateStoppedDl || state == TorrentStateStoppedUp
+	case TorrentFilterStalled:
+		return state == TorrentStateStalledDl || state == TorrentStateStalledUp
+	case TorrentFilterStalledDownloading:
+		return state == TorrentStateStalledDl
+	case TorrentFilterStalledUploading:
+		return state == TorrentStateStalledUp
+	default:
+		return true
+	}
 }
 
 // GetTorrent returns a specific torrent by hash
@@ -527,26 +588,6 @@ func (sm *SyncManager) GetTorrent(hash string) (Torrent, bool) {
 
 	torrent, exists := sm.data.Torrents[hash]
 	return torrent, exists
-}
-
-// GetTorrentHashes returns a map of torrents for the given hashes
-func (sm *SyncManager) GetTorrentHashes(hashes []string) map[string]Torrent {
-	sm.ensureFreshData()
-
-	sm.mu.RLock()
-	defer sm.mu.RUnlock()
-
-	if sm.data == nil {
-		return nil
-	}
-
-	result := make(map[string]Torrent)
-	for _, hash := range hashes {
-		if torrent, exists := sm.data.Torrents[hash]; exists {
-			result[hash] = torrent
-		}
-	}
-	return result
 }
 
 // GetServerState returns the current server state
