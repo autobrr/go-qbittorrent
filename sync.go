@@ -599,16 +599,34 @@ func (sm *SyncManager) processFilteredTorrents(filtered []Torrent, options Torre
 	if options.Sort != "" {
 		sort.Slice(filtered, func(i, j int) bool {
 			var less bool
-			switch options.Sort {
-			case "name":
+			switch TorrentSort(options.Sort) {
+			case TorrentSortName:
 				less = filtered[i].Name < filtered[j].Name
-			case "size":
+			case TorrentSortSize:
 				less = filtered[i].Size < filtered[j].Size
-			case "progress":
+			case TorrentSortProgress:
 				less = filtered[i].Progress < filtered[j].Progress
-			case "added_on":
+			case TorrentSortAddedOn:
 				less = filtered[i].AddedOn < filtered[j].AddedOn
-			case "state":
+			case TorrentSortCompletionOn:
+				less = filtered[i].CompletionOn < filtered[j].CompletionOn
+			case TorrentSortPriority:
+				less = filtered[i].Priority < filtered[j].Priority
+			case TorrentSortQueue:
+				less = filtered[i].Priority < filtered[j].Priority // queue is based on priority
+			case TorrentSortETA:
+				less = filtered[i].ETA < filtered[j].ETA
+			case TorrentSortRatio:
+				less = filtered[i].Ratio < filtered[j].Ratio
+			case TorrentSortDownloadSpeed:
+				less = filtered[i].DlSpeed < filtered[j].DlSpeed
+			case TorrentSortUploadSpeed:
+				less = filtered[i].UpSpeed < filtered[j].UpSpeed
+			case TorrentSortNumSeeds:
+				less = filtered[i].NumSeeds < filtered[j].NumSeeds
+			case TorrentSortNumLeechs:
+				less = filtered[i].NumLeechs < filtered[j].NumLeechs
+			case TorrentSortState:
 				less = string(filtered[i].State) < string(filtered[j].State)
 			default:
 				less = filtered[i].Name < filtered[j].Name // default to name

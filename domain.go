@@ -233,6 +233,26 @@ const (
 	TorrentFilterError TorrentFilter = "errored"
 )
 
+// TorrentSort represents sort field options for torrents
+type TorrentSort string
+
+const (
+	TorrentSortName          TorrentSort = "name"
+	TorrentSortSize          TorrentSort = "size"
+	TorrentSortProgress      TorrentSort = "progress"
+	TorrentSortAddedOn       TorrentSort = "added_on"
+	TorrentSortCompletionOn  TorrentSort = "completion_on"
+	TorrentSortPriority      TorrentSort = "priority"
+	TorrentSortQueue         TorrentSort = "queue"
+	TorrentSortETA           TorrentSort = "eta"
+	TorrentSortRatio         TorrentSort = "ratio"
+	TorrentSortDownloadSpeed TorrentSort = "download_speed"
+	TorrentSortUploadSpeed   TorrentSort = "upload_speed"
+	TorrentSortNumSeeds      TorrentSort = "num_seeds"
+	TorrentSortNumLeechs     TorrentSort = "num_leechs"
+	TorrentSortState         TorrentSort = "state"
+)
+
 // TrackerStatus https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-4.1)#get-torrent-trackers
 type TrackerStatus int
 
