@@ -46,8 +46,6 @@ type SyncOptions struct {
 	OnError func(error)
 	// RetainRemovedData keeps removed items for one sync cycle for comparison
 	RetainRemovedData bool
-	// UseCacheMetadata enables using cache metadata hints for smarter syncing
-	UseCacheMetadata bool
 }
 
 // DefaultSyncOptions returns sensible default options
@@ -60,7 +58,6 @@ func DefaultSyncOptions() SyncOptions {
 		MinSyncInterval:   1 * time.Second,
 		JitterPercent:     10,
 		RetainRemovedData: false,
-		UseCacheMetadata:  true,
 	}
 }
 
@@ -234,17 +231,6 @@ func (sm *SyncManager) mergePartialUpdate(rawData map[string]interface{}, source
 	// Update RID and server state
 	sm.data.Rid = source.Rid
 	sm.data.ServerState = source.ServerState
-
-	// Update cache metadata if present
-	if source.CacheMetadata != nil {
-		sm.data.CacheMetadata = &CacheMetadata{
-			Source:      source.CacheMetadata.Source,
-			Age:         source.CacheMetadata.Age,
-			IsStale:     source.CacheMetadata.IsStale,
-			NextRefresh: source.CacheMetadata.NextRefresh,
-			HasMore:     source.CacheMetadata.HasMore,
-		}
-	}
 
 	// Handle torrents ONLY if the torrents field is present in the raw JSON
 	// This prevents clearing torrents when there's no torrent update
@@ -595,27 +581,6 @@ func (sm *SyncManager) GetTags() []string {
 	return result
 }
 
-// GetCacheMetadata returns the current cache metadata
-func (sm *SyncManager) GetCacheMetadata() *CacheMetadata {
-	sm.ensureFreshData()
-
-	sm.mu.RLock()
-	defer sm.mu.RUnlock()
-
-	if sm.data == nil || sm.data.CacheMetadata == nil {
-		return nil
-	}
-
-	// Return a copy to prevent external modifications
-	return &CacheMetadata{
-		Source:      sm.data.CacheMetadata.Source,
-		Age:         sm.data.CacheMetadata.Age,
-		IsStale:     sm.data.CacheMetadata.IsStale,
-		NextRefresh: sm.data.CacheMetadata.NextRefresh,
-		HasMore:     sm.data.CacheMetadata.HasMore,
-	}
-}
-
 // LastSyncTime returns the time of the last successful sync
 func (sm *SyncManager) LastSyncTime() time.Time {
 	sm.mu.RLock()
@@ -665,37 +630,8 @@ func (sm *SyncManager) autoSync(ctx context.Context) {
 func (sm *SyncManager) calculateNextInterval() time.Duration {
 	sm.mu.RLock()
 	lastDuration := sm.lastSyncDuration
-	var cacheMetadata *CacheMetadata
-	if sm.data != nil {
-		cacheMetadata = sm.data.CacheMetadata
-	}
 	sm.mu.RUnlock()
 
-	// If cache metadata is available and enabled, use it for smarter syncing
-	if sm.options.UseCacheMetadata && cacheMetadata != nil {
-		now := time.Now()
-
-		// If data is stale, sync immediately
-		if cacheMetadata.IsStale {
-			return sm.options.MinSyncInterval
-		}
-
-		// If NextRefresh is set and in the future, use it
-		if !cacheMetadata.NextRefresh.IsZero() && cacheMetadata.NextRefresh.After(now) {
-			nextRefreshDuration := cacheMetadata.NextRefresh.Sub(now)
-			// Don't wait longer than MaxSyncInterval
-			if nextRefreshDuration > sm.options.MaxSyncInterval {
-				return sm.options.MaxSyncInterval
-			}
-			// Don't wait shorter than MinSyncInterval
-			if nextRefreshDuration < sm.options.MinSyncInterval {
-				return sm.options.MinSyncInterval
-			}
-			return nextRefreshDuration
-		}
-	}
-
-	// Fallback to duration-based calculation
 	// Base interval is double the last sync duration
 	baseInterval := lastDuration * 2
 
@@ -736,16 +672,6 @@ func (sm *SyncManager) copyMainData(src *MainData) *MainData {
 		Torrents:    make(map[string]Torrent, len(src.Torrents)),
 		Categories:  make(map[string]Category, len(src.Categories)),
 		Trackers:    make(map[string][]string, len(src.Trackers)),
-	}
-
-	if src.CacheMetadata != nil {
-		dst.CacheMetadata = &CacheMetadata{
-			Source:      src.CacheMetadata.Source,
-			Age:         src.CacheMetadata.Age,
-			IsStale:     src.CacheMetadata.IsStale,
-			NextRefresh: src.CacheMetadata.NextRefresh,
-			HasMore:     src.CacheMetadata.HasMore,
-		}
 	}
 
 	for k, v := range src.Torrents {

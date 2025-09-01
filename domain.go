@@ -2,7 +2,6 @@ package qbittorrent
 
 import (
 	"strconv"
-	"time"
 
 	"github.com/autobrr/go-qbittorrent/errors"
 )
@@ -625,14 +624,6 @@ type AppPreferences struct {
 	WebUIUsername                      string      `json:"web_ui_username"`
 }
 
-type CacheMetadata struct {
-	Source      string    `json:"source"`
-	Age         int64     `json:"age"`
-	IsStale     bool      `json:"isStale"`
-	NextRefresh time.Time `json:"nextRefresh"`
-	HasMore     bool      `json:"hasMore"`
-}
-
 type MainData struct {
 	Rid               int64               `json:"rid"`
 	FullUpdate        bool                `json:"full_update"`
@@ -644,7 +635,6 @@ type MainData struct {
 	TagsRemoved       []string            `json:"tags_removed"`
 	Trackers          map[string][]string `json:"trackers"`
 	ServerState       ServerState         `json:"server_state"`
-	CacheMetadata     *CacheMetadata      `json:"cacheMetadata,omitempty"`
 }
 
 type ServerState struct {

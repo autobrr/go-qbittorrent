@@ -20,17 +20,6 @@ func (dest *MainData) Update(ctx context.Context, c *Client) error {
 	dest.Rid = source.Rid
 	dest.ServerState = source.ServerState
 
-	// Update cache metadata if present
-	if source.CacheMetadata != nil {
-		dest.CacheMetadata = &CacheMetadata{
-			Source:      source.CacheMetadata.Source,
-			Age:         source.CacheMetadata.Age,
-			IsStale:     source.CacheMetadata.IsStale,
-			NextRefresh: source.CacheMetadata.NextRefresh,
-			HasMore:     source.CacheMetadata.HasMore,
-		}
-	}
-
 	merge(source.Categories, &dest.Categories)
 	merge(source.Torrents, &dest.Torrents)
 	merge(source.Trackers, &dest.Trackers)
