@@ -612,8 +612,6 @@ func (sm *SyncManager) processFilteredTorrents(filtered []Torrent, options Torre
 				less = filtered[i].CompletionOn < filtered[j].CompletionOn
 			case TorrentSortPriority:
 				less = filtered[i].Priority < filtered[j].Priority
-			case TorrentSortQueue:
-				less = filtered[i].Priority < filtered[j].Priority // queue is based on priority
 			case TorrentSortETA:
 				less = filtered[i].ETA < filtered[j].ETA
 			case TorrentSortRatio:
