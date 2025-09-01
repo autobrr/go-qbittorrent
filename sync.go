@@ -572,16 +572,14 @@ func (sm *SyncManager) matchesStateFilter(state TorrentState, filter TorrentFilt
 		return state == TorrentStateUploading || state == TorrentStateStalledUp || state == TorrentStateCheckingUp || state == TorrentStateForcedUp
 	case TorrentFilterCompleted:
 		return state == TorrentStatePausedUp || state == TorrentStateStoppedUp || state == TorrentStateQueuedUp || state == TorrentStateStalledUp || state == TorrentStateCheckingUp || state == TorrentStateForcedUp
-	case TorrentFilterPaused:
-		return state == TorrentStatePausedDl || state == TorrentStatePausedUp
+	case TorrentFilterPaused, TorrentFilterStopped:
+		return state == TorrentStatePausedDl || state == TorrentStatePausedUp || state == TorrentStateStoppedDl || state == TorrentStateStoppedUp
 	case TorrentFilterActive:
-		return state == TorrentStateDownloading || state == TorrentStateUploading || state == TorrentStateMetaDl || state == TorrentStateStalledDl || state == TorrentStateStalledUp || state == TorrentStateCheckingDl || state == TorrentStateCheckingUp || state == TorrentStateForcedDl || state == TorrentStateForcedUp || state == TorrentStateAllocating
+		return state == TorrentStateDownloading || state == TorrentStateUploading || state == TorrentStateMetaDl || state == TorrentStateCheckingDl || state == TorrentStateCheckingUp || state == TorrentStateForcedDl || state == TorrentStateForcedUp || state == TorrentStateAllocating
 	case TorrentFilterInactive:
 		return state == TorrentStatePausedDl || state == TorrentStatePausedUp || state == TorrentStateStoppedDl || state == TorrentStateStoppedUp || state == TorrentStateQueuedDl || state == TorrentStateQueuedUp || state == TorrentStateStalledDl || state == TorrentStateStalledUp
 	case TorrentFilterResumed:
-		return state == TorrentStateDownloading || state == TorrentStateUploading || state == TorrentStateMetaDl || state == TorrentStateStalledDl || state == TorrentStateStalledUp || state == TorrentStateCheckingDl || state == TorrentStateCheckingUp || state == TorrentStateForcedDl || state == TorrentStateForcedUp || state == TorrentStateAllocating
-	case TorrentFilterStopped:
-		return state == TorrentStateStoppedDl || state == TorrentStateStoppedUp
+		return state == TorrentStateDownloading || state == TorrentStateUploading || state == TorrentStateMetaDl || state == TorrentStateCheckingDl || state == TorrentStateCheckingUp || state == TorrentStateForcedDl || state == TorrentStateForcedUp || state == TorrentStateAllocating
 	case TorrentFilterStalled:
 		return state == TorrentStateStalledDl || state == TorrentStateStalledUp
 	case TorrentFilterStalledDownloading:
