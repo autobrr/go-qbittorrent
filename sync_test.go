@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/cookiejar"
 	"sync"
 	"testing"
 	"time"
@@ -23,15 +24,51 @@ type mockResponse struct {
 	err  error
 }
 
+type mockRoundTripper struct {
+	mock *MockClient
+}
+
+func (m *mockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	m.mock.callCount++
+
+	// Get the mock response for this endpoint
+	response, exists := m.mock.mockResponses[req.URL.Path]
+	if !exists || response.err != nil {
+		if response.err != nil {
+			return nil, response.err
+		}
+		return nil, context.DeadlineExceeded // Default error for missing mocks
+	}
+
+	// Create a mock HTTP response
+	jsonData, _ := json.Marshal(response.data)
+	return &http.Response{
+		StatusCode: 200,
+		Body:       io.NopCloser(bytes.NewReader(jsonData)),
+	}, nil
+}
+
 func NewMockClient() *MockClient {
-	// Create a dummy client that won't make real HTTP calls
-	client := &Client{}
-	
+	// Create a mock transport that returns mock responses
+	mockTransport := &mockRoundTripper{}
+
+	// Create a client with the mock transport
+	jar, _ := cookiejar.New(nil)
+	client := &Client{
+		http: &http.Client{
+			Transport: mockTransport,
+			Jar:       jar,
+		},
+	}
+
 	mock := &MockClient{
 		Client:        client,
 		mockResponses: make(map[string]mockResponse),
 	}
-	
+
+	// Store reference to mock in transport so it can access mock responses
+	mockTransport.mock = mock
+
 	// Set up default mock responses
 	mock.SetMockResponse("/sync/maindata", mockResponse{
 		data: map[string]interface{}{
@@ -46,7 +83,7 @@ func NewMockClient() *MockClient {
 		},
 		err: nil,
 	})
-	
+
 	return mock
 }
 
@@ -76,23 +113,6 @@ func (m *MockClient) SyncMainDataCtx(ctx context.Context, rid int64) (*MainData,
 	}, nil
 }
 
-func (m *MockClient) getCtx(ctx context.Context, endpoint string, opts map[string]string) (*http.Response, error) {
-	m.callCount++
-	response, exists := m.mockResponses[endpoint]
-	if !exists || response.err != nil {
-		if response.err != nil {
-			return nil, response.err
-		}
-		return nil, context.DeadlineExceeded // Default error for missing mocks
-	}
-
-	jsonData, _ := json.Marshal(response.data)
-	return &http.Response{
-		StatusCode: 200,
-		Body:       io.NopCloser(bytes.NewReader(jsonData)),
-	}, nil
-}
-
 func createMockSyncManager() (*SyncManager, *MockClient) {
 	mockClient := NewMockClient()
 	sm := &SyncManager{
@@ -100,10 +120,7 @@ func createMockSyncManager() (*SyncManager, *MockClient) {
 		options: DefaultSyncOptions(),
 	}
 	sm.syncCond = sync.NewCond(&sm.syncMu)
-	
-	// Override the client methods by replacing the client pointer
-	sm.client = mockClient.Client
-	
+
 	return sm, mockClient
 }
 

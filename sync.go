@@ -433,8 +433,11 @@ func (sm *SyncManager) ensureFreshData() {
 	sm.mu.RLock()
 
 	// Check if data is stale or nil and we should sync
-	shouldSync := sm.data == nil
-	if !shouldSync && sm.options.DynamicSync {
+	shouldSync := false
+	if sm.data == nil {
+		// If data is nil, only sync if DynamicSync is enabled
+		shouldSync = sm.options.DynamicSync
+	} else if sm.options.DynamicSync {
 		// Only check staleness if DynamicSync is enabled
 		staleThreshold := sm.calculateStaleThreshold()
 		if time.Since(sm.lastSync) > staleThreshold {
