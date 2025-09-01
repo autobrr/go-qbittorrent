@@ -519,6 +519,26 @@ func (sm *SyncManager) GetTorrents(options TorrentFilterOptions) []Torrent {
 	return result[:count]
 }
 
+// GetTorrentMap returns a filtered map of torrents keyed by hash
+func (sm *SyncManager) GetTorrentMap(options TorrentFilterOptions) map[string]Torrent {
+	sm.ensureFreshData()
+
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+
+	if sm.data == nil {
+		return nil
+	}
+
+	result := make(map[string]Torrent, len(sm.data.Torrents))
+	for _, torrent := range sm.data.Torrents {
+		if sm.matchesFilter(torrent, options) {
+			result[torrent.Hash] = torrent
+		}
+	}
+	return result
+}
+
 func (sm *SyncManager) matchesFilter(torrent Torrent, options TorrentFilterOptions) bool {
 	if len(options.Hashes) > 0 {
 		found := false

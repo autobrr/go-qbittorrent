@@ -163,7 +163,7 @@ func TestSyncManager_GetDataWhenEmpty(t *testing.T) {
 		t.Error("Expected nil data when not initialized")
 	}
 
-	torrents := syncManager.GetTorrents()
+	torrents := syncManager.GetTorrents(TorrentFilterOptions{})
 	if torrents != nil {
 		t.Error("Expected nil torrents when not initialized")
 	}
@@ -229,14 +229,39 @@ func TestSyncManager_InitializeData(t *testing.T) {
 	}
 
 	// Test GetTorrents
-	torrents := syncManager.GetTorrents()
+	torrents := syncManager.GetTorrents(TorrentFilterOptions{})
 	if torrents == nil {
-		t.Fatal("Expected torrents map, got nil")
+		t.Fatal("Expected torrents slice, got nil")
 	}
 	if len(torrents) != 1 {
 		t.Errorf("Expected 1 torrent, got %d", len(torrents))
 	}
-	if torrent, exists := torrents["abc123"]; !exists {
+	var torrent Torrent
+	found := false
+	for _, t := range torrents {
+		if t.Hash == "abc123" {
+			torrent = t
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("Expected torrent abc123 to exist")
+	} else {
+		if torrent.Name != "Test Torrent" {
+			t.Errorf("Expected torrent name 'Test Torrent', got %s", torrent.Name)
+		}
+	}
+
+	// Test GetTorrentMap
+	torrentMap := syncManager.GetTorrentMap(TorrentFilterOptions{})
+	if torrentMap == nil {
+		t.Fatal("Expected torrent map, got nil")
+	}
+	if len(torrentMap) != 1 {
+		t.Errorf("Expected 1 torrent, got %d", len(torrentMap))
+	}
+	if torrent, exists := torrentMap["abc123"]; !exists {
 		t.Error("Expected torrent abc123 to exist")
 	} else {
 		if torrent.Name != "Test Torrent" {
