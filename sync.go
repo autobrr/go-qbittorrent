@@ -568,9 +568,9 @@ func (sm *SyncManager) matchesStateFilter(state TorrentState, filter TorrentFilt
 	case TorrentFilterAll:
 		return true
 	case TorrentFilterDownloading:
-		return state == TorrentStateDownloading || state == TorrentStateMetaDl || state == TorrentStateStalledDl || state == TorrentStateCheckingDl || state == TorrentStateForcedDl || state == TorrentStateAllocating
+		return state == TorrentStateDownloading || state == TorrentStateMetaDl || state == TorrentStateStalledDl || state == TorrentStateCheckingDl || state == TorrentStateForcedDl || state == TorrentStateAllocating || state == TorrentStateQueuedDl
 	case TorrentFilterUploading:
-		return state == TorrentStateUploading || state == TorrentStateStalledUp || state == TorrentStateCheckingUp || state == TorrentStateForcedUp
+		return state == TorrentStateUploading || state == TorrentStateStalledUp || state == TorrentStateCheckingUp || state == TorrentStateForcedUp || state == TorrentStateQueuedUp
 	case TorrentFilterCompleted:
 		return state == TorrentStatePausedUp || state == TorrentStateStoppedUp || state == TorrentStateQueuedUp || state == TorrentStateStalledUp || state == TorrentStateCheckingUp || state == TorrentStateForcedUp
 	case TorrentFilterPaused, TorrentFilterStopped:
