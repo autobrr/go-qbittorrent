@@ -250,6 +250,12 @@ const (
 	TorrentSortNumSeeds      TorrentSort = "num_seeds"
 	TorrentSortNumLeechs     TorrentSort = "num_leechs"
 	TorrentSortState         TorrentSort = "state"
+	TorrentSortCategory      TorrentSort = "category"
+	TorrentSortTags          TorrentSort = "tags"
+	TorrentSortDownloaded    TorrentSort = "downloaded"
+	TorrentSortUploaded      TorrentSort = "uploaded"
+	TorrentSortSavePath      TorrentSort = "save_path"
+	TorrentSortTracker       TorrentSort = "tracker"
 )
 
 // TrackerStatus https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-4.1)#get-torrent-trackers

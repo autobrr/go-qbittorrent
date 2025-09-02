@@ -1,12 +1,13 @@
 package qbittorrent
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"math/rand"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -595,42 +596,59 @@ func (sm *SyncManager) matchesStateFilter(state TorrentState, filter TorrentFilt
 func (sm *SyncManager) processFilteredTorrents(filtered []Torrent, options TorrentFilterOptions) []Torrent {
 	// Sort
 	if options.Sort != "" {
-		sort.Slice(filtered, func(i, j int) bool {
-			var less bool
-			switch TorrentSort(options.Sort) {
-			case TorrentSortName:
-				less = filtered[i].Name < filtered[j].Name
-			case TorrentSortSize:
-				less = filtered[i].Size < filtered[j].Size
-			case TorrentSortProgress:
-				less = filtered[i].Progress < filtered[j].Progress
-			case TorrentSortAddedOn:
-				less = filtered[i].AddedOn < filtered[j].AddedOn
-			case TorrentSortCompletionOn:
-				less = filtered[i].CompletionOn < filtered[j].CompletionOn
-			case TorrentSortPriority:
-				less = filtered[i].Priority < filtered[j].Priority
-			case TorrentSortETA:
-				less = filtered[i].ETA < filtered[j].ETA
-			case TorrentSortRatio:
-				less = filtered[i].Ratio < filtered[j].Ratio
-			case TorrentSortDownloadSpeed:
-				less = filtered[i].DlSpeed < filtered[j].DlSpeed
-			case TorrentSortUploadSpeed:
-				less = filtered[i].UpSpeed < filtered[j].UpSpeed
-			case TorrentSortNumSeeds:
-				less = filtered[i].NumSeeds < filtered[j].NumSeeds
-			case TorrentSortNumLeechs:
-				less = filtered[i].NumLeechs < filtered[j].NumLeechs
-			case TorrentSortState:
-				less = string(filtered[i].State) < string(filtered[j].State)
-			default:
-				less = filtered[i].Name < filtered[j].Name // default to name
-			}
+		slices.SortFunc(filtered, func(a, b Torrent) int {
+			result := cmp.Or(
+				func() int {
+					switch TorrentSort(options.Sort) {
+					case TorrentSortName:
+						return cmp.Compare(a.Name, b.Name)
+					case TorrentSortSize:
+						return cmp.Compare(a.Size, b.Size)
+					case TorrentSortProgress:
+						return cmp.Compare(a.Progress, b.Progress)
+					case TorrentSortAddedOn:
+						return cmp.Compare(a.AddedOn, b.AddedOn)
+					case TorrentSortCompletionOn:
+						return cmp.Compare(a.CompletionOn, b.CompletionOn)
+					case TorrentSortPriority:
+						return cmp.Compare(a.Priority, b.Priority)
+					case TorrentSortETA:
+						return cmp.Compare(a.ETA, b.ETA)
+					case TorrentSortRatio:
+						return cmp.Compare(a.Ratio, b.Ratio)
+					case TorrentSortDownloadSpeed:
+						return cmp.Compare(a.DlSpeed, b.DlSpeed)
+					case TorrentSortUploadSpeed:
+						return cmp.Compare(a.UpSpeed, b.UpSpeed)
+					case TorrentSortNumSeeds:
+						return cmp.Compare(a.NumSeeds, b.NumSeeds)
+					case TorrentSortNumLeechs:
+						return cmp.Compare(a.NumLeechs, b.NumLeechs)
+					case TorrentSortState:
+						return cmp.Compare(string(a.State), string(b.State))
+					case TorrentSortCategory:
+						return cmp.Compare(a.Category, b.Category)
+					case TorrentSortTags:
+						return cmp.Compare(a.Tags, b.Tags)
+					case TorrentSortDownloaded:
+						return cmp.Compare(a.Downloaded, b.Downloaded)
+					case TorrentSortUploaded:
+						return cmp.Compare(a.Uploaded, b.Uploaded)
+					case TorrentSortSavePath:
+						return cmp.Compare(a.SavePath, b.SavePath)
+					case TorrentSortTracker:
+						return cmp.Compare(a.Tracker, b.Tracker)
+					default:
+						return cmp.Compare(a.Name, b.Name) // default to name
+					}
+				}(),
+				cmp.Compare(a.Hash, b.Hash),
+			)
+
 			if options.Reverse {
-				return !less
+				return -result
 			}
-			return less
+			return result
 		})
 	}
 
