@@ -233,7 +233,8 @@ func (sm *SyncManager) getSyncData(ctx context.Context, rid int64) (map[string]i
 func (sm *SyncManager) mergePartialUpdate(rawData map[string]interface{}, source *MainData) {
 	// Update RID and server state
 	sm.data.Rid = source.Rid
-	sm.data.ServerState = source.ServerState
+	// Merge server state updates while preserving existing values
+	mergeServerState(source.ServerState, &sm.data.ServerState)
 
 	// Handle torrents ONLY if the torrents field is present in the raw JSON
 	// This prevents clearing torrents when there's no torrent update
