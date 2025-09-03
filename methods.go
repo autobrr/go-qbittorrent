@@ -567,6 +567,41 @@ func (c *Client) SyncMainDataCtx(ctx context.Context, rid int64) (*MainData, err
 
 }
 
+// SyncMainDataCtxWithRaw returns both parsed MainData and raw JSON data for partial updates
+func (c *Client) SyncMainDataCtxWithRaw(ctx context.Context, rid int64) (*MainData, map[string]interface{}, error) {
+	opts := map[string]string{
+		"rid": strconv.FormatInt(rid, 10),
+	}
+
+	resp, err := c.getCtx(ctx, "/sync/maindata", opts)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "could not get main data")
+	}
+
+	defer drainAndClose(resp)
+
+	// Read the entire response body
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "could not read response body")
+	}
+
+	// First, decode into raw map to preserve field presence information
+	var rawData map[string]interface{}
+	if err := json.Unmarshal(bodyBytes, &rawData); err != nil {
+		return nil, nil, errors.Wrap(err, "could not unmarshal body")
+	}
+
+	// Then decode into structured MainData
+	var info MainData
+	if err := json.Unmarshal(bodyBytes, &info); err != nil {
+		return nil, nil, errors.Wrap(err, "could not unmarshal body")
+	}
+
+	return &info, rawData, nil
+
+}
+
 func (c *Client) Pause(hashes []string) error {
 	return c.PauseCtx(context.Background(), hashes)
 }

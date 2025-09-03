@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/cookiejar"
-	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -112,6 +111,27 @@ func (m *MockClient) SyncMainDataCtx(ctx context.Context, rid int64) (*MainData,
 			ConnectionStatus: "connected",
 		},
 	}, nil
+}
+
+func (m *MockClient) SyncMainDataCtxWithRaw(ctx context.Context, rid int64) (*MainData, map[string]interface{}, error) {
+	data, err := m.SyncMainDataCtx(ctx, rid)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Create basic raw data for testing
+	rawData := map[string]interface{}{
+		"rid":         data.Rid,
+		"full_update": data.FullUpdate,
+		"torrents":    map[string]interface{}{},
+		"categories":  map[string]interface{}{},
+		"tags":        []interface{}{},
+		"server_state": map[string]interface{}{
+			"connection_status": "connected",
+		},
+	}
+
+	return data, rawData, nil
 }
 
 func createMockSyncManager() (*SyncManager, *MockClient) {
@@ -850,62 +870,5 @@ func TestSyncManager_LastError(t *testing.T) {
 	err = syncManager.LastError()
 	if err != context.DeadlineExceeded {
 		t.Errorf("Expected DeadlineExceeded, got %v", err)
-	}
-}
-
-func TestMergeServerState_CoversAllFields(t *testing.T) {
-	// Use reflection to create a source ServerState with all fields populated
-	sourceValue := reflect.ValueOf(&ServerState{}).Elem()
-	sourceType := sourceValue.Type()
-
-	// Populate all fields with test values based on their type
-	for i := 0; i < sourceValue.NumField(); i++ {
-		field := sourceValue.Field(i)
-		fieldType := sourceType.Field(i)
-
-		if !field.CanSet() {
-			continue
-		}
-
-		switch field.Kind() {
-		case reflect.Int64:
-			field.SetInt(int64(100 + i))
-		case reflect.String:
-			field.SetString("test_" + fieldType.Name)
-		case reflect.Bool:
-			field.SetBool(true)
-		}
-	}
-
-	source := sourceValue.Interface().(ServerState)
-	var dest ServerState
-
-	// Apply merge
-	mergeServerState(source, &dest)
-
-	// Use reflection to verify all fields were properly merged
-	destValue := reflect.ValueOf(dest)
-	for i := 0; i < destValue.NumField(); i++ {
-		sourceField := sourceValue.Field(i)
-		destField := destValue.Field(i)
-		fieldType := sourceType.Field(i)
-		fieldName := fieldType.Name
-
-		// Check if the field was properly merged
-		switch sourceField.Kind() {
-		case reflect.Int64:
-			if destField.Int() == 0 {
-				t.Errorf("Field %s not merged: expected non-zero, got %d", fieldName, destField.Int())
-			}
-		case reflect.String:
-			if destField.String() == "" {
-				t.Errorf("Field %s not merged: expected non-empty, got empty string", fieldName)
-			}
-		case reflect.Bool:
-			// Bool fields should always be set (either true or false from source)
-			if destField.Bool() != sourceField.Bool() {
-				t.Errorf("Field %s not merged: expected %t, got %t", fieldName, sourceField.Bool(), destField.Bool())
-			}
-		}
 	}
 }

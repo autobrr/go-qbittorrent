@@ -273,6 +273,10 @@ func TestClient_AddPeersForTorrents(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotEmpty(t, data)
 
+	if len(data) == 0 {
+		t.Skip("No torrents available for testing")
+	}
+
 	hashes := []string{data[0].Hash}
 	peers := []string{"127.0.0.1:12345"}
 	err = client.AddPeersForTorrents(hashes, peers)
