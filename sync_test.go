@@ -329,16 +329,25 @@ func TestMergeTorrents(t *testing.T) {
 	sm.data.Torrents["abc123"] = existing
 
 	// Simulate a JSON partial update with only some fields
-	torrentsMap := map[string]interface{}{
-		"abc123": map[string]interface{}{
-			"progress": 0.75,
-			"dlspeed":  float64(1500),
-			"state":    "downloading",
-			// Note: upspeed, category, etc. are NOT present in this update
+	rawData := map[string]interface{}{
+		"torrents": map[string]interface{}{
+			"abc123": map[string]interface{}{
+				"progress": 0.75,
+				"dlspeed":  float64(1500),
+				"state":    "downloading",
+				// Note: upspeed, category, etc. are NOT present in this update
+			},
 		},
 	}
 
-	sm.mergeTorrentsPartial(torrentsMap)
+	source := &MainData{
+		Rid:               1,
+		TorrentsRemoved:   []string{},
+		CategoriesRemoved: []string{},
+		TagsRemoved:       []string{},
+	}
+
+	sm.data.UpdateWithRawData(rawData, source)
 
 	merged := sm.data.Torrents["abc123"]
 
@@ -371,19 +380,28 @@ func TestMergeTorrents_NewTorrent(t *testing.T) {
 		Torrents: make(map[string]Torrent),
 	}
 
-	// Add a new torrent through mergeTorrents
-	torrentsMap := map[string]interface{}{
-		"def456": map[string]interface{}{
-			"hash":     "def456",
-			"name":     "New Torrent",
-			"progress": 0.25,
-			"dlspeed":  float64(2000),
-			"state":    "downloading",
-			"category": "movies",
+	// Add a new torrent through UpdateWithRawData
+	rawData := map[string]interface{}{
+		"torrents": map[string]interface{}{
+			"def456": map[string]interface{}{
+				"hash":     "def456",
+				"name":     "New Torrent",
+				"progress": 0.25,
+				"dlspeed":  float64(2000),
+				"state":    "downloading",
+				"category": "movies",
+			},
 		},
 	}
 
-	sm.mergeTorrentsPartial(torrentsMap)
+	source := &MainData{
+		Rid:               1,
+		TorrentsRemoved:   []string{},
+		CategoriesRemoved: []string{},
+		TagsRemoved:       []string{},
+	}
+
+	sm.data.UpdateWithRawData(rawData, source)
 
 	if len(sm.data.Torrents) != 1 {
 		t.Errorf("Expected 1 torrent, got %d", len(sm.data.Torrents))

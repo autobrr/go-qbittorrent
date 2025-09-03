@@ -1,14 +1,8 @@
 package qbittorrent
 
 import (
-	"cmp"
 	"context"
-	"encoding/json"
-	"fmt"
-	"io"
 	"math/rand"
-	"slices"
-	"strings"
 	"sync"
 	"time"
 )
@@ -141,9 +135,18 @@ func (sm *SyncManager) Sync(ctx context.Context) error {
 		sm.mu.Unlock()
 	}()
 
-	// Get both raw JSON and parsed struct in a single request
-	rawData, source, err := sm.getSyncData(ctx, sm.rid)
-	if err != nil {
+	// Initialize data if needed
+	if sm.data == nil {
+		sm.data = &MainData{
+			Torrents:   make(map[string]Torrent),
+			Categories: make(map[string]Category),
+			Trackers:   make(map[string][]string),
+			Tags:       make([]string, 0),
+		}
+	}
+
+	// Use MainData.Update to handle all the sync logic
+	if err := sm.data.Update(ctx, sm.client); err != nil {
 		syncError = err
 		if sm.options.OnError != nil {
 			sm.options.OnError(err)
@@ -151,36 +154,7 @@ func (sm *SyncManager) Sync(ctx context.Context) error {
 		return err
 	}
 
-	// Check if this is a full update
-	isFullUpdate := false
-	if fullUpdateVal, exists := rawData["full_update"]; exists {
-		if fullUpdate, ok := fullUpdateVal.(bool); ok {
-			isFullUpdate = fullUpdate
-		}
-	}
-
-	if sm.data == nil || isFullUpdate {
-		// First sync or full update - replace everything
-		sm.data = source
-		// Ensure maps are initialized for future partial updates
-		if sm.data.Torrents == nil {
-			sm.data.Torrents = make(map[string]Torrent)
-		}
-		if sm.data.Categories == nil {
-			sm.data.Categories = make(map[string]Category)
-		}
-		if sm.data.Trackers == nil {
-			sm.data.Trackers = make(map[string][]string)
-		}
-		if sm.data.Tags == nil {
-			sm.data.Tags = make([]string, 0)
-		}
-	} else {
-		// Partial update - merge intelligently
-		sm.mergePartialUpdate(rawData, source)
-	}
-
-	sm.rid = source.Rid
+	sm.rid = sm.data.Rid
 
 	// Call update callback if set
 	if sm.options.OnUpdate != nil {
@@ -190,245 +164,6 @@ func (sm *SyncManager) Sync(ctx context.Context) error {
 	// Success - clear any previous error
 	syncError = nil
 	return nil
-}
-
-// getSyncData fetches and parses sync data in a single request
-func (sm *SyncManager) getSyncData(ctx context.Context, rid int64) (map[string]interface{}, *MainData, error) {
-	resp, err := sm.client.getCtx(ctx, "/sync/maindata", map[string]string{
-		"rid": fmt.Sprintf("%d", rid),
-	})
-	if err != nil {
-		return nil, nil, err
-	}
-	defer resp.Body.Close()
-
-	// Read the response body once
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// Parse raw JSON for field detection
-	var rawData map[string]interface{}
-	if err := json.Unmarshal(bodyBytes, &rawData); err != nil {
-		return nil, nil, err
-	}
-
-	// Parse structured data
-	var source MainData
-	if err := json.Unmarshal(bodyBytes, &source); err != nil {
-		return nil, nil, err
-	}
-
-	// Populate hash fields from map keys since JSON doesn't include hash in the object
-	for hash, torrent := range source.Torrents {
-		torrent.Hash = hash
-		source.Torrents[hash] = torrent
-	}
-
-	return rawData, &source, nil
-}
-
-// mergePartialUpdate efficiently merges partial updates using field-level merging
-func (sm *SyncManager) mergePartialUpdate(rawData map[string]interface{}, source *MainData) {
-	// Update RID and server state
-	sm.data.Rid = source.Rid
-	sm.data.ServerState = source.ServerState
-
-	// Handle torrents ONLY if the torrents field is present in the raw JSON
-	// This prevents clearing torrents when there's no torrent update
-	if torrentsRaw, exists := rawData["torrents"]; exists {
-		if torrentsMap, ok := torrentsRaw.(map[string]interface{}); ok {
-			sm.mergeTorrentsPartial(torrentsMap)
-		}
-	}
-
-	// Remove deleted torrents ONLY if there are actually items to remove
-	if len(source.TorrentsRemoved) > 0 {
-		remove(source.TorrentsRemoved, &sm.data.Torrents)
-	}
-
-	// Handle categories ONLY if present in raw JSON
-	if categoriesRaw, exists := rawData["categories"]; exists {
-		if _, ok := categoriesRaw.(map[string]interface{}); ok {
-			merge(source.Categories, &sm.data.Categories)
-		}
-	}
-	if len(source.CategoriesRemoved) > 0 {
-		remove(source.CategoriesRemoved, &sm.data.Categories)
-	}
-
-	// Handle trackers ONLY if present in raw JSON
-	if trackersRaw, exists := rawData["trackers"]; exists {
-		if _, ok := trackersRaw.(map[string]interface{}); ok {
-			merge(source.Trackers, &sm.data.Trackers)
-		}
-	}
-
-	// Handle tags ONLY if present in raw JSON
-	if tagsRaw, exists := rawData["tags"]; exists {
-		if _, ok := tagsRaw.([]interface{}); ok {
-			mergeSlice(source.Tags, &sm.data.Tags)
-		}
-	}
-	if len(source.TagsRemoved) > 0 {
-		removeSlice(source.TagsRemoved, &sm.data.Tags)
-	}
-}
-
-// mergeTorrentsPartial merges only the fields that are present in the update
-func (sm *SyncManager) mergeTorrentsPartial(torrentsMap map[string]interface{}) {
-	for hash, torrentRaw := range torrentsMap {
-		updateMap, ok := torrentRaw.(map[string]interface{})
-		if !ok {
-			continue
-		}
-
-		existing, exists := sm.data.Torrents[hash]
-		if !exists {
-			// New torrent - create a minimal torrent with the hash at least
-			existing = Torrent{Hash: hash}
-		}
-
-		// Always start with existing data and update only provided fields
-		sm.updateTorrentFields(&existing, updateMap)
-		sm.data.Torrents[hash] = existing
-	}
-}
-
-// updateTorrentFields updates only the fields that are present in the update map
-func (sm *SyncManager) updateTorrentFields(torrent *Torrent, updateMap map[string]interface{}) {
-	// Only update fields that are explicitly present in the JSON
-	if val, exists := updateMap["name"]; exists {
-		if name, ok := val.(string); ok {
-			torrent.Name = name
-		}
-	}
-	if val, exists := updateMap["hash"]; exists {
-		if hash, ok := val.(string); ok {
-			torrent.Hash = hash
-		}
-	}
-	if val, exists := updateMap["progress"]; exists {
-		if progress, ok := val.(float64); ok {
-			torrent.Progress = progress
-		}
-	}
-	if val, exists := updateMap["dlspeed"]; exists {
-		if speed, ok := val.(float64); ok {
-			torrent.DlSpeed = int64(speed)
-		}
-	}
-	if val, exists := updateMap["upspeed"]; exists {
-		if speed, ok := val.(float64); ok {
-			torrent.UpSpeed = int64(speed)
-		}
-	}
-	if val, exists := updateMap["state"]; exists {
-		if state, ok := val.(string); ok {
-			torrent.State = TorrentState(state)
-		}
-	}
-	if val, exists := updateMap["category"]; exists {
-		if category, ok := val.(string); ok {
-			torrent.Category = category
-		}
-	}
-	if val, exists := updateMap["tags"]; exists {
-		if tags, ok := val.(string); ok {
-			torrent.Tags = tags
-		}
-	}
-	if val, exists := updateMap["size"]; exists {
-		if size, ok := val.(float64); ok {
-			torrent.Size = int64(size)
-		}
-	}
-	if val, exists := updateMap["completed"]; exists {
-		if completed, ok := val.(float64); ok {
-			torrent.Completed = int64(completed)
-		}
-	}
-	if val, exists := updateMap["ratio"]; exists {
-		if ratio, ok := val.(float64); ok {
-			torrent.Ratio = ratio
-		}
-	}
-	if val, exists := updateMap["priority"]; exists {
-		if priority, ok := val.(float64); ok {
-			torrent.Priority = int64(priority)
-		}
-	}
-	if val, exists := updateMap["num_seeds"]; exists {
-		if seeds, ok := val.(float64); ok {
-			torrent.NumSeeds = int64(seeds)
-		}
-	}
-	if val, exists := updateMap["num_leechs"]; exists {
-		if leechs, ok := val.(float64); ok {
-			torrent.NumLeechs = int64(leechs)
-		}
-	}
-	if val, exists := updateMap["eta"]; exists {
-		if eta, ok := val.(float64); ok {
-			torrent.ETA = int64(eta)
-		}
-	}
-	if val, exists := updateMap["seq_dl"]; exists {
-		if seqDl, ok := val.(bool); ok {
-			torrent.SequentialDownload = seqDl
-		}
-	}
-	if val, exists := updateMap["f_l_piece_prio"]; exists {
-		if flPiecePrio, ok := val.(bool); ok {
-			torrent.FirstLastPiecePrio = flPiecePrio
-		}
-	}
-	if val, exists := updateMap["force_start"]; exists {
-		if forceStart, ok := val.(bool); ok {
-			torrent.ForceStart = forceStart
-		}
-	}
-	if val, exists := updateMap["super_seeding"]; exists {
-		if superSeeding, ok := val.(bool); ok {
-			torrent.SuperSeeding = superSeeding
-		}
-	}
-	if val, exists := updateMap["added_on"]; exists {
-		if addedOn, ok := val.(float64); ok {
-			torrent.AddedOn = int64(addedOn)
-		}
-	}
-	if val, exists := updateMap["completion_on"]; exists {
-		if completionOn, ok := val.(float64); ok {
-			torrent.CompletionOn = int64(completionOn)
-		}
-	}
-	if val, exists := updateMap["tracker"]; exists {
-		if tracker, ok := val.(string); ok {
-			torrent.Tracker = tracker
-		}
-	}
-	if val, exists := updateMap["save_path"]; exists {
-		if savePath, ok := val.(string); ok {
-			torrent.SavePath = savePath
-		}
-	}
-	if val, exists := updateMap["content_path"]; exists {
-		if contentPath, ok := val.(string); ok {
-			torrent.ContentPath = contentPath
-		}
-	}
-	if val, exists := updateMap["seeding_time"]; exists {
-		if seedingTime, ok := val.(float64); ok {
-			torrent.SeedingTime = int64(seedingTime)
-		}
-	}
-	if val, exists := updateMap["time_active"]; exists {
-		if timeActive, ok := val.(float64); ok {
-			torrent.TimeActive = int64(timeActive)
-		}
-	}
 }
 
 // ensureFreshData checks if data is stale or missing and syncs if needed
@@ -513,14 +248,14 @@ func (sm *SyncManager) GetTorrents(options TorrentFilterOptions) []Torrent {
 	result := make([]Torrent, len(sm.data.Torrents))
 	count := 0
 	for _, torrent := range sm.data.Torrents {
-		if sm.matchesFilter(torrent, options) {
+		if matchesTorrentFilter(torrent, options) {
 			result[count] = torrent
 			count++
 		}
 	}
 	filtered := result[:count]
 
-	filtered = sm.processFilteredTorrents(filtered, options)
+	filtered = applyTorrentFilterOptions(filtered, options)
 
 	return filtered
 }
@@ -536,137 +271,6 @@ func (sm *SyncManager) GetTorrentMap(options TorrentFilterOptions) map[string]To
 		result[torrent.Hash] = torrent
 	}
 	return result
-}
-
-func (sm *SyncManager) matchesFilter(torrent Torrent, options TorrentFilterOptions) bool {
-	if len(options.Hashes) > 0 {
-		found := false
-		for _, h := range options.Hashes {
-			if h == torrent.Hash {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return false
-		}
-	}
-	if options.Category != "" && torrent.Category != options.Category {
-		return false
-	}
-	if options.Tag != "" && !strings.Contains(torrent.Tags, options.Tag) {
-		return false
-	}
-	if options.Filter != "" && !sm.matchesStateFilter(torrent.State, options.Filter) {
-		return false
-	}
-	return true
-}
-
-func (sm *SyncManager) matchesStateFilter(state TorrentState, filter TorrentFilter) bool {
-	switch filter {
-	case TorrentFilterAll:
-		return true
-	case TorrentFilterDownloading:
-		return state == TorrentStateDownloading || state == TorrentStateMetaDl || state == TorrentStateStalledDl || state == TorrentStateCheckingDl || state == TorrentStateForcedDl || state == TorrentStateAllocating || state == TorrentStateQueuedDl
-	case TorrentFilterUploading:
-		return state == TorrentStateUploading || state == TorrentStateStalledUp || state == TorrentStateCheckingUp || state == TorrentStateForcedUp || state == TorrentStateQueuedUp
-	case TorrentFilterCompleted:
-		return state == TorrentStatePausedUp || state == TorrentStateStoppedUp || state == TorrentStateQueuedUp || state == TorrentStateStalledUp || state == TorrentStateCheckingUp || state == TorrentStateForcedUp
-	case TorrentFilterPaused, TorrentFilterStopped:
-		return state == TorrentStatePausedDl || state == TorrentStatePausedUp || state == TorrentStateStoppedDl || state == TorrentStateStoppedUp
-	case TorrentFilterActive:
-		return state == TorrentStateDownloading || state == TorrentStateUploading || state == TorrentStateMetaDl || state == TorrentStateCheckingDl || state == TorrentStateCheckingUp || state == TorrentStateForcedDl || state == TorrentStateForcedUp || state == TorrentStateAllocating
-	case TorrentFilterInactive:
-		return state == TorrentStatePausedDl || state == TorrentStatePausedUp || state == TorrentStateStoppedDl || state == TorrentStateStoppedUp || state == TorrentStateQueuedDl || state == TorrentStateQueuedUp || state == TorrentStateStalledDl || state == TorrentStateStalledUp
-	case TorrentFilterResumed:
-		return state == TorrentStateDownloading || state == TorrentStateUploading || state == TorrentStateMetaDl || state == TorrentStateCheckingDl || state == TorrentStateCheckingUp || state == TorrentStateForcedDl || state == TorrentStateForcedUp || state == TorrentStateAllocating
-	case TorrentFilterStalled:
-		return state == TorrentStateStalledDl || state == TorrentStateStalledUp
-	case TorrentFilterStalledDownloading:
-		return state == TorrentStateStalledDl
-	case TorrentFilterStalledUploading:
-		return state == TorrentStateStalledUp
-	default:
-		return true
-	}
-}
-
-// processFilteredTorrents applies sorting, reverse, limit, and offset to the filtered torrents
-func (sm *SyncManager) processFilteredTorrents(filtered []Torrent, options TorrentFilterOptions) []Torrent {
-	// Sort
-	if options.Sort != "" {
-		slices.SortFunc(filtered, func(a, b Torrent) int {
-			result := cmp.Or(
-				func() int {
-					switch TorrentSort(options.Sort) {
-					case TorrentSortName:
-						return cmp.Compare(a.Name, b.Name)
-					case TorrentSortSize:
-						return cmp.Compare(a.Size, b.Size)
-					case TorrentSortProgress:
-						return cmp.Compare(a.Progress, b.Progress)
-					case TorrentSortAddedOn:
-						return cmp.Compare(a.AddedOn, b.AddedOn)
-					case TorrentSortCompletionOn:
-						return cmp.Compare(a.CompletionOn, b.CompletionOn)
-					case TorrentSortPriority:
-						return cmp.Compare(a.Priority, b.Priority)
-					case TorrentSortETA:
-						return cmp.Compare(a.ETA, b.ETA)
-					case TorrentSortRatio:
-						return cmp.Compare(a.Ratio, b.Ratio)
-					case TorrentSortDownloadSpeed:
-						return cmp.Compare(a.DlSpeed, b.DlSpeed)
-					case TorrentSortUploadSpeed:
-						return cmp.Compare(a.UpSpeed, b.UpSpeed)
-					case TorrentSortNumSeeds:
-						return cmp.Compare(a.NumSeeds, b.NumSeeds)
-					case TorrentSortNumLeechs:
-						return cmp.Compare(a.NumLeechs, b.NumLeechs)
-					case TorrentSortState:
-						return cmp.Compare(string(a.State), string(b.State))
-					case TorrentSortCategory:
-						return cmp.Compare(a.Category, b.Category)
-					case TorrentSortTags:
-						return cmp.Compare(a.Tags, b.Tags)
-					case TorrentSortDownloaded:
-						return cmp.Compare(a.Downloaded, b.Downloaded)
-					case TorrentSortUploaded:
-						return cmp.Compare(a.Uploaded, b.Uploaded)
-					case TorrentSortSavePath:
-						return cmp.Compare(a.SavePath, b.SavePath)
-					case TorrentSortTracker:
-						return cmp.Compare(a.Tracker, b.Tracker)
-					default:
-						return cmp.Compare(a.Name, b.Name) // default to name
-					}
-				}(),
-				cmp.Compare(a.Hash, b.Hash),
-			)
-
-			if options.Reverse {
-				return -result
-			}
-			return result
-		})
-	}
-
-	// Apply offset and limit
-	if options.Offset > 0 || options.Limit > 0 {
-		start := options.Offset
-		if start >= len(filtered) {
-			filtered = filtered[:0]
-		} else {
-			end := len(filtered)
-			if options.Limit > 0 && start+options.Limit < end {
-				end = start + options.Limit
-			}
-			filtered = filtered[start:end]
-		}
-	}
-
-	return filtered
 }
 
 // GetTorrent returns a specific torrent by hash
@@ -848,36 +452,4 @@ func (sm *SyncManager) copyMainData(src *MainData) *MainData {
 	}
 
 	return dst
-}
-
-// removeDuplicateStrings removes duplicate strings from a slice
-func removeDuplicateStrings(input []string) []string {
-	seen := make(map[string]bool)
-	result := make([]string, 0, len(input))
-
-	for _, item := range input {
-		if !seen[item] {
-			seen[item] = true
-			result = append(result, item)
-		}
-	}
-
-	return result
-}
-
-// removeStrings removes specified strings from a slice
-func removeStrings(input []string, toRemove []string) []string {
-	removeMap := make(map[string]bool)
-	for _, item := range toRemove {
-		removeMap[item] = true
-	}
-
-	result := make([]string, 0, len(input))
-	for _, item := range input {
-		if !removeMap[item] {
-			result = append(result, item)
-		}
-	}
-
-	return result
 }
