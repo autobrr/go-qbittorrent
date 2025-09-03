@@ -158,6 +158,8 @@ func TestSyncManager_WithOptions(t *testing.T) {
 
 func TestSyncManager_GetDataWhenEmpty(t *testing.T) {
 	syncManager, _ := createMockSyncManager()
+	// Disable dynamic sync for this test to prevent automatic syncing
+	syncManager.options.DynamicSync = false
 
 	data := syncManager.GetData()
 	if data != nil {

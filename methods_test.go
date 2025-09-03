@@ -231,6 +231,10 @@ func TestClient_GetTorrentPieceStates(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotEmpty(t, data)
 
+	if len(data) == 0 {
+		t.Skip("No torrents available for testing")
+	}
+
 	hash := data[0].Hash
 	states, err := client.GetTorrentPieceStates(hash)
 	assert.NoError(t, err)
@@ -247,6 +251,10 @@ func TestClient_GetTorrentPieceHashes(t *testing.T) {
 	data, err := client.GetTorrents(qbittorrent.TorrentFilterOptions{})
 	assert.NoError(t, err)
 	assert.NotEmpty(t, data)
+
+	if len(data) == 0 {
+		t.Skip("No torrents available for testing")
+	}
 
 	hash := data[0].Hash
 	states, err := client.GetTorrentPieceHashes(hash)
