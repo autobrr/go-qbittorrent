@@ -547,24 +547,8 @@ func (c *Client) BanPeersCtx(ctx context.Context, peers []string) error {
 // SyncMainDataCtx Sync API implements requests for obtaining changes since the last request.
 // Response ID. If not provided, rid=0 will be assumed. If the given rid is different from the one of last server reply, full_update will be true (see the server reply details for more info)
 func (c *Client) SyncMainDataCtx(ctx context.Context, rid int64) (*MainData, error) {
-	opts := map[string]string{
-		"rid": strconv.FormatInt(rid, 10),
-	}
-
-	resp, err := c.getCtx(ctx, "/sync/maindata", opts)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not get main data")
-	}
-
-	defer drainAndClose(resp)
-
-	var info MainData
-	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
-		return nil, errors.Wrap(err, "could not unmarshal body")
-	}
-
-	return &info, nil
-
+	info, _, err := c.SyncMainDataCtxWithRaw(ctx, rid)
+	return info, err
 }
 
 // SyncMainDataCtxWithRaw returns both parsed MainData and raw JSON data for partial updates
