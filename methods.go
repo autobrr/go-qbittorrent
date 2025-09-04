@@ -564,24 +564,28 @@ func (c *Client) SyncMainDataCtxWithRaw(ctx context.Context, rid int64) (*MainDa
 
 	defer drainAndClose(resp)
 
-	// Read the entire response body
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "could not read response body")
-	}
-
-	// First, decode into raw map to preserve field presence information
+	rp, wp := io.Pipe()
 	var rawData map[string]interface{}
-	if err := json.Unmarshal(bodyBytes, &rawData); err != nil {
-		return nil, nil, errors.Wrap(err, "could not unmarshal body")
-	}
+	var mapErr error
+	go func() {
+		defer wp.Close()
+		mapErr = json.NewDecoder(io.TeeReader(resp.Body, wp)).Decode(&rawData)
+		if mapErr != nil {
+			normalizeHashes(rawData["torrents"].(map[string]Torrent))
+		}
+	}()
 
 	// Then decode into structured MainData
 	var info MainData
-	if err := json.Unmarshal(bodyBytes, &info); err != nil {
+	if err := json.NewDecoder(rp).Decode(&info); err != nil {
 		return nil, nil, errors.Wrap(err, "could not unmarshal body")
 	}
 
+	if mapErr != nil {
+		return nil, nil, errors.Wrap(mapErr, "could not unmarshal body to map")
+	}
+
+	normalizeHashes(info.Torrents)
 	return &info, rawData, nil
 
 }

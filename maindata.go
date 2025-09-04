@@ -9,13 +9,11 @@ import (
 )
 
 // normalizeHash sets .Hash from InfohashV1 or InfohashV2 if Hash is empty
-func normalizeHash(torrent *Torrent) {
-	if torrent.Hash == "" {
-		if torrent.InfohashV1 != "" {
-			torrent.Hash = torrent.InfohashV1
-		} else if torrent.InfohashV2 != "" {
-			torrent.Hash = torrent.InfohashV2
-		}
+func normalizeHashes(dest map[string]Torrent) {
+	// Normalize hashes for all torrents after full update
+	for hash, torrent := range dest {
+		torrent.Hash = hash
+		dest[hash] = torrent
 	}
 }
 
@@ -33,13 +31,6 @@ func (dest *MainData) Update(ctx context.Context, c *Client) error {
 
 	// For full updates, replace everything
 	*dest = *source
-	
-	// Normalize hashes for all torrents after full update
-	for hash, torrent := range dest.Torrents {
-		normalizeHash(&torrent)
-		dest.Torrents[hash] = torrent
-	}
-	
 	return nil
 }
 
@@ -153,10 +144,10 @@ func (dest *MainData) mergeTorrentsPartial(torrentsMap map[string]interface{}) {
 
 		// Always start with existing data and update only provided fields
 		dest.updateTorrentFields(&existing, updateMap)
-		
+
 		// Normalize hash: set .Hash from InfohashV1 or InfohashV2 if Hash is empty
 		normalizeHash(&existing)
-		
+
 		dest.Torrents[hash] = existing
 	}
 }

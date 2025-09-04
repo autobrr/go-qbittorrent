@@ -3,7 +3,6 @@ package qbittorrent
 import (
 	"context"
 	"math/rand"
-	"sort"
 	"sync"
 	"time"
 )
@@ -246,27 +245,14 @@ func (sm *SyncManager) GetTorrents(options TorrentFilterOptions) []Torrent {
 		return nil
 	}
 
-	// Get hashes in deterministic order to ensure consistent results
-	hashes := make([]string, 0, len(sm.data.Torrents))
-	for hash := range sm.data.Torrents {
-		hashes = append(hashes, hash)
-	}
-	sort.Strings(hashes)
-
-	result := make([]Torrent, len(sm.data.Torrents))
-	count := 0
-	for _, hash := range hashes {
-		torrent := sm.data.Torrents[hash]
+	result := make([]Torrent, 0, len(sm.data.Torrents))
+	for _, torrent := range sm.data.Torrents {
 		if matchesTorrentFilter(torrent, options) {
-			result[count] = torrent
-			count++
+			result = append(result, torrent)
 		}
 	}
-	filtered := result[:count]
 
-	filtered = applyTorrentFilterOptions(filtered, options)
-
-	return filtered
+	return applyTorrentFilterOptions(result, options)
 }
 
 // GetTorrentMap returns a filtered map of torrents keyed by hash

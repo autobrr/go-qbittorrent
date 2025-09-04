@@ -10,10 +10,6 @@ import (
 
 // applyTorrentSorting applies sorting to torrents based on the sort field
 func applyTorrentSorting(torrents []Torrent, sortField string, reverse bool) {
-	if sortField == "" {
-		return
-	}
-
 	slices.SortFunc(torrents, func(a, b Torrent) int {
 		result := cmp.Or(
 			func() int {
