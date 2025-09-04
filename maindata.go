@@ -123,7 +123,7 @@ func (dest *MainData) UpdateWithRawData(rawData map[string]interface{}, source *
 	// Handle server_state partial updates ONLY if present in raw JSON
 	if serverStateRaw, exists := rawData["server_state"]; exists {
 		if serverStateMap, ok := serverStateRaw.(map[string]interface{}); ok {
-			dest.updateServerStateFields(&dest.ServerState, serverStateMap)
+			updateServerStateFields(&dest.ServerState, serverStateMap)
 		}
 	}
 }
@@ -143,7 +143,7 @@ func (dest *MainData) mergeTorrentsPartial(torrentsMap map[string]interface{}) {
 		}
 
 		// Always start with existing data and update only provided fields
-		dest.updateTorrentFields(&existing, updateMap)
+		updateTorrentFields(&existing, updateMap)
 
 		dest.Torrents[hash] = existing
 	}
@@ -164,7 +164,7 @@ func (dest *MainData) mergeCategoriesPartial(categoriesMap map[string]interface{
 		}
 
 		// Always start with existing data and update only provided fields
-		dest.updateCategoryFields(&existing, updateMap)
+		updateCategoryFields(&existing, updateMap)
 		dest.Categories[name] = existing
 	}
 }
