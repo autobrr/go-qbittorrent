@@ -131,48 +131,53 @@ import (
 	"slices"
 )
 
-// applyTorrentSorting applies sorting to torrents based on the sort field
-func applyTorrentSorting(torrents []Torrent, sortField string, reverse bool) {
-	if sortField == "" {
-		return
-	}
-
-	slices.SortFunc(torrents, func(a, b Torrent) int {
-		result := cmp.Or(
-			func() int {
-				switch sortField {
+// Precomputed comparators for sorting torrents
+var torrentComparators = map[string]func(a, b Torrent) int{
 `
 
-	// Generate switch cases for each field
+	// Generate comparators for each field (only normal, reverse handled by negation)
 	for _, field := range fields {
 		if field.Type == "bool" {
-			output += fmt.Sprintf(`				case "%s":
-					if a.%s != b.%s {
-						if a.%s {
-							return 1
-						}
-						return -1
-					}
-					return 0
+			output += fmt.Sprintf(`	"%s": func(a, b Torrent) int {
+		if a.%s != b.%s {
+			if a.%s {
+				return 1
+			}
+			return -1
+		}
+		return 0
+	},
 `, field.JSONTag, field.Name, field.Name, field.Name)
 		} else if isComparableType(field.Type) {
-			output += fmt.Sprintf(`				case "%s":
-					return cmp.Compare(a.%s, b.%s)
+			output += fmt.Sprintf(`	"%s": func(a, b Torrent) int {
+		return cmp.Compare(a.%s, b.%s)
+	},
 `, field.JSONTag, field.Name, field.Name)
 		} else if field.Type == "TorrentState" {
-			output += fmt.Sprintf(`				case "%s":
-					return cmp.Compare(string(a.%s), string(b.%s))
+			output += fmt.Sprintf(`	"%s": func(a, b Torrent) int {
+		return cmp.Compare(string(a.%s), string(b.%s))
+	},
 `, field.JSONTag, field.Name, field.Name)
 		}
 	}
 
-	output += `				default:
-					return cmp.Compare(a.Name, b.Name) // default to name
-				}
-			}(),
+	// Default comparator
+	output += `	"default": func(a, b Torrent) int {
+		return cmp.Compare(a.Name, b.Name)
+	},
+}
+
+func applyTorrentSorting(torrents []Torrent, sortField string, reverse bool) {
+	comparator, exists := torrentComparators[sortField]
+	if !exists {
+		comparator = torrentComparators["default"]
+	}
+
+	slices.SortFunc(torrents, func(a, b Torrent) int {
+		result := cmp.Or(
+			comparator(a, b),
 			cmp.Compare(a.Hash, b.Hash), // secondary sort by hash for stability
 		)
-
 		if reverse {
 			return -result
 		}

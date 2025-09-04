@@ -145,9 +145,6 @@ func (dest *MainData) mergeTorrentsPartial(torrentsMap map[string]interface{}) {
 		// Always start with existing data and update only provided fields
 		dest.updateTorrentFields(&existing, updateMap)
 
-		// Normalize hash: set .Hash from InfohashV1 or InfohashV2 if Hash is empty
-		normalizeHash(&existing)
-
 		dest.Torrents[hash] = existing
 	}
 }
