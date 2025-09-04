@@ -193,10 +193,6 @@ var torrentComparators = map[string]func(a, b Torrent) int{
 }
 
 func applyTorrentSorting(torrents []Torrent, sortField string, reverse bool) {
-	if sortField == "" {
-		return
-	}
-
 	comparator, exists := torrentComparators[sortField]
 	if !exists {
 		comparator = torrentComparators["default"]
