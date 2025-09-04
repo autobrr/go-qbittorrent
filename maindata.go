@@ -68,9 +68,8 @@ func removeSlice[T []string](s T, d *T) {
 // UpdateWithRawData efficiently merges partial updates using raw JSON data
 // This provides field-level merging similar to the SyncManager's logic
 func (dest *MainData) UpdateWithRawData(rawData map[string]interface{}, source *MainData) {
-	// Update RID and server state
+	// Update RID
 	dest.Rid = source.Rid
-	dest.ServerState = source.ServerState
 
 	// Handle torrents ONLY if the torrents field is present in the raw JSON
 	// This prevents clearing torrents when there's no torrent update
