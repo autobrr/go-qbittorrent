@@ -8,147 +8,205 @@ import (
 	"slices"
 )
 
-// applyTorrentSorting applies sorting to torrents based on the sort field
+// Precomputed comparators for sorting torrents
+var torrentComparators = map[string]func(a, b Torrent) int{
+	"added_on": func(a, b Torrent) int {
+		return cmp.Compare(a.AddedOn, b.AddedOn)
+	},
+	"amount_left": func(a, b Torrent) int {
+		return cmp.Compare(a.AmountLeft, b.AmountLeft)
+	},
+	"auto_tmm": func(a, b Torrent) int {
+		if a.AutoManaged != b.AutoManaged {
+			if a.AutoManaged {
+				return 1
+			}
+			return -1
+		}
+		return 0
+	},
+	"availability": func(a, b Torrent) int {
+		return cmp.Compare(a.Availability, b.Availability)
+	},
+	"category": func(a, b Torrent) int {
+		return cmp.Compare(a.Category, b.Category)
+	},
+	"completed": func(a, b Torrent) int {
+		return cmp.Compare(a.Completed, b.Completed)
+	},
+	"completion_on": func(a, b Torrent) int {
+		return cmp.Compare(a.CompletionOn, b.CompletionOn)
+	},
+	"content_path": func(a, b Torrent) int {
+		return cmp.Compare(a.ContentPath, b.ContentPath)
+	},
+	"dl_limit": func(a, b Torrent) int {
+		return cmp.Compare(a.DlLimit, b.DlLimit)
+	},
+	"dlspeed": func(a, b Torrent) int {
+		return cmp.Compare(a.DlSpeed, b.DlSpeed)
+	},
+	"download_path": func(a, b Torrent) int {
+		return cmp.Compare(a.DownloadPath, b.DownloadPath)
+	},
+	"downloaded": func(a, b Torrent) int {
+		return cmp.Compare(a.Downloaded, b.Downloaded)
+	},
+	"downloaded_session": func(a, b Torrent) int {
+		return cmp.Compare(a.DownloadedSession, b.DownloadedSession)
+	},
+	"eta": func(a, b Torrent) int {
+		return cmp.Compare(a.ETA, b.ETA)
+	},
+	"f_l_piece_prio": func(a, b Torrent) int {
+		if a.FirstLastPiecePrio != b.FirstLastPiecePrio {
+			if a.FirstLastPiecePrio {
+				return 1
+			}
+			return -1
+		}
+		return 0
+	},
+	"force_start": func(a, b Torrent) int {
+		if a.ForceStart != b.ForceStart {
+			if a.ForceStart {
+				return 1
+			}
+			return -1
+		}
+		return 0
+	},
+	"hash": func(a, b Torrent) int {
+		return cmp.Compare(a.Hash, b.Hash)
+	},
+	"infohash_v1": func(a, b Torrent) int {
+		return cmp.Compare(a.InfohashV1, b.InfohashV1)
+	},
+	"infohash_v2": func(a, b Torrent) int {
+		return cmp.Compare(a.InfohashV2, b.InfohashV2)
+	},
+	"last_activity": func(a, b Torrent) int {
+		return cmp.Compare(a.LastActivity, b.LastActivity)
+	},
+	"magnet_uri": func(a, b Torrent) int {
+		return cmp.Compare(a.MagnetURI, b.MagnetURI)
+	},
+	"max_ratio": func(a, b Torrent) int {
+		return cmp.Compare(a.MaxRatio, b.MaxRatio)
+	},
+	"max_seeding_time": func(a, b Torrent) int {
+		return cmp.Compare(a.MaxSeedingTime, b.MaxSeedingTime)
+	},
+	"name": func(a, b Torrent) int {
+		return cmp.Compare(a.Name, b.Name)
+	},
+	"num_complete": func(a, b Torrent) int {
+		return cmp.Compare(a.NumComplete, b.NumComplete)
+	},
+	"num_incomplete": func(a, b Torrent) int {
+		return cmp.Compare(a.NumIncomplete, b.NumIncomplete)
+	},
+	"num_leechs": func(a, b Torrent) int {
+		return cmp.Compare(a.NumLeechs, b.NumLeechs)
+	},
+	"num_seeds": func(a, b Torrent) int {
+		return cmp.Compare(a.NumSeeds, b.NumSeeds)
+	},
+	"priority": func(a, b Torrent) int {
+		return cmp.Compare(a.Priority, b.Priority)
+	},
+	"progress": func(a, b Torrent) int {
+		return cmp.Compare(a.Progress, b.Progress)
+	},
+	"ratio": func(a, b Torrent) int {
+		return cmp.Compare(a.Ratio, b.Ratio)
+	},
+	"ratio_limit": func(a, b Torrent) int {
+		return cmp.Compare(a.RatioLimit, b.RatioLimit)
+	},
+	"save_path": func(a, b Torrent) int {
+		return cmp.Compare(a.SavePath, b.SavePath)
+	},
+	"seeding_time": func(a, b Torrent) int {
+		return cmp.Compare(a.SeedingTime, b.SeedingTime)
+	},
+	"seeding_time_limit": func(a, b Torrent) int {
+		return cmp.Compare(a.SeedingTimeLimit, b.SeedingTimeLimit)
+	},
+	"seen_complete": func(a, b Torrent) int {
+		return cmp.Compare(a.SeenComplete, b.SeenComplete)
+	},
+	"seq_dl": func(a, b Torrent) int {
+		if a.SequentialDownload != b.SequentialDownload {
+			if a.SequentialDownload {
+				return 1
+			}
+			return -1
+		}
+		return 0
+	},
+	"size": func(a, b Torrent) int {
+		return cmp.Compare(a.Size, b.Size)
+	},
+	"state": func(a, b Torrent) int {
+		return cmp.Compare(string(a.State), string(b.State))
+	},
+	"super_seeding": func(a, b Torrent) int {
+		if a.SuperSeeding != b.SuperSeeding {
+			if a.SuperSeeding {
+				return 1
+			}
+			return -1
+		}
+		return 0
+	},
+	"tags": func(a, b Torrent) int {
+		return cmp.Compare(a.Tags, b.Tags)
+	},
+	"time_active": func(a, b Torrent) int {
+		return cmp.Compare(a.TimeActive, b.TimeActive)
+	},
+	"total_size": func(a, b Torrent) int {
+		return cmp.Compare(a.TotalSize, b.TotalSize)
+	},
+	"tracker": func(a, b Torrent) int {
+		return cmp.Compare(a.Tracker, b.Tracker)
+	},
+	"trackers_count": func(a, b Torrent) int {
+		return cmp.Compare(a.TrackersCount, b.TrackersCount)
+	},
+	"up_limit": func(a, b Torrent) int {
+		return cmp.Compare(a.UpLimit, b.UpLimit)
+	},
+	"uploaded": func(a, b Torrent) int {
+		return cmp.Compare(a.Uploaded, b.Uploaded)
+	},
+	"uploaded_session": func(a, b Torrent) int {
+		return cmp.Compare(a.UploadedSession, b.UploadedSession)
+	},
+	"upspeed": func(a, b Torrent) int {
+		return cmp.Compare(a.UpSpeed, b.UpSpeed)
+	},
+	"default": func(a, b Torrent) int {
+		return cmp.Compare(a.Name, b.Name)
+	},
+}
+
 func applyTorrentSorting(torrents []Torrent, sortField string, reverse bool) {
+	if sortField == "" {
+		return
+	}
+
+	comparator, exists := torrentComparators[sortField]
+	if !exists {
+		comparator = torrentComparators["default"]
+	}
+
 	slices.SortFunc(torrents, func(a, b Torrent) int {
 		result := cmp.Or(
-			func() int {
-				switch sortField {
-				case "added_on":
-					return cmp.Compare(a.AddedOn, b.AddedOn)
-				case "amount_left":
-					return cmp.Compare(a.AmountLeft, b.AmountLeft)
-				case "auto_tmm":
-					if a.AutoManaged != b.AutoManaged {
-						if a.AutoManaged {
-							return 1
-						}
-						return -1
-					}
-					return 0
-				case "availability":
-					return cmp.Compare(a.Availability, b.Availability)
-				case "category":
-					return cmp.Compare(a.Category, b.Category)
-				case "completed":
-					return cmp.Compare(a.Completed, b.Completed)
-				case "completion_on":
-					return cmp.Compare(a.CompletionOn, b.CompletionOn)
-				case "content_path":
-					return cmp.Compare(a.ContentPath, b.ContentPath)
-				case "dl_limit":
-					return cmp.Compare(a.DlLimit, b.DlLimit)
-				case "dlspeed":
-					return cmp.Compare(a.DlSpeed, b.DlSpeed)
-				case "download_path":
-					return cmp.Compare(a.DownloadPath, b.DownloadPath)
-				case "downloaded":
-					return cmp.Compare(a.Downloaded, b.Downloaded)
-				case "downloaded_session":
-					return cmp.Compare(a.DownloadedSession, b.DownloadedSession)
-				case "eta":
-					return cmp.Compare(a.ETA, b.ETA)
-				case "f_l_piece_prio":
-					if a.FirstLastPiecePrio != b.FirstLastPiecePrio {
-						if a.FirstLastPiecePrio {
-							return 1
-						}
-						return -1
-					}
-					return 0
-				case "force_start":
-					if a.ForceStart != b.ForceStart {
-						if a.ForceStart {
-							return 1
-						}
-						return -1
-					}
-					return 0
-				case "hash":
-					return cmp.Compare(a.Hash, b.Hash)
-				case "infohash_v1":
-					return cmp.Compare(a.InfohashV1, b.InfohashV1)
-				case "infohash_v2":
-					return cmp.Compare(a.InfohashV2, b.InfohashV2)
-				case "last_activity":
-					return cmp.Compare(a.LastActivity, b.LastActivity)
-				case "magnet_uri":
-					return cmp.Compare(a.MagnetURI, b.MagnetURI)
-				case "max_ratio":
-					return cmp.Compare(a.MaxRatio, b.MaxRatio)
-				case "max_seeding_time":
-					return cmp.Compare(a.MaxSeedingTime, b.MaxSeedingTime)
-				case "name":
-					return cmp.Compare(a.Name, b.Name)
-				case "num_complete":
-					return cmp.Compare(a.NumComplete, b.NumComplete)
-				case "num_incomplete":
-					return cmp.Compare(a.NumIncomplete, b.NumIncomplete)
-				case "num_leechs":
-					return cmp.Compare(a.NumLeechs, b.NumLeechs)
-				case "num_seeds":
-					return cmp.Compare(a.NumSeeds, b.NumSeeds)
-				case "priority":
-					return cmp.Compare(a.Priority, b.Priority)
-				case "progress":
-					return cmp.Compare(a.Progress, b.Progress)
-				case "ratio":
-					return cmp.Compare(a.Ratio, b.Ratio)
-				case "ratio_limit":
-					return cmp.Compare(a.RatioLimit, b.RatioLimit)
-				case "save_path":
-					return cmp.Compare(a.SavePath, b.SavePath)
-				case "seeding_time":
-					return cmp.Compare(a.SeedingTime, b.SeedingTime)
-				case "seeding_time_limit":
-					return cmp.Compare(a.SeedingTimeLimit, b.SeedingTimeLimit)
-				case "seen_complete":
-					return cmp.Compare(a.SeenComplete, b.SeenComplete)
-				case "seq_dl":
-					if a.SequentialDownload != b.SequentialDownload {
-						if a.SequentialDownload {
-							return 1
-						}
-						return -1
-					}
-					return 0
-				case "size":
-					return cmp.Compare(a.Size, b.Size)
-				case "state":
-					return cmp.Compare(string(a.State), string(b.State))
-				case "super_seeding":
-					if a.SuperSeeding != b.SuperSeeding {
-						if a.SuperSeeding {
-							return 1
-						}
-						return -1
-					}
-					return 0
-				case "tags":
-					return cmp.Compare(a.Tags, b.Tags)
-				case "time_active":
-					return cmp.Compare(a.TimeActive, b.TimeActive)
-				case "total_size":
-					return cmp.Compare(a.TotalSize, b.TotalSize)
-				case "tracker":
-					return cmp.Compare(a.Tracker, b.Tracker)
-				case "trackers_count":
-					return cmp.Compare(a.TrackersCount, b.TrackersCount)
-				case "up_limit":
-					return cmp.Compare(a.UpLimit, b.UpLimit)
-				case "uploaded":
-					return cmp.Compare(a.Uploaded, b.Uploaded)
-				case "uploaded_session":
-					return cmp.Compare(a.UploadedSession, b.UploadedSession)
-				case "upspeed":
-					return cmp.Compare(a.UpSpeed, b.UpSpeed)
-				default:
-					return cmp.Compare(a.Name, b.Name) // default to name
-				}
-			}(),
+			comparator(a, b),
 			cmp.Compare(a.Hash, b.Hash), // secondary sort by hash for stability
 		)
-
 		if reverse {
 			return -result
 		}
