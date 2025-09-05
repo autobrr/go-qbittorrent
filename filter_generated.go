@@ -5,7 +5,6 @@ package qbittorrent
 
 import (
 	"slices"
-	"strings"
 )
 func compareAddedOn(a, b *Torrent) int {
 	if a.AddedOn < b.AddedOn {
@@ -45,7 +44,12 @@ func compareAvailability(a, b *Torrent) int {
 }
 
 func compareCategory(a, b *Torrent) int {
-	return strings.Compare(a.Category, b.Category)
+	if a.Category == b.Category {
+		return 0
+	} else if a.Category < b.Category {
+		return -1
+	}
+	return 1
 }
 
 func compareCompleted(a, b *Torrent) int {
@@ -67,7 +71,12 @@ func compareCompletionOn(a, b *Torrent) int {
 }
 
 func compareContentPath(a, b *Torrent) int {
-	return strings.Compare(a.ContentPath, b.ContentPath)
+	if a.ContentPath == b.ContentPath {
+		return 0
+	} else if a.ContentPath < b.ContentPath {
+		return -1
+	}
+	return 1
 }
 
 func compareDlLimit(a, b *Torrent) int {
@@ -89,7 +98,12 @@ func compareDlSpeed(a, b *Torrent) int {
 }
 
 func compareDownloadPath(a, b *Torrent) int {
-	return strings.Compare(a.DownloadPath, b.DownloadPath)
+	if a.DownloadPath == b.DownloadPath {
+		return 0
+	} else if a.DownloadPath < b.DownloadPath {
+		return -1
+	}
+	return 1
 }
 
 func compareDownloaded(a, b *Torrent) int {
@@ -140,15 +154,30 @@ func compareForceStart(a, b *Torrent) int {
 }
 
 func compareHash(a, b *Torrent) int {
-	return strings.Compare(a.Hash, b.Hash)
+	if a.Hash == b.Hash {
+		return 0
+	} else if a.Hash < b.Hash {
+		return -1
+	}
+	return 1
 }
 
 func compareInfohashV1(a, b *Torrent) int {
-	return strings.Compare(a.InfohashV1, b.InfohashV1)
+	if a.InfohashV1 == b.InfohashV1 {
+		return 0
+	} else if a.InfohashV1 < b.InfohashV1 {
+		return -1
+	}
+	return 1
 }
 
 func compareInfohashV2(a, b *Torrent) int {
-	return strings.Compare(a.InfohashV2, b.InfohashV2)
+	if a.InfohashV2 == b.InfohashV2 {
+		return 0
+	} else if a.InfohashV2 < b.InfohashV2 {
+		return -1
+	}
+	return 1
 }
 
 func compareLastActivity(a, b *Torrent) int {
@@ -161,7 +190,12 @@ func compareLastActivity(a, b *Torrent) int {
 }
 
 func compareMagnetURI(a, b *Torrent) int {
-	return strings.Compare(a.MagnetURI, b.MagnetURI)
+	if a.MagnetURI == b.MagnetURI {
+		return 0
+	} else if a.MagnetURI < b.MagnetURI {
+		return -1
+	}
+	return 1
 }
 
 func compareMaxRatio(a, b *Torrent) int {
@@ -183,7 +217,12 @@ func compareMaxSeedingTime(a, b *Torrent) int {
 }
 
 func compareName(a, b *Torrent) int {
-	return strings.Compare(a.Name, b.Name)
+	if a.Name == b.Name {
+		return 0
+	} else if a.Name < b.Name {
+		return -1
+	}
+	return 1
 }
 
 func compareNumComplete(a, b *Torrent) int {
@@ -259,7 +298,12 @@ func compareRatioLimit(a, b *Torrent) int {
 }
 
 func compareSavePath(a, b *Torrent) int {
-	return strings.Compare(a.SavePath, b.SavePath)
+	if a.SavePath == b.SavePath {
+		return 0
+	} else if a.SavePath < b.SavePath {
+		return -1
+	}
+	return 1
 }
 
 func compareSeedingTime(a, b *Torrent) int {
@@ -309,7 +353,12 @@ func compareSize(a, b *Torrent) int {
 }
 
 func compareState(a, b *Torrent) int {
-	return strings.Compare(string(a.State), string(b.State))
+	if a.State == b.State {
+		return 0
+	} else if string(a.State) < string(b.State) {
+		return -1
+	}
+	return 1
 }
 
 func compareSuperSeeding(a, b *Torrent) int {
@@ -323,7 +372,12 @@ func compareSuperSeeding(a, b *Torrent) int {
 }
 
 func compareTags(a, b *Torrent) int {
-	return strings.Compare(a.Tags, b.Tags)
+	if a.Tags == b.Tags {
+		return 0
+	} else if a.Tags < b.Tags {
+		return -1
+	}
+	return 1
 }
 
 func compareTimeActive(a, b *Torrent) int {
@@ -345,7 +399,12 @@ func compareTotalSize(a, b *Torrent) int {
 }
 
 func compareTracker(a, b *Torrent) int {
-	return strings.Compare(a.Tracker, b.Tracker)
+	if a.Tracker == b.Tracker {
+		return 0
+	} else if a.Tracker < b.Tracker {
+		return -1
+	}
+	return 1
 }
 
 func compareTrackersCount(a, b *Torrent) int {
@@ -394,7 +453,12 @@ func compareUpSpeed(a, b *Torrent) int {
 }
 
 func compareDefault(a, b *Torrent) int {
-	return strings.Compare(a.Name, b.Name)
+	if a.Name == b.Name {
+		return 0
+	} else if a.Name < b.Name {
+		return -1
+	}
+	return 1
 }
 
 // Precomputed comparators for sorting torrents
@@ -462,7 +526,13 @@ type torrentSorter struct {
 func (s *torrentSorter) compare(i, j int) int {
 	result := s.comparator(&s.torrents[i], &s.torrents[j])
 	if result == 0 {
-		result = strings.Compare(s.torrents[i].Hash, s.torrents[j].Hash) // secondary sort by hash for stability
+		if s.torrents[i].Hash == s.torrents[j].Hash {
+			result = 0
+		} else if s.torrents[i].Hash < s.torrents[j].Hash {
+			result = -1
+		} else {
+			result = 1
+		} // secondary sort by hash for stability
 	}
 	if s.reverse {
 		return -result

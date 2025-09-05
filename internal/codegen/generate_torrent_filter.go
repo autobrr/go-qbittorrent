@@ -128,7 +128,6 @@ package qbittorrent
 
 import (
 	"slices"
-	"strings"
 )
 `
 
@@ -148,10 +147,15 @@ import (
 `, field.Name, field.Name, field.Name, field.Name)
 		} else if field.Type == "string" {
 			output += fmt.Sprintf(`func compare%s(a, b *Torrent) int {
-	return strings.Compare(a.%s, b.%s)
+	if a.%s == b.%s {
+		return 0
+	} else if a.%s < b.%s {
+		return -1
+	}
+	return 1
 }
 
-`, field.Name, field.Name, field.Name)
+`, field.Name, field.Name, field.Name, field.Name, field.Name)
 		} else if isComparableType(field.Type) {
 			output += fmt.Sprintf(`func compare%s(a, b *Torrent) int {
 	if a.%s < b.%s {
@@ -165,16 +169,26 @@ import (
 `, field.Name, field.Name, field.Name, field.Name, field.Name)
 		} else if field.Type == "TorrentState" {
 			output += fmt.Sprintf(`func compare%s(a, b *Torrent) int {
-	return strings.Compare(string(a.%s), string(b.%s))
+	if a.%s == b.%s {
+		return 0
+	} else if string(a.%s) < string(b.%s) {
+		return -1
+	}
+	return 1
 }
 
-`, field.Name, field.Name, field.Name)
+`, field.Name, field.Name, field.Name, field.Name, field.Name)
 		}
 	}
 
 	// Default comparator function
 	output += `func compareDefault(a, b *Torrent) int {
-	return strings.Compare(a.Name, b.Name)
+	if a.Name == b.Name {
+		return 0
+	} else if a.Name < b.Name {
+		return -1
+	}
+	return 1
 }
 
 // Precomputed comparators for sorting torrents
@@ -203,7 +217,13 @@ type torrentSorter struct {
 func (s *torrentSorter) compare(i, j int) int {
 	result := s.comparator(&s.torrents[i], &s.torrents[j])
 	if result == 0 {
-		result = strings.Compare(s.torrents[i].Hash, s.torrents[j].Hash) // secondary sort by hash for stability
+		if s.torrents[i].Hash == s.torrents[j].Hash {
+			result = 0
+		} else if s.torrents[i].Hash < s.torrents[j].Hash {
+			result = -1
+		} else {
+			result = 1
+		} // secondary sort by hash for stability
 	}
 	if s.reverse {
 		return -result
