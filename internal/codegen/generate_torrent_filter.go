@@ -170,7 +170,7 @@ import (
 
 	// Default comparator function
 	output += `func compareDefault(a, b *Torrent) int {
-	return cmp.Compare(a.Name, b.Name)
+	return strings.Compare(a.Name, b.Name)
 }
 
 // Precomputed comparators for sorting torrents
