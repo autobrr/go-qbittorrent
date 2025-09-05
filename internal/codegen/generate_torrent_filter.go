@@ -216,19 +216,17 @@ func applyTorrentSorting(torrents []Torrent, sortField string, reverse bool) {
 		return result
 	})
 
-	// Rearrange torrents according to sorted indices in place
-	visited := make([]bool, len(torrents))
-	for i := range torrents {
-		if !visited[i] {
-			j := i
-			for !visited[j] {
-				visited[j] = true
-				next := indices[j]
-				if next != j {
-					torrents[j], torrents[next] = torrents[next], torrents[j]
-				}
-				j = next
-			}
+	// Apply permutation in place using selection sort approach
+	for i := 0; i < len(torrents); i++ {
+		// Find where element i should come from
+		target := indices[i]
+		for target < i {
+			target = indices[target]
+		}
+		
+		if target != i {
+			torrents[i], torrents[target] = torrents[target], torrents[i]
+			indices[target] = indices[i]
 		}
 	}
 }
