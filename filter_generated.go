@@ -476,11 +476,18 @@ func applyTorrentSorting(torrents []Torrent, sortField string, reverse bool) {
 	})
 
 	// Rearrange torrents according to sorted indices in place
+	visited := make([]bool, len(torrents))
 	for i := range torrents {
-		for indices[i] != i {
-			j := indices[i]
-			torrents[i], torrents[j] = torrents[j], torrents[i]
-			indices[i], indices[j] = indices[j], indices[i]
+		if !visited[i] {
+			j := i
+			for !visited[j] {
+				visited[j] = true
+				next := indices[j]
+				if next != j {
+					torrents[j], torrents[next] = torrents[next], torrents[j]
+				}
+				j = next
+			}
 		}
 	}
 }
