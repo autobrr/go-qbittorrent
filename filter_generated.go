@@ -6,6 +6,7 @@ package qbittorrent
 import (
 	"cmp"
 	"slices"
+	"strings"
 )
 func compareAddedOn(a, b *Torrent) int {
 	return cmp.Compare(a.AddedOn, b.AddedOn)
@@ -30,7 +31,7 @@ func compareAvailability(a, b *Torrent) int {
 }
 
 func compareCategory(a, b *Torrent) int {
-	return cmp.Compare(a.Category, b.Category)
+	return strings.Compare(a.Category, b.Category)
 }
 
 func compareCompleted(a, b *Torrent) int {
@@ -42,7 +43,7 @@ func compareCompletionOn(a, b *Torrent) int {
 }
 
 func compareContentPath(a, b *Torrent) int {
-	return cmp.Compare(a.ContentPath, b.ContentPath)
+	return strings.Compare(a.ContentPath, b.ContentPath)
 }
 
 func compareDlLimit(a, b *Torrent) int {
@@ -54,7 +55,7 @@ func compareDlSpeed(a, b *Torrent) int {
 }
 
 func compareDownloadPath(a, b *Torrent) int {
-	return cmp.Compare(a.DownloadPath, b.DownloadPath)
+	return strings.Compare(a.DownloadPath, b.DownloadPath)
 }
 
 func compareDownloaded(a, b *Torrent) int {
@@ -90,15 +91,15 @@ func compareForceStart(a, b *Torrent) int {
 }
 
 func compareHash(a, b *Torrent) int {
-	return cmp.Compare(a.Hash, b.Hash)
+	return strings.Compare(a.Hash, b.Hash)
 }
 
 func compareInfohashV1(a, b *Torrent) int {
-	return cmp.Compare(a.InfohashV1, b.InfohashV1)
+	return strings.Compare(a.InfohashV1, b.InfohashV1)
 }
 
 func compareInfohashV2(a, b *Torrent) int {
-	return cmp.Compare(a.InfohashV2, b.InfohashV2)
+	return strings.Compare(a.InfohashV2, b.InfohashV2)
 }
 
 func compareLastActivity(a, b *Torrent) int {
@@ -106,7 +107,7 @@ func compareLastActivity(a, b *Torrent) int {
 }
 
 func compareMagnetURI(a, b *Torrent) int {
-	return cmp.Compare(a.MagnetURI, b.MagnetURI)
+	return strings.Compare(a.MagnetURI, b.MagnetURI)
 }
 
 func compareMaxRatio(a, b *Torrent) int {
@@ -118,7 +119,7 @@ func compareMaxSeedingTime(a, b *Torrent) int {
 }
 
 func compareName(a, b *Torrent) int {
-	return cmp.Compare(a.Name, b.Name)
+	return strings.Compare(a.Name, b.Name)
 }
 
 func compareNumComplete(a, b *Torrent) int {
@@ -154,7 +155,7 @@ func compareRatioLimit(a, b *Torrent) int {
 }
 
 func compareSavePath(a, b *Torrent) int {
-	return cmp.Compare(a.SavePath, b.SavePath)
+	return strings.Compare(a.SavePath, b.SavePath)
 }
 
 func compareSeedingTime(a, b *Torrent) int {
@@ -184,7 +185,7 @@ func compareSize(a, b *Torrent) int {
 }
 
 func compareState(a, b *Torrent) int {
-	return cmp.Compare(string(a.State), string(b.State))
+	return strings.Compare(string(a.State), string(b.State))
 }
 
 func compareSuperSeeding(a, b *Torrent) int {
@@ -198,7 +199,7 @@ func compareSuperSeeding(a, b *Torrent) int {
 }
 
 func compareTags(a, b *Torrent) int {
-	return cmp.Compare(a.Tags, b.Tags)
+	return strings.Compare(a.Tags, b.Tags)
 }
 
 func compareTimeActive(a, b *Torrent) int {
@@ -210,7 +211,7 @@ func compareTotalSize(a, b *Torrent) int {
 }
 
 func compareTracker(a, b *Torrent) int {
-	return cmp.Compare(a.Tracker, b.Tracker)
+	return strings.Compare(a.Tracker, b.Tracker)
 }
 
 func compareTrackersCount(a, b *Torrent) int {

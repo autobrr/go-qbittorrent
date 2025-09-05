@@ -129,6 +129,7 @@ package qbittorrent
 import (
 	"cmp"
 	"slices"
+	"strings"
 )
 `
 
@@ -146,6 +147,12 @@ import (
 }
 
 `, field.Name, field.Name, field.Name, field.Name)
+		} else if field.Type == "string" {
+			output += fmt.Sprintf(`func compare%s(a, b *Torrent) int {
+	return strings.Compare(a.%s, b.%s)
+}
+
+`, field.Name, field.Name, field.Name)
 		} else if isComparableType(field.Type) {
 			output += fmt.Sprintf(`func compare%s(a, b *Torrent) int {
 	return cmp.Compare(a.%s, b.%s)
@@ -154,7 +161,7 @@ import (
 `, field.Name, field.Name, field.Name)
 		} else if field.Type == "TorrentState" {
 			output += fmt.Sprintf(`func compare%s(a, b *Torrent) int {
-	return cmp.Compare(string(a.%s), string(b.%s))
+	return strings.Compare(string(a.%s), string(b.%s))
 }
 
 `, field.Name, field.Name, field.Name)
