@@ -12,12 +12,12 @@ func removeDuplicateStrings(input []string) []string {
 		return nil
 	}
 
-	seen := make(map[string]bool)
+	seen := make(map[string]struct{})
 	result := make([]string, 0, len(input))
 
 	for _, item := range input {
-		if !seen[item] {
-			seen[item] = true
+		if _, ok := seen[item]; !ok {
+			seen[item] = struct{}{}
 			result = append(result, item)
 		}
 	}
@@ -31,14 +31,14 @@ func removeStrings(input []string, toRemove []string) []string {
 		return input
 	}
 
-	removeMap := make(map[string]bool)
+	removeMap := make(map[string]struct{})
 	for _, item := range toRemove {
-		removeMap[item] = true
+		removeMap[item] = struct{}{}
 	}
 
 	result := make([]string, 0, len(input))
 	for _, item := range input {
-		if !removeMap[item] {
+		if _, ok := removeMap[item]; !ok {
 			result = append(result, item)
 		}
 	}
