@@ -3,266 +3,416 @@
 
 package qbittorrent
 
+// updateTorrentAddedOn updates the AddedOn field of Torrent
+func updateTorrentAddedOn(val interface{}, obj *Torrent) {
+	if a, ok := val.(float64); ok {
+		obj.AddedOn = int64(a)
+	}
+}
+
+// updateTorrentAmountLeft updates the AmountLeft field of Torrent
+func updateTorrentAmountLeft(val interface{}, obj *Torrent) {
+	if a, ok := val.(float64); ok {
+		obj.AmountLeft = int64(a)
+	}
+}
+
+// updateTorrentAutoManaged updates the AutoManaged field of Torrent
+func updateTorrentAutoManaged(val interface{}, obj *Torrent) {
+	if a, ok := val.(bool); ok {
+		obj.AutoManaged = a
+	}
+}
+
+// updateTorrentAvailability updates the Availability field of Torrent
+func updateTorrentAvailability(val interface{}, obj *Torrent) {
+	if a, ok := val.(float64); ok {
+		obj.Availability = a
+	}
+}
+
+// updateTorrentCategory updates the Category field of Torrent
+func updateTorrentCategory(val interface{}, obj *Torrent) {
+	if c, ok := val.(string); ok {
+		obj.Category = c
+	}
+}
+
+// updateTorrentCompleted updates the Completed field of Torrent
+func updateTorrentCompleted(val interface{}, obj *Torrent) {
+	if c, ok := val.(float64); ok {
+		obj.Completed = int64(c)
+	}
+}
+
+// updateTorrentCompletionOn updates the CompletionOn field of Torrent
+func updateTorrentCompletionOn(val interface{}, obj *Torrent) {
+	if c, ok := val.(float64); ok {
+		obj.CompletionOn = int64(c)
+	}
+}
+
+// updateTorrentContentPath updates the ContentPath field of Torrent
+func updateTorrentContentPath(val interface{}, obj *Torrent) {
+	if c, ok := val.(string); ok {
+		obj.ContentPath = c
+	}
+}
+
+// updateTorrentDlLimit updates the DlLimit field of Torrent
+func updateTorrentDlLimit(val interface{}, obj *Torrent) {
+	if d, ok := val.(float64); ok {
+		obj.DlLimit = int64(d)
+	}
+}
+
+// updateTorrentDlSpeed updates the DlSpeed field of Torrent
+func updateTorrentDlSpeed(val interface{}, obj *Torrent) {
+	if d, ok := val.(float64); ok {
+		obj.DlSpeed = int64(d)
+	}
+}
+
+// updateTorrentDownloadPath updates the DownloadPath field of Torrent
+func updateTorrentDownloadPath(val interface{}, obj *Torrent) {
+	if d, ok := val.(string); ok {
+		obj.DownloadPath = d
+	}
+}
+
+// updateTorrentDownloaded updates the Downloaded field of Torrent
+func updateTorrentDownloaded(val interface{}, obj *Torrent) {
+	if d, ok := val.(float64); ok {
+		obj.Downloaded = int64(d)
+	}
+}
+
+// updateTorrentDownloadedSession updates the DownloadedSession field of Torrent
+func updateTorrentDownloadedSession(val interface{}, obj *Torrent) {
+	if d, ok := val.(float64); ok {
+		obj.DownloadedSession = int64(d)
+	}
+}
+
+// updateTorrentETA updates the ETA field of Torrent
+func updateTorrentETA(val interface{}, obj *Torrent) {
+	if e, ok := val.(float64); ok {
+		obj.ETA = int64(e)
+	}
+}
+
+// updateTorrentFirstLastPiecePrio updates the FirstLastPiecePrio field of Torrent
+func updateTorrentFirstLastPiecePrio(val interface{}, obj *Torrent) {
+	if f, ok := val.(bool); ok {
+		obj.FirstLastPiecePrio = f
+	}
+}
+
+// updateTorrentForceStart updates the ForceStart field of Torrent
+func updateTorrentForceStart(val interface{}, obj *Torrent) {
+	if f, ok := val.(bool); ok {
+		obj.ForceStart = f
+	}
+}
+
+// updateTorrentHash updates the Hash field of Torrent
+func updateTorrentHash(val interface{}, obj *Torrent) {
+	if h, ok := val.(string); ok {
+		obj.Hash = h
+	}
+}
+
+// updateTorrentInfohashV1 updates the InfohashV1 field of Torrent
+func updateTorrentInfohashV1(val interface{}, obj *Torrent) {
+	if i, ok := val.(string); ok {
+		obj.InfohashV1 = i
+	}
+}
+
+// updateTorrentInfohashV2 updates the InfohashV2 field of Torrent
+func updateTorrentInfohashV2(val interface{}, obj *Torrent) {
+	if i, ok := val.(string); ok {
+		obj.InfohashV2 = i
+	}
+}
+
+// updateTorrentLastActivity updates the LastActivity field of Torrent
+func updateTorrentLastActivity(val interface{}, obj *Torrent) {
+	if l, ok := val.(float64); ok {
+		obj.LastActivity = int64(l)
+	}
+}
+
+// updateTorrentMagnetURI updates the MagnetURI field of Torrent
+func updateTorrentMagnetURI(val interface{}, obj *Torrent) {
+	if m, ok := val.(string); ok {
+		obj.MagnetURI = m
+	}
+}
+
+// updateTorrentMaxRatio updates the MaxRatio field of Torrent
+func updateTorrentMaxRatio(val interface{}, obj *Torrent) {
+	if m, ok := val.(float64); ok {
+		obj.MaxRatio = m
+	}
+}
+
+// updateTorrentMaxSeedingTime updates the MaxSeedingTime field of Torrent
+func updateTorrentMaxSeedingTime(val interface{}, obj *Torrent) {
+	if m, ok := val.(float64); ok {
+		obj.MaxSeedingTime = int64(m)
+	}
+}
+
+// updateTorrentName updates the Name field of Torrent
+func updateTorrentName(val interface{}, obj *Torrent) {
+	if n, ok := val.(string); ok {
+		obj.Name = n
+	}
+}
+
+// updateTorrentNumComplete updates the NumComplete field of Torrent
+func updateTorrentNumComplete(val interface{}, obj *Torrent) {
+	if n, ok := val.(float64); ok {
+		obj.NumComplete = int64(n)
+	}
+}
+
+// updateTorrentNumIncomplete updates the NumIncomplete field of Torrent
+func updateTorrentNumIncomplete(val interface{}, obj *Torrent) {
+	if n, ok := val.(float64); ok {
+		obj.NumIncomplete = int64(n)
+	}
+}
+
+// updateTorrentNumLeechs updates the NumLeechs field of Torrent
+func updateTorrentNumLeechs(val interface{}, obj *Torrent) {
+	if n, ok := val.(float64); ok {
+		obj.NumLeechs = int64(n)
+	}
+}
+
+// updateTorrentNumSeeds updates the NumSeeds field of Torrent
+func updateTorrentNumSeeds(val interface{}, obj *Torrent) {
+	if n, ok := val.(float64); ok {
+		obj.NumSeeds = int64(n)
+	}
+}
+
+// updateTorrentPriority updates the Priority field of Torrent
+func updateTorrentPriority(val interface{}, obj *Torrent) {
+	if p, ok := val.(float64); ok {
+		obj.Priority = int64(p)
+	}
+}
+
+// updateTorrentProgress updates the Progress field of Torrent
+func updateTorrentProgress(val interface{}, obj *Torrent) {
+	if p, ok := val.(float64); ok {
+		obj.Progress = p
+	}
+}
+
+// updateTorrentRatio updates the Ratio field of Torrent
+func updateTorrentRatio(val interface{}, obj *Torrent) {
+	if r, ok := val.(float64); ok {
+		obj.Ratio = r
+	}
+}
+
+// updateTorrentRatioLimit updates the RatioLimit field of Torrent
+func updateTorrentRatioLimit(val interface{}, obj *Torrent) {
+	if r, ok := val.(float64); ok {
+		obj.RatioLimit = r
+	}
+}
+
+// updateTorrentSavePath updates the SavePath field of Torrent
+func updateTorrentSavePath(val interface{}, obj *Torrent) {
+	if s, ok := val.(string); ok {
+		obj.SavePath = s
+	}
+}
+
+// updateTorrentSeedingTime updates the SeedingTime field of Torrent
+func updateTorrentSeedingTime(val interface{}, obj *Torrent) {
+	if s, ok := val.(float64); ok {
+		obj.SeedingTime = int64(s)
+	}
+}
+
+// updateTorrentSeedingTimeLimit updates the SeedingTimeLimit field of Torrent
+func updateTorrentSeedingTimeLimit(val interface{}, obj *Torrent) {
+	if s, ok := val.(float64); ok {
+		obj.SeedingTimeLimit = int64(s)
+	}
+}
+
+// updateTorrentSeenComplete updates the SeenComplete field of Torrent
+func updateTorrentSeenComplete(val interface{}, obj *Torrent) {
+	if s, ok := val.(float64); ok {
+		obj.SeenComplete = int64(s)
+	}
+}
+
+// updateTorrentSequentialDownload updates the SequentialDownload field of Torrent
+func updateTorrentSequentialDownload(val interface{}, obj *Torrent) {
+	if s, ok := val.(bool); ok {
+		obj.SequentialDownload = s
+	}
+}
+
+// updateTorrentSize updates the Size field of Torrent
+func updateTorrentSize(val interface{}, obj *Torrent) {
+	if s, ok := val.(float64); ok {
+		obj.Size = int64(s)
+	}
+}
+
+// updateTorrentState updates the State field of Torrent
+func updateTorrentState(val interface{}, obj *Torrent) {
+	if s, ok := val.(string); ok {
+		obj.State = TorrentState(s)
+	}
+}
+
+// updateTorrentSuperSeeding updates the SuperSeeding field of Torrent
+func updateTorrentSuperSeeding(val interface{}, obj *Torrent) {
+	if s, ok := val.(bool); ok {
+		obj.SuperSeeding = s
+	}
+}
+
+// updateTorrentTags updates the Tags field of Torrent
+func updateTorrentTags(val interface{}, obj *Torrent) {
+	if t, ok := val.(string); ok {
+		obj.Tags = t
+	}
+}
+
+// updateTorrentTimeActive updates the TimeActive field of Torrent
+func updateTorrentTimeActive(val interface{}, obj *Torrent) {
+	if t, ok := val.(float64); ok {
+		obj.TimeActive = int64(t)
+	}
+}
+
+// updateTorrentTotalSize updates the TotalSize field of Torrent
+func updateTorrentTotalSize(val interface{}, obj *Torrent) {
+	if t, ok := val.(float64); ok {
+		obj.TotalSize = int64(t)
+	}
+}
+
+// updateTorrentTracker updates the Tracker field of Torrent
+func updateTorrentTracker(val interface{}, obj *Torrent) {
+	if t, ok := val.(string); ok {
+		obj.Tracker = t
+	}
+}
+
+// updateTorrentTrackersCount updates the TrackersCount field of Torrent
+func updateTorrentTrackersCount(val interface{}, obj *Torrent) {
+	if t, ok := val.(float64); ok {
+		obj.TrackersCount = int64(t)
+	}
+}
+
+// updateTorrentUpLimit updates the UpLimit field of Torrent
+func updateTorrentUpLimit(val interface{}, obj *Torrent) {
+	if u, ok := val.(float64); ok {
+		obj.UpLimit = int64(u)
+	}
+}
+
+// updateTorrentUploaded updates the Uploaded field of Torrent
+func updateTorrentUploaded(val interface{}, obj *Torrent) {
+	if u, ok := val.(float64); ok {
+		obj.Uploaded = int64(u)
+	}
+}
+
+// updateTorrentUploadedSession updates the UploadedSession field of Torrent
+func updateTorrentUploadedSession(val interface{}, obj *Torrent) {
+	if u, ok := val.(float64); ok {
+		obj.UploadedSession = int64(u)
+	}
+}
+
+// updateTorrentUpSpeed updates the UpSpeed field of Torrent
+func updateTorrentUpSpeed(val interface{}, obj *Torrent) {
+	if u, ok := val.(float64); ok {
+		obj.UpSpeed = int64(u)
+	}
+}
+
+// updateTorrentTrackers updates the Trackers field of Torrent
+func updateTorrentTrackers(val interface{}, obj *Torrent) {
+	if t, ok := val.([]interface{}); ok {
+		var trackers []TorrentTracker
+		for _, item := range t {
+			if trackerMap, ok := item.(map[string]interface{}); ok {
+				var tracker TorrentTracker
+				updateTorrentTrackerFields(&tracker, trackerMap)
+				trackers = append(trackers, tracker)
+			}
+		}
+		obj.Trackers = trackers
+	}
+}
+
 // Precomputed field updaters for Torrent - created once at package init
 var torrentFieldUpdaters = map[string]func(val interface{}, obj *Torrent){
-	"added_on": func(val interface{}, obj *Torrent) {
-			if a, ok := val.(float64); ok {
-				obj.AddedOn = int64(a)
-			}
-	},
-	"amount_left": func(val interface{}, obj *Torrent) {
-			if a, ok := val.(float64); ok {
-				obj.AmountLeft = int64(a)
-			}
-	},
-	"auto_tmm": func(val interface{}, obj *Torrent) {
-			if a, ok := val.(bool); ok {
-				obj.AutoManaged = a
-			}
-	},
-	"availability": func(val interface{}, obj *Torrent) {
-			if a, ok := val.(float64); ok {
-				obj.Availability = a
-			}
-	},
-	"category": func(val interface{}, obj *Torrent) {
-			if c, ok := val.(string); ok {
-				obj.Category = c
-			}
-	},
-	"completed": func(val interface{}, obj *Torrent) {
-			if c, ok := val.(float64); ok {
-				obj.Completed = int64(c)
-			}
-	},
-	"completion_on": func(val interface{}, obj *Torrent) {
-			if c, ok := val.(float64); ok {
-				obj.CompletionOn = int64(c)
-			}
-	},
-	"content_path": func(val interface{}, obj *Torrent) {
-			if c, ok := val.(string); ok {
-				obj.ContentPath = c
-			}
-	},
-	"dl_limit": func(val interface{}, obj *Torrent) {
-			if d, ok := val.(float64); ok {
-				obj.DlLimit = int64(d)
-			}
-	},
-	"dlspeed": func(val interface{}, obj *Torrent) {
-			if d, ok := val.(float64); ok {
-				obj.DlSpeed = int64(d)
-			}
-	},
-	"download_path": func(val interface{}, obj *Torrent) {
-			if d, ok := val.(string); ok {
-				obj.DownloadPath = d
-			}
-	},
-	"downloaded": func(val interface{}, obj *Torrent) {
-			if d, ok := val.(float64); ok {
-				obj.Downloaded = int64(d)
-			}
-	},
-	"downloaded_session": func(val interface{}, obj *Torrent) {
-			if d, ok := val.(float64); ok {
-				obj.DownloadedSession = int64(d)
-			}
-	},
-	"eta": func(val interface{}, obj *Torrent) {
-			if e, ok := val.(float64); ok {
-				obj.ETA = int64(e)
-			}
-	},
-	"f_l_piece_prio": func(val interface{}, obj *Torrent) {
-			if f, ok := val.(bool); ok {
-				obj.FirstLastPiecePrio = f
-			}
-	},
-	"force_start": func(val interface{}, obj *Torrent) {
-			if f, ok := val.(bool); ok {
-				obj.ForceStart = f
-			}
-	},
-	"hash": func(val interface{}, obj *Torrent) {
-			if h, ok := val.(string); ok {
-				obj.Hash = h
-			}
-	},
-	"infohash_v1": func(val interface{}, obj *Torrent) {
-			if i, ok := val.(string); ok {
-				obj.InfohashV1 = i
-			}
-	},
-	"infohash_v2": func(val interface{}, obj *Torrent) {
-			if i, ok := val.(string); ok {
-				obj.InfohashV2 = i
-			}
-	},
-	"last_activity": func(val interface{}, obj *Torrent) {
-			if l, ok := val.(float64); ok {
-				obj.LastActivity = int64(l)
-			}
-	},
-	"magnet_uri": func(val interface{}, obj *Torrent) {
-			if m, ok := val.(string); ok {
-				obj.MagnetURI = m
-			}
-	},
-	"max_ratio": func(val interface{}, obj *Torrent) {
-			if m, ok := val.(float64); ok {
-				obj.MaxRatio = m
-			}
-	},
-	"max_seeding_time": func(val interface{}, obj *Torrent) {
-			if m, ok := val.(float64); ok {
-				obj.MaxSeedingTime = int64(m)
-			}
-	},
-	"name": func(val interface{}, obj *Torrent) {
-			if n, ok := val.(string); ok {
-				obj.Name = n
-			}
-	},
-	"num_complete": func(val interface{}, obj *Torrent) {
-			if n, ok := val.(float64); ok {
-				obj.NumComplete = int64(n)
-			}
-	},
-	"num_incomplete": func(val interface{}, obj *Torrent) {
-			if n, ok := val.(float64); ok {
-				obj.NumIncomplete = int64(n)
-			}
-	},
-	"num_leechs": func(val interface{}, obj *Torrent) {
-			if n, ok := val.(float64); ok {
-				obj.NumLeechs = int64(n)
-			}
-	},
-	"num_seeds": func(val interface{}, obj *Torrent) {
-			if n, ok := val.(float64); ok {
-				obj.NumSeeds = int64(n)
-			}
-	},
-	"priority": func(val interface{}, obj *Torrent) {
-			if p, ok := val.(float64); ok {
-				obj.Priority = int64(p)
-			}
-	},
-	"progress": func(val interface{}, obj *Torrent) {
-			if p, ok := val.(float64); ok {
-				obj.Progress = p
-			}
-	},
-	"ratio": func(val interface{}, obj *Torrent) {
-			if r, ok := val.(float64); ok {
-				obj.Ratio = r
-			}
-	},
-	"ratio_limit": func(val interface{}, obj *Torrent) {
-			if r, ok := val.(float64); ok {
-				obj.RatioLimit = r
-			}
-	},
-	"save_path": func(val interface{}, obj *Torrent) {
-			if s, ok := val.(string); ok {
-				obj.SavePath = s
-			}
-	},
-	"seeding_time": func(val interface{}, obj *Torrent) {
-			if s, ok := val.(float64); ok {
-				obj.SeedingTime = int64(s)
-			}
-	},
-	"seeding_time_limit": func(val interface{}, obj *Torrent) {
-			if s, ok := val.(float64); ok {
-				obj.SeedingTimeLimit = int64(s)
-			}
-	},
-	"seen_complete": func(val interface{}, obj *Torrent) {
-			if s, ok := val.(float64); ok {
-				obj.SeenComplete = int64(s)
-			}
-	},
-	"seq_dl": func(val interface{}, obj *Torrent) {
-			if s, ok := val.(bool); ok {
-				obj.SequentialDownload = s
-			}
-	},
-	"size": func(val interface{}, obj *Torrent) {
-			if s, ok := val.(float64); ok {
-				obj.Size = int64(s)
-			}
-	},
-	"state": func(val interface{}, obj *Torrent) {
-			if s, ok := val.(string); ok {
-				obj.State = TorrentState(s)
-			}
-	},
-	"super_seeding": func(val interface{}, obj *Torrent) {
-			if s, ok := val.(bool); ok {
-				obj.SuperSeeding = s
-			}
-	},
-	"tags": func(val interface{}, obj *Torrent) {
-			if t, ok := val.(string); ok {
-				obj.Tags = t
-			}
-	},
-	"time_active": func(val interface{}, obj *Torrent) {
-			if t, ok := val.(float64); ok {
-				obj.TimeActive = int64(t)
-			}
-	},
-	"total_size": func(val interface{}, obj *Torrent) {
-			if t, ok := val.(float64); ok {
-				obj.TotalSize = int64(t)
-			}
-	},
-	"tracker": func(val interface{}, obj *Torrent) {
-			if t, ok := val.(string); ok {
-				obj.Tracker = t
-			}
-	},
-	"trackers_count": func(val interface{}, obj *Torrent) {
-			if t, ok := val.(float64); ok {
-				obj.TrackersCount = int64(t)
-			}
-	},
-	"up_limit": func(val interface{}, obj *Torrent) {
-			if u, ok := val.(float64); ok {
-				obj.UpLimit = int64(u)
-			}
-	},
-	"uploaded": func(val interface{}, obj *Torrent) {
-			if u, ok := val.(float64); ok {
-				obj.Uploaded = int64(u)
-			}
-	},
-	"uploaded_session": func(val interface{}, obj *Torrent) {
-			if u, ok := val.(float64); ok {
-				obj.UploadedSession = int64(u)
-			}
-	},
-	"upspeed": func(val interface{}, obj *Torrent) {
-			if u, ok := val.(float64); ok {
-				obj.UpSpeed = int64(u)
-			}
-	},
-	"trackers": func(val interface{}, obj *Torrent) {
-			if t, ok := val.([]interface{}); ok {
-				var trackers []TorrentTracker
-				for _, item := range t {
-					if trackerMap, ok := item.(map[string]interface{}); ok {
-						var tracker TorrentTracker
-						updateTorrentTrackerFields(&tracker, trackerMap)
-						trackers = append(trackers, tracker)
-					}
-				}
-				obj.Trackers = trackers
-			}
-	},
+	"added_on": updateTorrentAddedOn,
+	"amount_left": updateTorrentAmountLeft,
+	"auto_tmm": updateTorrentAutoManaged,
+	"availability": updateTorrentAvailability,
+	"category": updateTorrentCategory,
+	"completed": updateTorrentCompleted,
+	"completion_on": updateTorrentCompletionOn,
+	"content_path": updateTorrentContentPath,
+	"dl_limit": updateTorrentDlLimit,
+	"dlspeed": updateTorrentDlSpeed,
+	"download_path": updateTorrentDownloadPath,
+	"downloaded": updateTorrentDownloaded,
+	"downloaded_session": updateTorrentDownloadedSession,
+	"eta": updateTorrentETA,
+	"f_l_piece_prio": updateTorrentFirstLastPiecePrio,
+	"force_start": updateTorrentForceStart,
+	"hash": updateTorrentHash,
+	"infohash_v1": updateTorrentInfohashV1,
+	"infohash_v2": updateTorrentInfohashV2,
+	"last_activity": updateTorrentLastActivity,
+	"magnet_uri": updateTorrentMagnetURI,
+	"max_ratio": updateTorrentMaxRatio,
+	"max_seeding_time": updateTorrentMaxSeedingTime,
+	"name": updateTorrentName,
+	"num_complete": updateTorrentNumComplete,
+	"num_incomplete": updateTorrentNumIncomplete,
+	"num_leechs": updateTorrentNumLeechs,
+	"num_seeds": updateTorrentNumSeeds,
+	"priority": updateTorrentPriority,
+	"progress": updateTorrentProgress,
+	"ratio": updateTorrentRatio,
+	"ratio_limit": updateTorrentRatioLimit,
+	"save_path": updateTorrentSavePath,
+	"seeding_time": updateTorrentSeedingTime,
+	"seeding_time_limit": updateTorrentSeedingTimeLimit,
+	"seen_complete": updateTorrentSeenComplete,
+	"seq_dl": updateTorrentSequentialDownload,
+	"size": updateTorrentSize,
+	"state": updateTorrentState,
+	"super_seeding": updateTorrentSuperSeeding,
+	"tags": updateTorrentTags,
+	"time_active": updateTorrentTimeActive,
+	"total_size": updateTorrentTotalSize,
+	"tracker": updateTorrentTracker,
+	"trackers_count": updateTorrentTrackersCount,
+	"up_limit": updateTorrentUpLimit,
+	"uploaded": updateTorrentUploaded,
+	"uploaded_session": updateTorrentUploadedSession,
+	"upspeed": updateTorrentUpSpeed,
+	"trackers": updateTorrentTrackers,
 }
 
 // updateTorrentFields updates only the fields that are present in the update map
@@ -275,43 +425,64 @@ func updateTorrentFields(obj *Torrent, updateMap map[string]interface{}) {
 	}
 }
 
+// updateTorrentTrackerUrl updates the Url field of TorrentTracker
+func updateTorrentTrackerUrl(val interface{}, obj *TorrentTracker) {
+	if u, ok := val.(string); ok {
+		obj.Url = u
+	}
+}
+
+// updateTorrentTrackerStatus updates the Status field of TorrentTracker
+func updateTorrentTrackerStatus(val interface{}, obj *TorrentTracker) {
+	if s, ok := val.(float64); ok {
+		obj.Status = TrackerStatus(int(s))
+	}
+}
+
+// updateTorrentTrackerNumPeers updates the NumPeers field of TorrentTracker
+func updateTorrentTrackerNumPeers(val interface{}, obj *TorrentTracker) {
+	if n, ok := val.(float64); ok {
+		obj.NumPeers = int(n)
+	}
+}
+
+// updateTorrentTrackerNumSeeds updates the NumSeeds field of TorrentTracker
+func updateTorrentTrackerNumSeeds(val interface{}, obj *TorrentTracker) {
+	if n, ok := val.(float64); ok {
+		obj.NumSeeds = int(n)
+	}
+}
+
+// updateTorrentTrackerNumLeechers updates the NumLeechers field of TorrentTracker
+func updateTorrentTrackerNumLeechers(val interface{}, obj *TorrentTracker) {
+	if n, ok := val.(float64); ok {
+		obj.NumLeechers = int(n)
+	}
+}
+
+// updateTorrentTrackerNumDownloaded updates the NumDownloaded field of TorrentTracker
+func updateTorrentTrackerNumDownloaded(val interface{}, obj *TorrentTracker) {
+	if n, ok := val.(float64); ok {
+		obj.NumDownloaded = int(n)
+	}
+}
+
+// updateTorrentTrackerMessage updates the Message field of TorrentTracker
+func updateTorrentTrackerMessage(val interface{}, obj *TorrentTracker) {
+	if m, ok := val.(string); ok {
+		obj.Message = m
+	}
+}
+
 // Precomputed field updaters for TorrentTracker - created once at package init
 var torrenttrackerFieldUpdaters = map[string]func(val interface{}, obj *TorrentTracker){
-	"url": func(val interface{}, obj *TorrentTracker) {
-			if u, ok := val.(string); ok {
-				obj.Url = u
-			}
-	},
-	"status": func(val interface{}, obj *TorrentTracker) {
-			if s, ok := val.(float64); ok {
-				obj.Status = TrackerStatus(int(s))
-			}
-	},
-	"num_peers": func(val interface{}, obj *TorrentTracker) {
-			if n, ok := val.(float64); ok {
-				obj.NumPeers = int(n)
-			}
-	},
-	"num_seeds": func(val interface{}, obj *TorrentTracker) {
-			if n, ok := val.(float64); ok {
-				obj.NumSeeds = int(n)
-			}
-	},
-	"num_leechers": func(val interface{}, obj *TorrentTracker) {
-			if n, ok := val.(float64); ok {
-				obj.NumLeechers = int(n)
-			}
-	},
-	"num_downloaded": func(val interface{}, obj *TorrentTracker) {
-			if n, ok := val.(float64); ok {
-				obj.NumDownloaded = int(n)
-			}
-	},
-	"msg": func(val interface{}, obj *TorrentTracker) {
-			if m, ok := val.(string); ok {
-				obj.Message = m
-			}
-	},
+	"url": updateTorrentTrackerUrl,
+	"status": updateTorrentTrackerStatus,
+	"num_peers": updateTorrentTrackerNumPeers,
+	"num_seeds": updateTorrentTrackerNumSeeds,
+	"num_leechers": updateTorrentTrackerNumLeechers,
+	"num_downloaded": updateTorrentTrackerNumDownloaded,
+	"msg": updateTorrentTrackerMessage,
 }
 
 // updateTorrentTrackerFields updates only the fields that are present in the update map
@@ -324,18 +495,24 @@ func updateTorrentTrackerFields(obj *TorrentTracker, updateMap map[string]interf
 	}
 }
 
+// updateCategoryName updates the Name field of Category
+func updateCategoryName(val interface{}, obj *Category) {
+	if n, ok := val.(string); ok {
+		obj.Name = n
+	}
+}
+
+// updateCategorySavePath updates the SavePath field of Category
+func updateCategorySavePath(val interface{}, obj *Category) {
+	if s, ok := val.(string); ok {
+		obj.SavePath = s
+	}
+}
+
 // Precomputed field updaters for Category - created once at package init
 var categoryFieldUpdaters = map[string]func(val interface{}, obj *Category){
-	"name": func(val interface{}, obj *Category) {
-			if n, ok := val.(string); ok {
-				obj.Name = n
-			}
-	},
-	"savePath": func(val interface{}, obj *Category) {
-			if s, ok := val.(string); ok {
-				obj.SavePath = s
-			}
-	},
+	"name": updateCategoryName,
+	"savePath": updateCategorySavePath,
 }
 
 // updateCategoryFields updates only the fields that are present in the update map
@@ -348,128 +525,200 @@ func updateCategoryFields(obj *Category, updateMap map[string]interface{}) {
 	}
 }
 
+// updateServerStateAlltimeDl updates the AlltimeDl field of ServerState
+func updateServerStateAlltimeDl(val interface{}, obj *ServerState) {
+	if a, ok := val.(float64); ok {
+		obj.AlltimeDl = int64(a)
+	}
+}
+
+// updateServerStateAlltimeUl updates the AlltimeUl field of ServerState
+func updateServerStateAlltimeUl(val interface{}, obj *ServerState) {
+	if a, ok := val.(float64); ok {
+		obj.AlltimeUl = int64(a)
+	}
+}
+
+// updateServerStateAverageTimeQueue updates the AverageTimeQueue field of ServerState
+func updateServerStateAverageTimeQueue(val interface{}, obj *ServerState) {
+	if a, ok := val.(float64); ok {
+		obj.AverageTimeQueue = int64(a)
+	}
+}
+
+// updateServerStateConnectionStatus updates the ConnectionStatus field of ServerState
+func updateServerStateConnectionStatus(val interface{}, obj *ServerState) {
+	if c, ok := val.(string); ok {
+		obj.ConnectionStatus = c
+	}
+}
+
+// updateServerStateDhtNodes updates the DhtNodes field of ServerState
+func updateServerStateDhtNodes(val interface{}, obj *ServerState) {
+	if d, ok := val.(float64); ok {
+		obj.DhtNodes = int64(d)
+	}
+}
+
+// updateServerStateDlInfoData updates the DlInfoData field of ServerState
+func updateServerStateDlInfoData(val interface{}, obj *ServerState) {
+	if d, ok := val.(float64); ok {
+		obj.DlInfoData = int64(d)
+	}
+}
+
+// updateServerStateDlInfoSpeed updates the DlInfoSpeed field of ServerState
+func updateServerStateDlInfoSpeed(val interface{}, obj *ServerState) {
+	if d, ok := val.(float64); ok {
+		obj.DlInfoSpeed = int64(d)
+	}
+}
+
+// updateServerStateDlRateLimit updates the DlRateLimit field of ServerState
+func updateServerStateDlRateLimit(val interface{}, obj *ServerState) {
+	if d, ok := val.(float64); ok {
+		obj.DlRateLimit = int64(d)
+	}
+}
+
+// updateServerStateFreeSpaceOnDisk updates the FreeSpaceOnDisk field of ServerState
+func updateServerStateFreeSpaceOnDisk(val interface{}, obj *ServerState) {
+	if f, ok := val.(float64); ok {
+		obj.FreeSpaceOnDisk = int64(f)
+	}
+}
+
+// updateServerStateGlobalRatio updates the GlobalRatio field of ServerState
+func updateServerStateGlobalRatio(val interface{}, obj *ServerState) {
+	if g, ok := val.(string); ok {
+		obj.GlobalRatio = g
+	}
+}
+
+// updateServerStateQueuedIoJobs updates the QueuedIoJobs field of ServerState
+func updateServerStateQueuedIoJobs(val interface{}, obj *ServerState) {
+	if q, ok := val.(float64); ok {
+		obj.QueuedIoJobs = int64(q)
+	}
+}
+
+// updateServerStateQueueing updates the Queueing field of ServerState
+func updateServerStateQueueing(val interface{}, obj *ServerState) {
+	if q, ok := val.(bool); ok {
+		obj.Queueing = q
+	}
+}
+
+// updateServerStateReadCacheHits updates the ReadCacheHits field of ServerState
+func updateServerStateReadCacheHits(val interface{}, obj *ServerState) {
+	if r, ok := val.(string); ok {
+		obj.ReadCacheHits = r
+	}
+}
+
+// updateServerStateReadCacheOverload updates the ReadCacheOverload field of ServerState
+func updateServerStateReadCacheOverload(val interface{}, obj *ServerState) {
+	if r, ok := val.(string); ok {
+		obj.ReadCacheOverload = r
+	}
+}
+
+// updateServerStateRefreshInterval updates the RefreshInterval field of ServerState
+func updateServerStateRefreshInterval(val interface{}, obj *ServerState) {
+	if r, ok := val.(float64); ok {
+		obj.RefreshInterval = int64(r)
+	}
+}
+
+// updateServerStateTotalBuffersSize updates the TotalBuffersSize field of ServerState
+func updateServerStateTotalBuffersSize(val interface{}, obj *ServerState) {
+	if t, ok := val.(float64); ok {
+		obj.TotalBuffersSize = int64(t)
+	}
+}
+
+// updateServerStateTotalPeerConnections updates the TotalPeerConnections field of ServerState
+func updateServerStateTotalPeerConnections(val interface{}, obj *ServerState) {
+	if t, ok := val.(float64); ok {
+		obj.TotalPeerConnections = int64(t)
+	}
+}
+
+// updateServerStateTotalQueuedSize updates the TotalQueuedSize field of ServerState
+func updateServerStateTotalQueuedSize(val interface{}, obj *ServerState) {
+	if t, ok := val.(float64); ok {
+		obj.TotalQueuedSize = int64(t)
+	}
+}
+
+// updateServerStateTotalWastedSession updates the TotalWastedSession field of ServerState
+func updateServerStateTotalWastedSession(val interface{}, obj *ServerState) {
+	if t, ok := val.(float64); ok {
+		obj.TotalWastedSession = int64(t)
+	}
+}
+
+// updateServerStateUpInfoData updates the UpInfoData field of ServerState
+func updateServerStateUpInfoData(val interface{}, obj *ServerState) {
+	if u, ok := val.(float64); ok {
+		obj.UpInfoData = int64(u)
+	}
+}
+
+// updateServerStateUpInfoSpeed updates the UpInfoSpeed field of ServerState
+func updateServerStateUpInfoSpeed(val interface{}, obj *ServerState) {
+	if u, ok := val.(float64); ok {
+		obj.UpInfoSpeed = int64(u)
+	}
+}
+
+// updateServerStateUpRateLimit updates the UpRateLimit field of ServerState
+func updateServerStateUpRateLimit(val interface{}, obj *ServerState) {
+	if u, ok := val.(float64); ok {
+		obj.UpRateLimit = int64(u)
+	}
+}
+
+// updateServerStateUseAltSpeedLimits updates the UseAltSpeedLimits field of ServerState
+func updateServerStateUseAltSpeedLimits(val interface{}, obj *ServerState) {
+	if u, ok := val.(bool); ok {
+		obj.UseAltSpeedLimits = u
+	}
+}
+
+// updateServerStateWriteCacheOverload updates the WriteCacheOverload field of ServerState
+func updateServerStateWriteCacheOverload(val interface{}, obj *ServerState) {
+	if w, ok := val.(string); ok {
+		obj.WriteCacheOverload = w
+	}
+}
+
 // Precomputed field updaters for ServerState - created once at package init
 var serverstateFieldUpdaters = map[string]func(val interface{}, obj *ServerState){
-	"alltime_dl": func(val interface{}, obj *ServerState) {
-			if a, ok := val.(float64); ok {
-				obj.AlltimeDl = int64(a)
-			}
-	},
-	"alltime_ul": func(val interface{}, obj *ServerState) {
-			if a, ok := val.(float64); ok {
-				obj.AlltimeUl = int64(a)
-			}
-	},
-	"average_time_queue": func(val interface{}, obj *ServerState) {
-			if a, ok := val.(float64); ok {
-				obj.AverageTimeQueue = int64(a)
-			}
-	},
-	"connection_status": func(val interface{}, obj *ServerState) {
-			if c, ok := val.(string); ok {
-				obj.ConnectionStatus = c
-			}
-	},
-	"dht_nodes": func(val interface{}, obj *ServerState) {
-			if d, ok := val.(float64); ok {
-				obj.DhtNodes = int64(d)
-			}
-	},
-	"dl_info_data": func(val interface{}, obj *ServerState) {
-			if d, ok := val.(float64); ok {
-				obj.DlInfoData = int64(d)
-			}
-	},
-	"dl_info_speed": func(val interface{}, obj *ServerState) {
-			if d, ok := val.(float64); ok {
-				obj.DlInfoSpeed = int64(d)
-			}
-	},
-	"dl_rate_limit": func(val interface{}, obj *ServerState) {
-			if d, ok := val.(float64); ok {
-				obj.DlRateLimit = int64(d)
-			}
-	},
-	"free_space_on_disk": func(val interface{}, obj *ServerState) {
-			if f, ok := val.(float64); ok {
-				obj.FreeSpaceOnDisk = int64(f)
-			}
-	},
-	"global_ratio": func(val interface{}, obj *ServerState) {
-			if g, ok := val.(string); ok {
-				obj.GlobalRatio = g
-			}
-	},
-	"queued_io_jobs": func(val interface{}, obj *ServerState) {
-			if q, ok := val.(float64); ok {
-				obj.QueuedIoJobs = int64(q)
-			}
-	},
-	"queueing": func(val interface{}, obj *ServerState) {
-			if q, ok := val.(bool); ok {
-				obj.Queueing = q
-			}
-	},
-	"read_cache_hits": func(val interface{}, obj *ServerState) {
-			if r, ok := val.(string); ok {
-				obj.ReadCacheHits = r
-			}
-	},
-	"read_cache_overload": func(val interface{}, obj *ServerState) {
-			if r, ok := val.(string); ok {
-				obj.ReadCacheOverload = r
-			}
-	},
-	"refresh_interval": func(val interface{}, obj *ServerState) {
-			if r, ok := val.(float64); ok {
-				obj.RefreshInterval = int64(r)
-			}
-	},
-	"total_buffers_size": func(val interface{}, obj *ServerState) {
-			if t, ok := val.(float64); ok {
-				obj.TotalBuffersSize = int64(t)
-			}
-	},
-	"total_peer_connections": func(val interface{}, obj *ServerState) {
-			if t, ok := val.(float64); ok {
-				obj.TotalPeerConnections = int64(t)
-			}
-	},
-	"total_queued_size": func(val interface{}, obj *ServerState) {
-			if t, ok := val.(float64); ok {
-				obj.TotalQueuedSize = int64(t)
-			}
-	},
-	"total_wasted_session": func(val interface{}, obj *ServerState) {
-			if t, ok := val.(float64); ok {
-				obj.TotalWastedSession = int64(t)
-			}
-	},
-	"up_info_data": func(val interface{}, obj *ServerState) {
-			if u, ok := val.(float64); ok {
-				obj.UpInfoData = int64(u)
-			}
-	},
-	"up_info_speed": func(val interface{}, obj *ServerState) {
-			if u, ok := val.(float64); ok {
-				obj.UpInfoSpeed = int64(u)
-			}
-	},
-	"up_rate_limit": func(val interface{}, obj *ServerState) {
-			if u, ok := val.(float64); ok {
-				obj.UpRateLimit = int64(u)
-			}
-	},
-	"use_alt_speed_limits": func(val interface{}, obj *ServerState) {
-			if u, ok := val.(bool); ok {
-				obj.UseAltSpeedLimits = u
-			}
-	},
-	"write_cache_overload": func(val interface{}, obj *ServerState) {
-			if w, ok := val.(string); ok {
-				obj.WriteCacheOverload = w
-			}
-	},
+	"alltime_dl": updateServerStateAlltimeDl,
+	"alltime_ul": updateServerStateAlltimeUl,
+	"average_time_queue": updateServerStateAverageTimeQueue,
+	"connection_status": updateServerStateConnectionStatus,
+	"dht_nodes": updateServerStateDhtNodes,
+	"dl_info_data": updateServerStateDlInfoData,
+	"dl_info_speed": updateServerStateDlInfoSpeed,
+	"dl_rate_limit": updateServerStateDlRateLimit,
+	"free_space_on_disk": updateServerStateFreeSpaceOnDisk,
+	"global_ratio": updateServerStateGlobalRatio,
+	"queued_io_jobs": updateServerStateQueuedIoJobs,
+	"queueing": updateServerStateQueueing,
+	"read_cache_hits": updateServerStateReadCacheHits,
+	"read_cache_overload": updateServerStateReadCacheOverload,
+	"refresh_interval": updateServerStateRefreshInterval,
+	"total_buffers_size": updateServerStateTotalBuffersSize,
+	"total_peer_connections": updateServerStateTotalPeerConnections,
+	"total_queued_size": updateServerStateTotalQueuedSize,
+	"total_wasted_session": updateServerStateTotalWastedSession,
+	"up_info_data": updateServerStateUpInfoData,
+	"up_info_speed": updateServerStateUpInfoSpeed,
+	"up_rate_limit": updateServerStateUpRateLimit,
+	"use_alt_speed_limits": updateServerStateUseAltSpeedLimits,
+	"write_cache_overload": updateServerStateWriteCacheOverload,
 }
 
 // updateServerStateFields updates only the fields that are present in the update map

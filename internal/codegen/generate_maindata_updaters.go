@@ -173,14 +173,22 @@ func generateStructUpdater(structInfo StructInfo) {
 	structName := structInfo.Name
 	mapName := fmt.Sprintf("%sFieldUpdaters", strings.ToLower(structName))
 
-	// Generate global map
+	// Generate discrete updater functions for each field
+	for _, field := range structInfo.Fields {
+		funcName := fmt.Sprintf("update%s%s", structName, field.Name)
+		fmt.Printf("// %s updates the %s field of %s\n", funcName, field.Name, structName)
+		fmt.Printf("func %s(val interface{}, obj *%s) {\n", funcName, structName)
+		generateFieldUpdateLogic(structName, field)
+		fmt.Printf("}\n\n")
+	}
+
+	// Generate global map that references the discrete functions
 	fmt.Printf("// Precomputed field updaters for %s - created once at package init\n", structName)
 	fmt.Printf("var %s = map[string]func(val interface{}, obj *%s){\n", mapName, structName)
 
 	for _, field := range structInfo.Fields {
-		fmt.Printf("\t\"%s\": func(val interface{}, obj *%s) {\n", field.JSONTag, structName)
-		generateFieldUpdateLogic(structName, field)
-		fmt.Printf("\t},\n")
+		funcName := fmt.Sprintf("update%s%s", structName, field.Name)
+		fmt.Printf("\t\"%s\": %s,\n", field.JSONTag, funcName)
 	}
 
 	fmt.Printf("}\n\n")
@@ -203,51 +211,51 @@ func generateFieldUpdateLogic(structName string, field FieldInfo) {
 
 	switch goType {
 	case "string":
-		fmt.Printf("\t\t\tif %s, ok := val.(string); ok {\n", strings.ToLower(field.Name[:1]))
-		fmt.Printf("\t\t\t\tobj.%s = %s\n", field.Name, strings.ToLower(field.Name[:1]))
-		fmt.Printf("\t\t\t}\n")
+		fmt.Printf("\tif %s, ok := val.(string); ok {\n", strings.ToLower(field.Name[:1]))
+		fmt.Printf("\t\tobj.%s = %s\n", field.Name, strings.ToLower(field.Name[:1]))
+		fmt.Printf("\t}\n")
 	case "int64":
-		fmt.Printf("\t\t\tif %s, ok := val.(float64); ok {\n", strings.ToLower(field.Name[:1]))
-		fmt.Printf("\t\t\t\tobj.%s = int64(%s)\n", field.Name, strings.ToLower(field.Name[:1]))
-		fmt.Printf("\t\t\t}\n")
+		fmt.Printf("\tif %s, ok := val.(float64); ok {\n", strings.ToLower(field.Name[:1]))
+		fmt.Printf("\t\tobj.%s = int64(%s)\n", field.Name, strings.ToLower(field.Name[:1]))
+		fmt.Printf("\t}\n")
 	case "int":
-		fmt.Printf("\t\t\tif %s, ok := val.(float64); ok {\n", strings.ToLower(field.Name[:1]))
-		fmt.Printf("\t\t\t\tobj.%s = int(%s)\n", field.Name, strings.ToLower(field.Name[:1]))
-		fmt.Printf("\t\t\t}\n")
+		fmt.Printf("\tif %s, ok := val.(float64); ok {\n", strings.ToLower(field.Name[:1]))
+		fmt.Printf("\t\tobj.%s = int(%s)\n", field.Name, strings.ToLower(field.Name[:1]))
+		fmt.Printf("\t}\n")
 	case "float64":
-		fmt.Printf("\t\t\tif %s, ok := val.(float64); ok {\n", strings.ToLower(field.Name[:1]))
-		fmt.Printf("\t\t\t\tobj.%s = %s\n", field.Name, strings.ToLower(field.Name[:1]))
-		fmt.Printf("\t\t\t}\n")
+		fmt.Printf("\tif %s, ok := val.(float64); ok {\n", strings.ToLower(field.Name[:1]))
+		fmt.Printf("\t\tobj.%s = %s\n", field.Name, strings.ToLower(field.Name[:1]))
+		fmt.Printf("\t}\n")
 	case "float32":
-		fmt.Printf("\t\t\tif %s, ok := val.(float64); ok {\n", strings.ToLower(field.Name[:1]))
-		fmt.Printf("\t\t\t\tobj.%s = float32(%s)\n", field.Name, strings.ToLower(field.Name[:1]))
-		fmt.Printf("\t\t\t}\n")
+		fmt.Printf("\tif %s, ok := val.(float64); ok {\n", strings.ToLower(field.Name[:1]))
+		fmt.Printf("\t\tobj.%s = float32(%s)\n", field.Name, strings.ToLower(field.Name[:1]))
+		fmt.Printf("\t}\n")
 	case "bool":
-		fmt.Printf("\t\t\tif %s, ok := val.(bool); ok {\n", strings.ToLower(field.Name[:1]))
-		fmt.Printf("\t\t\t\tobj.%s = %s\n", field.Name, strings.ToLower(field.Name[:1]))
-		fmt.Printf("\t\t\t}\n")
+		fmt.Printf("\tif %s, ok := val.(bool); ok {\n", strings.ToLower(field.Name[:1]))
+		fmt.Printf("\t\tobj.%s = %s\n", field.Name, strings.ToLower(field.Name[:1]))
+		fmt.Printf("\t}\n")
 	case "TorrentState":
-		fmt.Printf("\t\t\tif %s, ok := val.(string); ok {\n", strings.ToLower(field.Name[:1]))
-		fmt.Printf("\t\t\t\tobj.%s = TorrentState(%s)\n", field.Name, strings.ToLower(field.Name[:1]))
-		fmt.Printf("\t\t\t}\n")
+		fmt.Printf("\tif %s, ok := val.(string); ok {\n", strings.ToLower(field.Name[:1]))
+		fmt.Printf("\t\tobj.%s = TorrentState(%s)\n", field.Name, strings.ToLower(field.Name[:1]))
+		fmt.Printf("\t}\n")
 	case "TrackerStatus":
 		// TrackerStatus is an int-based enum
-		fmt.Printf("\t\t\tif %s, ok := val.(float64); ok {\n", strings.ToLower(field.Name[:1]))
-		fmt.Printf("\t\t\t\tobj.%s = TrackerStatus(int(%s))\n", field.Name, strings.ToLower(field.Name[:1]))
-		fmt.Printf("\t\t\t}\n")
+		fmt.Printf("\tif %s, ok := val.(float64); ok {\n", strings.ToLower(field.Name[:1]))
+		fmt.Printf("\t\tobj.%s = TrackerStatus(int(%s))\n", field.Name, strings.ToLower(field.Name[:1]))
+		fmt.Printf("\t}\n")
 	case "[]TorrentTracker":
 		// Handle slice of TorrentTracker with recursive update logic
-		fmt.Printf("\t\t\tif %s, ok := val.([]interface{}); ok {\n", strings.ToLower(field.Name[:1]))
-		fmt.Printf("\t\t\t\tvar trackers []TorrentTracker\n")
-		fmt.Printf("\t\t\t\tfor _, item := range %s {\n", strings.ToLower(field.Name[:1]))
-		fmt.Printf("\t\t\t\t\tif trackerMap, ok := item.(map[string]interface{}); ok {\n")
-		fmt.Printf("\t\t\t\t\t\tvar tracker TorrentTracker\n")
-		fmt.Printf("\t\t\t\t\t\tupdateTorrentTrackerFields(&tracker, trackerMap)\n")
-		fmt.Printf("\t\t\t\t\t\ttrackers = append(trackers, tracker)\n")
-		fmt.Printf("\t\t\t\t\t}\n")
-		fmt.Printf("\t\t\t\t}\n")
-		fmt.Printf("\t\t\t\tobj.%s = trackers\n", field.Name)
+		fmt.Printf("\tif %s, ok := val.([]interface{}); ok {\n", strings.ToLower(field.Name[:1]))
+		fmt.Printf("\t\tvar trackers []TorrentTracker\n")
+		fmt.Printf("\t\tfor _, item := range %s {\n", strings.ToLower(field.Name[:1]))
+		fmt.Printf("\t\t\tif trackerMap, ok := item.(map[string]interface{}); ok {\n")
+		fmt.Printf("\t\t\t\tvar tracker TorrentTracker\n")
+		fmt.Printf("\t\t\t\tupdateTorrentTrackerFields(&tracker, trackerMap)\n")
+		fmt.Printf("\t\t\t\ttrackers = append(trackers, tracker)\n")
 		fmt.Printf("\t\t\t}\n")
+		fmt.Printf("\t\t}\n")
+		fmt.Printf("\t\tobj.%s = trackers\n", field.Name)
+		fmt.Printf("\t}\n")
 	default:
 		// Panic on any unhandled type to ensure we handle all types properly
 		log.Fatalf("Unhandled type: %s for field %s - add proper handling", goType, structName+"."+field.Name)
