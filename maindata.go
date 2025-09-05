@@ -17,6 +17,19 @@ func normalizeHashes(dest map[string]Torrent) {
 	}
 }
 
+// normalizeHashesRaw normalizes hashes in raw JSON data format
+func normalizeHashesRaw(rawData map[string]interface{}) {
+	if torrentsRaw, exists := rawData["torrents"]; exists {
+		if torrentsMap, ok := torrentsRaw.(map[string]interface{}); ok {
+			for hash, torrentRaw := range torrentsMap {
+				if torrentMap, ok := torrentRaw.(map[string]interface{}); ok {
+					torrentMap["hash"] = hash
+				}
+			}
+		}
+	}
+}
+
 func (dest *MainData) Update(ctx context.Context, c *Client) error {
 	source, rawData, err := c.SyncMainDataCtxWithRaw(ctx, int64(dest.Rid))
 	if err != nil {

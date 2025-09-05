@@ -571,7 +571,7 @@ func (c *Client) SyncMainDataCtxWithRaw(ctx context.Context, rid int64) (*MainDa
 		defer wp.Close()
 		mapErr = json.NewDecoder(io.TeeReader(resp.Body, wp)).Decode(&rawData)
 		if mapErr == nil {
-			normalizeHashes(rawData["torrents"].(map[string]Torrent))
+			normalizeHashesRaw(rawData)
 		}
 	}()
 
