@@ -12,12 +12,12 @@ func removeDuplicateStrings(input []string) []string {
 		return nil
 	}
 
-	seen := make(map[string]bool)
+	seen := make(map[string]struct{}, len(input))
 	result := make([]string, 0, len(input))
 
 	for _, item := range input {
-		if !seen[item] {
-			seen[item] = true
+		if _, ok := seen[item]; !ok {
+			seen[item] = struct{}{}
 			result = append(result, item)
 		}
 	}
@@ -31,14 +31,14 @@ func removeStrings(input []string, toRemove []string) []string {
 		return input
 	}
 
-	removeMap := make(map[string]bool)
+	removeMap := make(map[string]struct{}, len(toRemove))
 	for _, item := range toRemove {
-		removeMap[item] = true
+		removeMap[item] = struct{}{}
 	}
 
 	result := make([]string, 0, len(input))
 	for _, item := range input {
-		if !removeMap[item] {
+		if _, ok := removeMap[item]; !ok {
 			result = append(result, item)
 		}
 	}
@@ -72,34 +72,133 @@ func matchesTorrentFilter(torrent Torrent, options TorrentFilterOptions) bool {
 	return true
 }
 
-// matchesStateFilter checks if a torrent state matches the given filter
+// stateFilterMatches is a precomputed lookup table for state-filter matches
+var stateFilterMatches = map[TorrentState]map[TorrentFilter]struct{}{
+	TorrentStateError: {
+		TorrentFilterAll:      struct{}{},
+		TorrentFilterError:    struct{}{},
+		TorrentFilterInactive: struct{}{},
+	},
+	TorrentStateMissingFiles: {
+		TorrentFilterAll:      struct{}{},
+		TorrentFilterInactive: struct{}{},
+	},
+	TorrentStateUploading: {
+		TorrentFilterAll:       struct{}{},
+		TorrentFilterActive:    struct{}{},
+		TorrentFilterUploading: struct{}{},
+		TorrentFilterCompleted: struct{}{},
+		TorrentFilterResumed:   struct{}{},
+	},
+	TorrentStatePausedUp: {
+		TorrentFilterAll:       struct{}{},
+		TorrentFilterPaused:    struct{}{},
+		TorrentFilterStopped:   struct{}{},
+		TorrentFilterCompleted: struct{}{},
+		TorrentFilterInactive:  struct{}{},
+	},
+	TorrentStateStoppedUp: {
+		TorrentFilterAll:       struct{}{},
+		TorrentFilterPaused:    struct{}{},
+		TorrentFilterStopped:   struct{}{},
+		TorrentFilterCompleted: struct{}{},
+		TorrentFilterInactive:  struct{}{},
+	},
+	TorrentStateQueuedUp: {
+		TorrentFilterAll:       struct{}{},
+		TorrentFilterCompleted: struct{}{},
+		TorrentFilterInactive:  struct{}{},
+	},
+	TorrentStateStalledUp: {
+		TorrentFilterAll:              struct{}{},
+		TorrentFilterStalled:          struct{}{},
+		TorrentFilterStalledUploading: struct{}{},
+		TorrentFilterCompleted:        struct{}{},
+		TorrentFilterInactive:         struct{}{},
+	},
+	TorrentStateCheckingUp: {
+		TorrentFilterAll:       struct{}{},
+		TorrentFilterActive:    struct{}{},
+		TorrentFilterCompleted: struct{}{},
+		TorrentFilterResumed:   struct{}{},
+	},
+	TorrentStateForcedUp: {
+		TorrentFilterAll:       struct{}{},
+		TorrentFilterActive:    struct{}{},
+		TorrentFilterUploading: struct{}{},
+		TorrentFilterCompleted: struct{}{},
+		TorrentFilterResumed:   struct{}{},
+	},
+	TorrentStateAllocating: {
+		TorrentFilterAll:         struct{}{},
+		TorrentFilterActive:      struct{}{},
+		TorrentFilterDownloading: struct{}{},
+		TorrentFilterResumed:     struct{}{},
+	},
+	TorrentStateDownloading: {
+		TorrentFilterAll:         struct{}{},
+		TorrentFilterActive:      struct{}{},
+		TorrentFilterDownloading: struct{}{},
+		TorrentFilterResumed:     struct{}{},
+	},
+	TorrentStateMetaDl: {
+		TorrentFilterAll:         struct{}{},
+		TorrentFilterActive:      struct{}{},
+		TorrentFilterDownloading: struct{}{},
+		TorrentFilterResumed:     struct{}{},
+	},
+	TorrentStatePausedDl: {
+		TorrentFilterAll:      struct{}{},
+		TorrentFilterPaused:   struct{}{},
+		TorrentFilterStopped:  struct{}{},
+		TorrentFilterInactive: struct{}{},
+	},
+	TorrentStateStoppedDl: {
+		TorrentFilterAll:      struct{}{},
+		TorrentFilterPaused:   struct{}{},
+		TorrentFilterStopped:  struct{}{},
+		TorrentFilterInactive: struct{}{},
+	},
+	TorrentStateQueuedDl: {
+		TorrentFilterAll:      struct{}{},
+		TorrentFilterInactive: struct{}{},
+	},
+	TorrentStateStalledDl: {
+		TorrentFilterAll:                struct{}{},
+		TorrentFilterStalled:            struct{}{},
+		TorrentFilterStalledDownloading: struct{}{},
+		TorrentFilterInactive:           struct{}{},
+	},
+	TorrentStateCheckingDl: {
+		TorrentFilterAll:         struct{}{},
+		TorrentFilterActive:      struct{}{},
+		TorrentFilterDownloading: struct{}{},
+		TorrentFilterResumed:     struct{}{},
+	},
+	TorrentStateForcedDl: {
+		TorrentFilterAll:         struct{}{},
+		TorrentFilterActive:      struct{}{},
+		TorrentFilterDownloading: struct{}{},
+		TorrentFilterResumed:     struct{}{},
+	},
+	TorrentStateCheckingResumeData: {
+		TorrentFilterAll: struct{}{},
+	},
+	TorrentStateMoving: {
+		TorrentFilterAll: struct{}{},
+	},
+	TorrentStateUnknown: {
+		TorrentFilterAll: struct{}{},
+	},
+}
+
+// matchesStateFilter checks if a torrent state matches the given filter using precomputed lookup
 func matchesStateFilter(state TorrentState, filter TorrentFilter) bool {
-	switch filter {
-	case TorrentFilterAll:
-		return true
-	case TorrentFilterDownloading:
-		return state == TorrentStateDownloading || state == TorrentStateMetaDl || state == TorrentStateStalledDl || state == TorrentStateCheckingDl || state == TorrentStateForcedDl || state == TorrentStateAllocating || state == TorrentStateQueuedDl
-	case TorrentFilterUploading:
-		return state == TorrentStateUploading || state == TorrentStateStalledUp || state == TorrentStateCheckingUp || state == TorrentStateForcedUp || state == TorrentStateQueuedUp
-	case TorrentFilterCompleted:
-		return state == TorrentStatePausedUp || state == TorrentStateStoppedUp || state == TorrentStateQueuedUp || state == TorrentStateStalledUp || state == TorrentStateCheckingUp || state == TorrentStateForcedUp
-	case TorrentFilterPaused, TorrentFilterStopped:
-		return state == TorrentStatePausedDl || state == TorrentStatePausedUp || state == TorrentStateStoppedDl || state == TorrentStateStoppedUp
-	case TorrentFilterActive:
-		return state == TorrentStateDownloading || state == TorrentStateUploading || state == TorrentStateMetaDl || state == TorrentStateCheckingDl || state == TorrentStateCheckingUp || state == TorrentStateForcedDl || state == TorrentStateForcedUp || state == TorrentStateAllocating
-	case TorrentFilterInactive:
-		return state == TorrentStatePausedDl || state == TorrentStatePausedUp || state == TorrentStateStoppedDl || state == TorrentStateStoppedUp || state == TorrentStateQueuedDl || state == TorrentStateQueuedUp || state == TorrentStateStalledDl || state == TorrentStateStalledUp
-	case TorrentFilterResumed:
-		return state == TorrentStateDownloading || state == TorrentStateUploading || state == TorrentStateMetaDl || state == TorrentStateCheckingDl || state == TorrentStateCheckingUp || state == TorrentStateForcedDl || state == TorrentStateForcedUp || state == TorrentStateAllocating
-	case TorrentFilterStalled:
-		return state == TorrentStateStalledDl || state == TorrentStateStalledUp
-	case TorrentFilterStalledDownloading:
-		return state == TorrentStateStalledDl
-	case TorrentFilterStalledUploading:
-		return state == TorrentStateStalledUp
-	default:
-		return true
+	if stateMap, exists := stateFilterMatches[state]; exists {
+		_, ok := stateMap[filter]
+		return ok
 	}
+	return filter == TorrentFilterAll
 }
 
 // applyTorrentFilterOptions applies sorting, reverse, limit, and offset to torrents
