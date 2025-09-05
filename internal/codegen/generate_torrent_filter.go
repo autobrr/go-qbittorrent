@@ -130,41 +130,55 @@ import (
 	"cmp"
 	"slices"
 )
-
-// Precomputed comparators for sorting torrents
-var torrentComparators = map[string]func(a, b Torrent) int{
 `
 
-	// Generate comparators for each field (only normal, reverse handled by negation)
+	// Generate comparator functions for each field
 	for _, field := range fields {
 		if field.Type == "bool" {
-			output += fmt.Sprintf(`	"%s": func(a, b Torrent) int {
-		if a.%s != b.%s {
-			if a.%s {
-				return 1
-			}
-			return -1
+			output += fmt.Sprintf(`func compare%s(a, b *Torrent) int {
+	if a.%s != b.%s {
+		if a.%s {
+			return 1
 		}
-		return 0
-	},
-`, field.JSONTag, field.Name, field.Name, field.Name)
+		return -1
+	}
+	return 0
+}
+
+`, field.Name, field.Name, field.Name, field.Name)
 		} else if isComparableType(field.Type) {
-			output += fmt.Sprintf(`	"%s": func(a, b Torrent) int {
-		return cmp.Compare(a.%s, b.%s)
-	},
-`, field.JSONTag, field.Name, field.Name)
+			output += fmt.Sprintf(`func compare%s(a, b *Torrent) int {
+	return cmp.Compare(a.%s, b.%s)
+}
+
+`, field.Name, field.Name, field.Name)
 		} else if field.Type == "TorrentState" {
-			output += fmt.Sprintf(`	"%s": func(a, b Torrent) int {
-		return cmp.Compare(string(a.%s), string(b.%s))
-	},
-`, field.JSONTag, field.Name, field.Name)
+			output += fmt.Sprintf(`func compare%s(a, b *Torrent) int {
+	return cmp.Compare(string(a.%s), string(b.%s))
+}
+
+`, field.Name, field.Name, field.Name)
 		}
 	}
 
-	// Default comparator
-	output += `	"default": func(a, b Torrent) int {
-		return cmp.Compare(a.Name, b.Name)
-	},
+	// Default comparator function
+	output += `func compareDefault(a, b *Torrent) int {
+	return cmp.Compare(a.Name, b.Name)
+}
+
+// Precomputed comparators for sorting torrents
+var torrentComparators = map[string]func(a, b *Torrent) int{
+`
+
+	// Generate map entries
+	for _, field := range fields {
+		if field.Type == "bool" || isComparableType(field.Type) || field.Type == "TorrentState" {
+			output += fmt.Sprintf(`	"%s": compare%s,
+`, field.JSONTag, field.Name)
+		}
+	}
+
+	output += `	"default": compareDefault,
 }
 
 func applyTorrentSorting(torrents []Torrent, sortField string, reverse bool) {
@@ -181,10 +195,9 @@ func applyTorrentSorting(torrents []Torrent, sortField string, reverse bool) {
 
 	// Sort indices using comparators on the original torrents
 	slices.SortFunc(indices, func(i, j int) int {
-		a, b := torrents[i], torrents[j]
 		result := cmp.Or(
-			comparator(a, b),
-			cmp.Compare(a.Hash, b.Hash), // secondary sort by hash for stability
+			comparator(&torrents[i], &torrents[j]),
+			cmp.Compare(torrents[i].Hash, torrents[j].Hash), // secondary sort by hash for stability
 		)
 		if reverse {
 			return -result
