@@ -127,7 +127,6 @@ func generateFilterFile(fields []FilterFieldInfo) {
 package qbittorrent
 
 import (
-	"cmp"
 	"slices"
 	"strings"
 )
@@ -155,10 +154,15 @@ import (
 `, field.Name, field.Name, field.Name)
 		} else if isComparableType(field.Type) {
 			output += fmt.Sprintf(`func compare%s(a, b *Torrent) int {
-	return cmp.Compare(a.%s, b.%s)
+	if a.%s < b.%s {
+		return -1
+	} else if a.%s > b.%s {
+		return 1
+	}
+	return 0
 }
 
-`, field.Name, field.Name, field.Name)
+`, field.Name, field.Name, field.Name, field.Name, field.Name)
 		} else if field.Type == "TorrentState" {
 			output += fmt.Sprintf(`func compare%s(a, b *Torrent) int {
 	return strings.Compare(string(a.%s), string(b.%s))
@@ -202,22 +206,24 @@ func applyTorrentSorting(torrents []Torrent, sortField string, reverse bool) {
 
 	// Sort indices using comparators on the original torrents
 	slices.SortFunc(indices, func(i, j int) int {
-		result := cmp.Or(
-			comparator(&torrents[i], &torrents[j]),
-			strings.Compare(torrents[i].Hash, torrents[j].Hash), // secondary sort by hash for stability
-		)
+		result := comparator(&torrents[i], &torrents[j])
+		if result == 0 {
+			result = strings.Compare(torrents[i].Hash, torrents[j].Hash) // secondary sort by hash for stability
+		}
 		if reverse {
 			return -result
 		}
 		return result
 	})
 
-	// Rearrange torrents according to sorted indices
-	sorted := make([]Torrent, len(torrents))
-	for i, idx := range indices {
-		sorted[i] = torrents[idx]
+	// Rearrange torrents according to sorted indices in place
+	for i := range torrents {
+		for indices[i] != i {
+			j := indices[i]
+			torrents[i], torrents[j] = torrents[j], torrents[i]
+			indices[i], indices[j] = indices[j], indices[i]
+		}
 	}
-	copy(torrents, sorted)
 }
 `
 
