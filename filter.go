@@ -12,7 +12,7 @@ func removeDuplicateStrings(input []string) []string {
 		return nil
 	}
 
-	seen := make(map[string]struct{})
+	seen := make(map[string]struct{}, len(input))
 	result := make([]string, 0, len(input))
 
 	for _, item := range input {
@@ -31,7 +31,7 @@ func removeStrings(input []string, toRemove []string) []string {
 		return input
 	}
 
-	removeMap := make(map[string]struct{})
+	removeMap := make(map[string]struct{}, len(toRemove))
 	for _, item := range toRemove {
 		removeMap[item] = struct{}{}
 	}
