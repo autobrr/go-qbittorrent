@@ -204,7 +204,7 @@ func applyTorrentSorting(torrents []Torrent, sortField string, reverse bool) {
 	slices.SortFunc(indices, func(i, j int) int {
 		result := cmp.Or(
 			comparator(&torrents[i], &torrents[j]),
-			cmp.Compare(torrents[i].Hash, torrents[j].Hash), // secondary sort by hash for stability
+			strings.Compare(torrents[i].Hash, torrents[j].Hash), // secondary sort by hash for stability
 		)
 		if reverse {
 			return -result
