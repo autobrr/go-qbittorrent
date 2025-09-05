@@ -102,12 +102,12 @@ func (sm *SyncManager) Sync(ctx context.Context) error {
 	if sm.syncing {
 		// Another sync is in progress, wait for it to complete
 		sm.syncCond.Wait()
-		// Get the cached error from the last sync
+		sm.syncMu.Unlock()
+
+		// Now safely read the cached error from the completed sync
 		sm.mu.RLock()
 		cachedError := sm.lastError
 		sm.mu.RUnlock()
-		sm.syncMu.Unlock()
-		// Return the cached error from the sync that just completed
 		return cachedError
 	}
 
