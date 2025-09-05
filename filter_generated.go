@@ -198,7 +198,15 @@ func applyTorrentSorting(torrents []Torrent, sortField string, reverse bool) {
 		comparator = torrentComparators["default"]
 	}
 
-	slices.SortFunc(torrents, func(a, b Torrent) int {
+	// Create indices to sort instead of large structs
+	indices := make([]int, len(torrents))
+	for i := range indices {
+		indices[i] = i
+	}
+
+	// Sort indices using comparators on the original torrents
+	slices.SortFunc(indices, func(i, j int) int {
+		a, b := torrents[i], torrents[j]
 		result := cmp.Or(
 			comparator(a, b),
 			cmp.Compare(a.Hash, b.Hash), // secondary sort by hash for stability
@@ -208,4 +216,11 @@ func applyTorrentSorting(torrents []Torrent, sortField string, reverse bool) {
 		}
 		return result
 	})
+
+	// Rearrange torrents according to sorted indices
+	sorted := make([]Torrent, len(torrents))
+	for i, idx := range indices {
+		sorted[i] = torrents[idx]
+	}
+	copy(torrents, sorted)
 }
