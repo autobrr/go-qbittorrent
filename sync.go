@@ -158,7 +158,7 @@ func (sm *SyncManager) Sync(ctx context.Context) error {
 
 	// Call update callback if set
 	if sm.options.OnUpdate != nil {
-		sm.options.OnUpdate(sm.data)
+		sm.options.OnUpdate(sm.copyMainData(sm.data))
 	}
 
 	// Success - clear any previous error
