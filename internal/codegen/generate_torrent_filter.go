@@ -216,17 +216,22 @@ func applyTorrentSorting(torrents []Torrent, sortField string, reverse bool) {
 		return result
 	})
 
-	// Apply permutation in place using selection sort approach
+	// Apply permutation in place using cycle decomposition
 	for i := 0; i < len(torrents); i++ {
-		// Find where element i should come from
-		target := indices[i]
-		for target < i {
-			target = indices[target]
-		}
-		
-		if target != i {
-			torrents[i], torrents[target] = torrents[target], torrents[i]
-			indices[target] = indices[i]
+		if indices[i] != i {
+			// Start of a cycle
+			temp := torrents[i]
+			j := i
+			for {
+				k := indices[j]
+				indices[j] = j // Mark as processed
+				if k == i {
+					torrents[j] = temp
+					break
+				}
+				torrents[j] = torrents[k]
+				j = k
+			}
 		}
 	}
 }
