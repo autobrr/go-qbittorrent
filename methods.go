@@ -1140,7 +1140,7 @@ func (c *Client) GetTagsCtx(ctx context.Context) ([]string, error) {
 
 	defer drainAndClose(resp)
 
-	m := make([]string, 0)
+	var m []string
 	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
 		return nil, errors.Wrap(err, "could not unmarshal body")
 	}
@@ -1152,21 +1152,19 @@ func (c *Client) CreateTags(tags []string) error {
 }
 
 func (c *Client) CreateTagsCtx(ctx context.Context, tags []string) error {
-	t := strings.Join(tags, ",")
-
 	opts := map[string]string{
-		"tags": t,
+		"tags": strings.Join(tags, ","),
 	}
 
 	resp, err := c.postCtx(ctx, "torrents/createTags", opts)
 	if err != nil {
-		return errors.Wrap(err, "could not create tags; tags: %v", t)
+		return errors.Wrap(err, "could not create tags; tags: %v", strings.Join(tags, ","))
 	}
 
 	defer drainAndClose(resp)
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.Wrap(ErrUnexpectedStatus, "could not create tags; tags: %v | status code: %d", t, resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not create tags; tags: %v | status code: %d", strings.Join(tags, ","), resp.StatusCode)
 	}
 
 	return nil
@@ -2174,9 +2172,9 @@ func (c *Client) GetLogsCtx(ctx context.Context) ([]Log, error) {
 
 	defer drainAndClose(resp)
 
-	m := make([]Log, 0)
+	var m []Log
 	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
-		return m, errors.Wrap(err, "could not unmarshal body")
+		return nil, errors.Wrap(err, "could not unmarshal body")
 	}
 	return m, nil
 }
@@ -2195,7 +2193,7 @@ func (c *Client) GetPeerLogsCtx(ctx context.Context) ([]PeerLog, error) {
 
 	defer drainAndClose(resp)
 
-	m := make([]PeerLog, 0)
+	var m []PeerLog
 	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
 		return m, errors.Wrap(err, "could not unmarshal body")
 	}
