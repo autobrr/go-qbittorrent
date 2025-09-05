@@ -552,7 +552,6 @@ func applyTorrentSorting(torrents []Torrent, sortField string, reverse bool) {
 		indices[i] = i
 	}
 
-	// Get a sorter from the pool
 	sorter := &torrentSorter{
 		torrents:  torrents,
 		comparator: comparator,
