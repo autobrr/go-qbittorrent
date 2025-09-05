@@ -246,7 +246,8 @@ func generateFieldUpdateLogic(structName string, field FieldInfo) {
 	case "[]TorrentTracker":
 		// Handle slice of TorrentTracker with recursive update logic
 		fmt.Printf("\tif %s, ok := val.([]interface{}); ok {\n", strings.ToLower(field.Name[:1]))
-		fmt.Printf("\t\tvar trackers []TorrentTracker\n")
+		fmt.Printf("\t\t// Preallocate slice to avoid reallocations\n")
+		fmt.Printf("\t\ttrackers := make([]TorrentTracker, 0, len(%s))\n", strings.ToLower(field.Name[:1]))
 		fmt.Printf("\t\tfor _, item := range %s {\n", strings.ToLower(field.Name[:1]))
 		fmt.Printf("\t\t\tif trackerMap, ok := item.(map[string]interface{}); ok {\n")
 		fmt.Printf("\t\t\t\tvar tracker TorrentTracker\n")

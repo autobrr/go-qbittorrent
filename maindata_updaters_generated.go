@@ -349,7 +349,8 @@ func updateTorrentUpSpeed(val interface{}, obj *Torrent) {
 // updateTorrentTrackers updates the Trackers field of Torrent
 func updateTorrentTrackers(val interface{}, obj *Torrent) {
 	if t, ok := val.([]interface{}); ok {
-		var trackers []TorrentTracker
+		// Preallocate slice to avoid reallocations
+		trackers := make([]TorrentTracker, 0, len(t))
 		for _, item := range t {
 			if trackerMap, ok := item.(map[string]interface{}); ok {
 				var tracker TorrentTracker
