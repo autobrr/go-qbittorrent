@@ -451,6 +451,25 @@ var torrentComparators = map[string]func(a, b *Torrent) int{
 	"default": compareDefault,
 }
 
+// torrentSorter is a reusable struct for sorting torrents without allocations
+type torrentSorter struct {
+	torrents   []Torrent
+	comparator func(a, b *Torrent) int
+	reverse    bool
+}
+
+// compare is a static method that doesn't allocate
+func (s *torrentSorter) compare(i, j int) int {
+	result := s.comparator(&s.torrents[i], &s.torrents[j])
+	if result == 0 {
+		result = strings.Compare(s.torrents[i].Hash, s.torrents[j].Hash) // secondary sort by hash for stability
+	}
+	if s.reverse {
+		return -result
+	}
+	return result
+}
+
 func applyTorrentSorting(torrents []Torrent, sortField string, reverse bool) {
 	comparator, exists := torrentComparators[sortField]
 	if !exists {
@@ -463,17 +482,15 @@ func applyTorrentSorting(torrents []Torrent, sortField string, reverse bool) {
 		indices[i] = i
 	}
 
-	// Sort indices using comparators on the original torrents
-	slices.SortFunc(indices, func(i, j int) int {
-		result := comparator(&torrents[i], &torrents[j])
-		if result == 0 {
-			result = strings.Compare(torrents[i].Hash, torrents[j].Hash) // secondary sort by hash for stability
-		}
-		if reverse {
-			return -result
-		}
-		return result
-	})
+	// Get a sorter from the pool
+	sorter := &torrentSorter{
+		torrents:  torrents,
+		comparator: comparator,
+		reverse:   reverse,
+	}
+
+	// Sort indices using the static method - no allocation!
+	slices.SortFunc(indices, sorter.compare)
 
 	// Apply permutation in place using cycle decomposition
 	for i := 0; i < len(torrents); i++ {
