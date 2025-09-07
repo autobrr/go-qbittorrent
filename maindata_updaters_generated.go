@@ -418,13 +418,8 @@ var torrentFieldUpdaters = map[string]func(val interface{}, obj *Torrent){
 
 // updateTorrentFields updates only the fields that are present in the update map
 func updateTorrentFields(obj *Torrent, updateMap map[string]interface{}) {
-	// Make a copy of the updateMap to avoid potential concurrent access issues
-	updateMapCopy := make(map[string]interface{}, len(updateMap))
-	for k, v := range updateMap {
-		updateMapCopy[k] = v
-	}
 	// Update only fields that are present in the map using precomputed updaters
-	for fieldName, val := range updateMapCopy {
+	for fieldName, val := range updateMap {
 		if updater, exists := torrentFieldUpdaters[fieldName]; exists {
 			updater(val, obj)
 		}
@@ -493,13 +488,8 @@ var torrenttrackerFieldUpdaters = map[string]func(val interface{}, obj *TorrentT
 
 // updateTorrentTrackerFields updates only the fields that are present in the update map
 func updateTorrentTrackerFields(obj *TorrentTracker, updateMap map[string]interface{}) {
-	// Make a copy of the updateMap to avoid potential concurrent access issues
-	updateMapCopy := make(map[string]interface{}, len(updateMap))
-	for k, v := range updateMap {
-		updateMapCopy[k] = v
-	}
 	// Update only fields that are present in the map using precomputed updaters
-	for fieldName, val := range updateMapCopy {
+	for fieldName, val := range updateMap {
 		if updater, exists := torrenttrackerFieldUpdaters[fieldName]; exists {
 			updater(val, obj)
 		}
@@ -528,13 +518,8 @@ var categoryFieldUpdaters = map[string]func(val interface{}, obj *Category){
 
 // updateCategoryFields updates only the fields that are present in the update map
 func updateCategoryFields(obj *Category, updateMap map[string]interface{}) {
-	// Make a copy of the updateMap to avoid potential concurrent access issues
-	updateMapCopy := make(map[string]interface{}, len(updateMap))
-	for k, v := range updateMap {
-		updateMapCopy[k] = v
-	}
 	// Update only fields that are present in the map using precomputed updaters
-	for fieldName, val := range updateMapCopy {
+	for fieldName, val := range updateMap {
 		if updater, exists := categoryFieldUpdaters[fieldName]; exists {
 			updater(val, obj)
 		}
@@ -739,13 +724,8 @@ var serverstateFieldUpdaters = map[string]func(val interface{}, obj *ServerState
 
 // updateServerStateFields updates only the fields that are present in the update map
 func updateServerStateFields(obj *ServerState, updateMap map[string]interface{}) {
-	// Make a copy of the updateMap to avoid potential concurrent access issues
-	updateMapCopy := make(map[string]interface{}, len(updateMap))
-	for k, v := range updateMap {
-		updateMapCopy[k] = v
-	}
 	// Update only fields that are present in the map using precomputed updaters
-	for fieldName, val := range updateMapCopy {
+	for fieldName, val := range updateMap {
 		if updater, exists := serverstateFieldUpdaters[fieldName]; exists {
 			updater(val, obj)
 		}
