@@ -581,6 +581,8 @@ func (c *Client) SyncMainDataCtxWithRaw(ctx context.Context, rid int64) (*MainDa
 		return nil, nil, errors.Wrap(err, "could not unmarshal body")
 	}
 
+	io.Copy(io.Discard, rp)
+
 	if mapErr != nil {
 		return nil, nil, errors.Wrap(mapErr, "could not unmarshal body to map")
 	}
