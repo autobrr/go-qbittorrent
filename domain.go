@@ -373,10 +373,10 @@ func (o *TorrentAddOptions) Prepare() map[string]string {
 	if o.LimitDownloadSpeed > 0 {
 		options["dlLimit"] = strconv.FormatInt(o.LimitDownloadSpeed*1024, 10)
 	}
-	if o.LimitRatio > 0 {
+	if o.LimitRatio >= 0 {
 		options["ratioLimit"] = strconv.FormatFloat(o.LimitRatio, 'f', 2, 64)
 	}
-	if o.LimitSeedTime > 0 {
+	if o.LimitSeedTime >= 0 {
 		options["seedingTimeLimit"] = strconv.FormatInt(o.LimitSeedTime, 10)
 	}
 
