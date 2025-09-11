@@ -1402,6 +1402,7 @@ func TestPeerSyncManager_ConcurrentAccess(t *testing.T) {
 	finalPeers := psm.GetPeers()
 	if finalPeers == nil {
 		t.Error("Final peers should not be nil")
+		return
 	}
 
 	if len(finalPeers.Peers) == 0 {
