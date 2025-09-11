@@ -231,9 +231,13 @@ const (
 
 	// Torrent is errored
 	TorrentFilterError TorrentFilter = "errored"
-)
 
-// TrackerStatus https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-4.1)#get-torrent-trackers
+	// Torrent is checking
+	TorrentFilterChecking TorrentFilter = "checking"
+
+	// Torrent is moving
+	TorrentFilterMoving TorrentFilter = "moving"
+) // TrackerStatus https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-4.1)#get-torrent-trackers
 type TrackerStatus int
 
 const (
@@ -391,6 +395,39 @@ func (o *TorrentAddOptions) Prepare() map[string]string {
 	}
 
 	return options
+}
+
+func ParseTorrentFilter(filter string) TorrentFilter {
+	switch filter {
+	case "downloading":
+		return TorrentFilterDownloading
+	case "seeding":
+		return TorrentFilterUploading
+	case "completed":
+		return TorrentFilterCompleted
+	case "stopped":
+		return TorrentFilterStopped
+	case "running":
+		return TorrentFilterActive
+	case "active":
+		return TorrentFilterActive
+	case "inactive":
+		return TorrentFilterInactive
+	case "stalled":
+		return TorrentFilterStalled
+	case "stalled_uploading":
+		return TorrentFilterStalledUploading
+	case "stalled_downloading":
+		return TorrentFilterStalledDownloading
+	case "checking":
+		return TorrentFilterChecking
+	case "moving":
+		return TorrentFilterMoving
+	case "errored":
+		return TorrentFilterError
+	default:
+		return TorrentFilterAll
+	}
 }
 
 type TorrentFilterOptions struct {

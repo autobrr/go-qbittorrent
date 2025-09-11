@@ -9,12 +9,23 @@ import (
 )
 
 // normalizeHash sets .Hash from InfohashV1 or InfohashV2 if Hash is empty
-func normalizeHash(torrent *Torrent) {
-	if torrent.Hash == "" {
-		if torrent.InfohashV1 != "" {
-			torrent.Hash = torrent.InfohashV1
-		} else if torrent.InfohashV2 != "" {
-			torrent.Hash = torrent.InfohashV2
+func normalizeHashes(dest map[string]Torrent) {
+	// Normalize hashes for all torrents after full update
+	for hash, torrent := range dest {
+		torrent.Hash = hash
+		dest[hash] = torrent
+	}
+}
+
+// normalizeHashesRaw normalizes hashes in raw JSON data format
+func normalizeHashesRaw(rawData map[string]interface{}) {
+	if torrentsRaw, exists := rawData["torrents"]; exists {
+		if torrentsMap, ok := torrentsRaw.(map[string]interface{}); ok {
+			for hash, torrentRaw := range torrentsMap {
+				if torrentMap, ok := torrentRaw.(map[string]interface{}); ok {
+					torrentMap["hash"] = hash
+				}
+			}
 		}
 	}
 }
@@ -33,13 +44,6 @@ func (dest *MainData) Update(ctx context.Context, c *Client) error {
 
 	// For full updates, replace everything
 	*dest = *source
-	
-	// Normalize hashes for all torrents after full update
-	for hash, torrent := range dest.Torrents {
-		normalizeHash(&torrent)
-		dest.Torrents[hash] = torrent
-	}
-	
 	return nil
 }
 
@@ -132,7 +136,7 @@ func (dest *MainData) UpdateWithRawData(rawData map[string]interface{}, source *
 	// Handle server_state partial updates ONLY if present in raw JSON
 	if serverStateRaw, exists := rawData["server_state"]; exists {
 		if serverStateMap, ok := serverStateRaw.(map[string]interface{}); ok {
-			dest.updateServerStateFields(&dest.ServerState, serverStateMap)
+			updateServerStateFields(&dest.ServerState, serverStateMap)
 		}
 	}
 }
@@ -152,11 +156,8 @@ func (dest *MainData) mergeTorrentsPartial(torrentsMap map[string]interface{}) {
 		}
 
 		// Always start with existing data and update only provided fields
-		dest.updateTorrentFields(&existing, updateMap)
-		
-		// Normalize hash: set .Hash from InfohashV1 or InfohashV2 if Hash is empty
-		normalizeHash(&existing)
-		
+		updateTorrentFields(&existing, updateMap)
+
 		dest.Torrents[hash] = existing
 	}
 }
@@ -176,7 +177,7 @@ func (dest *MainData) mergeCategoriesPartial(categoriesMap map[string]interface{
 		}
 
 		// Always start with existing data and update only provided fields
-		dest.updateCategoryFields(&existing, updateMap)
+		updateCategoryFields(&existing, updateMap)
 		dest.Categories[name] = existing
 	}
 }

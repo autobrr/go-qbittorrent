@@ -564,24 +564,30 @@ func (c *Client) SyncMainDataCtxWithRaw(ctx context.Context, rid int64) (*MainDa
 
 	defer drainAndClose(resp)
 
-	// Read the entire response body
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "could not read response body")
-	}
-
-	// First, decode into raw map to preserve field presence information
+	rp, wp := io.Pipe()
 	var rawData map[string]interface{}
-	if err := json.Unmarshal(bodyBytes, &rawData); err != nil {
-		return nil, nil, errors.Wrap(err, "could not unmarshal body")
-	}
+	var mapErr error
+	go func() {
+		defer wp.Close()
+		mapErr = json.NewDecoder(io.TeeReader(resp.Body, wp)).Decode(&rawData)
+		if mapErr == nil {
+			normalizeHashesRaw(rawData)
+		}
+	}()
 
 	// Then decode into structured MainData
 	var info MainData
-	if err := json.Unmarshal(bodyBytes, &info); err != nil {
+	if err := json.NewDecoder(rp).Decode(&info); err != nil {
 		return nil, nil, errors.Wrap(err, "could not unmarshal body")
 	}
 
+	io.Copy(io.Discard, rp)
+
+	if mapErr != nil {
+		return nil, nil, errors.Wrap(mapErr, "could not unmarshal body to map")
+	}
+
+	normalizeHashes(info.Torrents)
 	return &info, rawData, nil
 
 }
@@ -1136,7 +1142,7 @@ func (c *Client) GetTagsCtx(ctx context.Context) ([]string, error) {
 
 	defer drainAndClose(resp)
 
-	m := make([]string, 0)
+	var m []string
 	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
 		return nil, errors.Wrap(err, "could not unmarshal body")
 	}
@@ -1148,21 +1154,19 @@ func (c *Client) CreateTags(tags []string) error {
 }
 
 func (c *Client) CreateTagsCtx(ctx context.Context, tags []string) error {
-	t := strings.Join(tags, ",")
-
 	opts := map[string]string{
-		"tags": t,
+		"tags": strings.Join(tags, ","),
 	}
 
 	resp, err := c.postCtx(ctx, "torrents/createTags", opts)
 	if err != nil {
-		return errors.Wrap(err, "could not create tags; tags: %v", t)
+		return errors.Wrap(err, "could not create tags; tags: %v", strings.Join(tags, ","))
 	}
 
 	defer drainAndClose(resp)
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.Wrap(ErrUnexpectedStatus, "could not create tags; tags: %v | status code: %d", t, resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not create tags; tags: %v | status code: %d", strings.Join(tags, ","), resp.StatusCode)
 	}
 
 	return nil
@@ -2170,9 +2174,9 @@ func (c *Client) GetLogsCtx(ctx context.Context) ([]Log, error) {
 
 	defer drainAndClose(resp)
 
-	m := make([]Log, 0)
+	var m []Log
 	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
-		return m, errors.Wrap(err, "could not unmarshal body")
+		return nil, errors.Wrap(err, "could not unmarshal body")
 	}
 	return m, nil
 }
@@ -2191,7 +2195,7 @@ func (c *Client) GetPeerLogsCtx(ctx context.Context) ([]PeerLog, error) {
 
 	defer drainAndClose(resp)
 
-	m := make([]PeerLog, 0)
+	var m []PeerLog
 	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
 		return m, errors.Wrap(err, "could not unmarshal body")
 	}
