@@ -674,13 +674,21 @@ func mergePeerFields(existing, update TorrentPeer) TorrentPeer {
 		result.Port = update.Port
 	}
 
-	// Always update numeric fields as they can legitimately be 0
+	// Update numeric fields that can change frequently
+	// Progress, speeds, and relevance should always be updated
 	result.Progress = update.Progress
 	result.DownSpeed = update.DownSpeed
 	result.UpSpeed = update.UpSpeed
-	result.Downloaded = update.Downloaded
-	result.Uploaded = update.Uploaded
 	result.Relevance = update.Relevance
+
+	// For Downloaded and Uploaded, only update if non-zero
+	// These are cumulative values that shouldn't be reset to 0 in partial updates
+	if update.Downloaded != 0 {
+		result.Downloaded = update.Downloaded
+	}
+	if update.Uploaded != 0 {
+		result.Uploaded = update.Uploaded
+	}
 
 	return result
 }
