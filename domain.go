@@ -730,7 +730,7 @@ type TorrentPeer struct {
 	CountryCode  string  `json:"country_code,omitempty"`
 	PeerIDClient string  `json:"peer_id_client,omitempty"`
 	Port         int     `json:"port,omitempty"`
-	Progress     float64 `json:"progress,omitempty"`
+	Progress     float64 `json:"progress"` // Progress should always be included (0 is valid)
 	DownSpeed    int64   `json:"dl_speed,omitempty"`
 	UpSpeed      int64   `json:"up_speed,omitempty"`
 	Downloaded   int64   `json:"downloaded,omitempty"`
