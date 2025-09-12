@@ -76,10 +76,21 @@ func mergePeerFields(existing, update TorrentPeer) TorrentPeer {
 	}
 
 	// Update numeric fields that can change frequently
-	// Progress, speeds, and relevance should always be updated
-	result.Progress = update.Progress
+	// Speeds should always be updated (they can legitimately be 0)
 	result.DownSpeed = update.DownSpeed
 	result.UpSpeed = update.UpSpeed
+
+	// Progress should only be updated if it's explicitly provided in the partial update
+	// A seeder with progress=1.0 might receive partial updates with progress=0 when nothing changed
+	// We need to check if progress was actually included in the update
+	// Since we removed omitempty, we need a different approach to detect if it was included
+	// For now, only update progress if it's different from 0 OR if it's explicitly being set to 0
+	// from a non-zero value (which would mean the peer went backwards)
+	if update.Progress > 0 || (update.Progress == 0 && existing.Progress > 0 && existing.Progress < 1.0) {
+		result.Progress = update.Progress
+	}
+
+	// Relevance should always be updated
 	result.Relevance = update.Relevance
 
 	// For Downloaded and Uploaded, only update if non-zero
@@ -93,4 +104,3 @@ func mergePeerFields(existing, update TorrentPeer) TorrentPeer {
 
 	return result
 }
-
