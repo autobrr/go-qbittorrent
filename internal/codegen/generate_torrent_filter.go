@@ -127,57 +127,153 @@ func generateFilterFile(fields []FilterFieldInfo) {
 package qbittorrent
 
 import (
-	"cmp"
 	"slices"
 )
+`
 
-// applyTorrentSorting applies sorting to torrents based on the sort field
+	// Generate comparator functions for each field
+	for _, field := range fields {
+		if field.Type == "bool" {
+			output += fmt.Sprintf(`func compare%s(a, b *Torrent) int {
+	if a.%s != b.%s {
+		if a.%s {
+			return 1
+		}
+		return -1
+	}
+	return 0
+}
+
+`, field.Name, field.Name, field.Name, field.Name)
+		} else if field.Type == "string" {
+			output += fmt.Sprintf(`func compare%s(a, b *Torrent) int {
+	if a.%s == b.%s {
+		return 0
+	} else if a.%s < b.%s {
+		return -1
+	}
+	return 1
+}
+
+`, field.Name, field.Name, field.Name, field.Name, field.Name)
+		} else if isComparableType(field.Type) {
+			output += fmt.Sprintf(`func compare%s(a, b *Torrent) int {
+	if a.%s < b.%s {
+		return -1
+	} else if a.%s > b.%s {
+		return 1
+	}
+	return 0
+}
+
+`, field.Name, field.Name, field.Name, field.Name, field.Name)
+		} else if field.Type == "TorrentState" {
+			output += fmt.Sprintf(`func compare%s(a, b *Torrent) int {
+	if a.%s == b.%s {
+		return 0
+	} else if string(a.%s) < string(b.%s) {
+		return -1
+	}
+	return 1
+}
+
+`, field.Name, field.Name, field.Name, field.Name, field.Name)
+		}
+	}
+
+	// Default comparator function
+	output += `func compareDefault(a, b *Torrent) int {
+	if a.Name == b.Name {
+		return 0
+	} else if a.Name < b.Name {
+		return -1
+	}
+	return 1
+}
+
+// Precomputed comparators for sorting torrents
+var torrentComparators = map[string]func(a, b *Torrent) int{
+`
+
+	// Generate map entries
+	for _, field := range fields {
+		if field.Type == "bool" || isComparableType(field.Type) || field.Type == "TorrentState" {
+			output += fmt.Sprintf(`	"%s": compare%s,
+`, field.JSONTag, field.Name)
+		}
+	}
+
+	output += `	"default": compareDefault,
+}
+
+// torrentSorter is a reusable struct for sorting torrents without allocations
+type torrentSorter struct {
+	torrents   []Torrent
+	comparator func(a, b *Torrent) int
+	reverse    bool
+}
+
+// compare is a static method that doesn't allocate
+func (s *torrentSorter) compare(i, j int) int {
+	result := s.comparator(&s.torrents[i], &s.torrents[j])
+	if result == 0 {
+		if s.torrents[i].Hash == s.torrents[j].Hash {
+			result = 0
+		} else if s.torrents[i].Hash < s.torrents[j].Hash {
+			result = -1
+		} else {
+			result = 1
+		} // secondary sort by hash for stability
+	}
+	if s.reverse {
+		return -result
+	}
+	return result
+}
+
 func applyTorrentSorting(torrents []Torrent, sortField string, reverse bool) {
 	if sortField == "" {
 		return
 	}
 
-	slices.SortFunc(torrents, func(a, b Torrent) int {
-		result := cmp.Or(
-			func() int {
-				switch sortField {
-`
-
-	// Generate switch cases for each field
-	for _, field := range fields {
-		if field.Type == "bool" {
-			output += fmt.Sprintf(`				case "%s":
-					if a.%s != b.%s {
-						if a.%s {
-							return 1
-						}
-						return -1
-					}
-					return 0
-`, field.JSONTag, field.Name, field.Name, field.Name)
-		} else if isComparableType(field.Type) {
-			output += fmt.Sprintf(`				case "%s":
-					return cmp.Compare(a.%s, b.%s)
-`, field.JSONTag, field.Name, field.Name)
-		} else if field.Type == "TorrentState" {
-			output += fmt.Sprintf(`				case "%s":
-					return cmp.Compare(string(a.%s), string(b.%s))
-`, field.JSONTag, field.Name, field.Name)
-		}
+	comparator, exists := torrentComparators[sortField]
+	if !exists {
+		comparator = torrentComparators["default"]
 	}
 
-	output += `				default:
-					return cmp.Compare(a.Name, b.Name) // default to name
-				}
-			}(),
-			cmp.Compare(a.Hash, b.Hash), // secondary sort by hash for stability
-		)
+	// Create indices to sort instead of large structs
+	indices := make([]int, len(torrents))
+	for i := range indices {
+		indices[i] = i
+	}
 
-		if reverse {
-			return -result
+	sorter := &torrentSorter{
+		torrents:  torrents,
+		comparator: comparator,
+		reverse:   reverse,
+	}
+
+	// Sort indices using the static method - no allocation!
+	slices.SortFunc(indices, sorter.compare)
+
+	// Apply permutation in place using cycle decomposition
+	for i := 0; i < len(torrents); i++ {
+		if indices[i] != i {
+			// Start of a cycle
+			temp := torrents[i]
+			j := i
+			for {
+				k := indices[j]
+				indices[j] = j // Mark as processed
+				if k == i {
+					torrents[j] = temp
+					break
+				}
+				torrents[j] = torrents[k]
+				j = k
+			}
 		}
-		return result
-	})
+	}
 }
 `
 
