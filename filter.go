@@ -194,6 +194,22 @@ var stateFilterMatches = map[TorrentState]map[TorrentFilter]struct{}{
 
 // matchesStateFilter checks if a torrent state matches the given filter using precomputed lookup
 func matchesStateFilter(state TorrentState, filter TorrentFilter) bool {
+	// Special case: TorrentFilterRunning means "not stopped"
+	// Added in qBittorrent v4.6.0+ (commit 5d1c2496, March 2024)
+	if filter == TorrentFilterRunning {
+		// Running is the inverse of stopped states
+		return state != TorrentStateStoppedUp && state != TorrentStateStoppedDl
+	}
+
+	// Special case: TorrentFilterResumed for backward compatibility
+	// Used in qBittorrent < v4.6.0 (e.g., v4.3.9)
+	// "Resumed" meant !isPaused() in older versions
+	if filter == TorrentFilterResumed {
+		// Resumed is the inverse of paused states
+		return state != TorrentStatePausedUp && state != TorrentStatePausedDl &&
+			state != TorrentStateStoppedUp && state != TorrentStateStoppedDl
+	}
+
 	if stateMap, exists := stateFilterMatches[state]; exists {
 		_, ok := stateMap[filter]
 		return ok

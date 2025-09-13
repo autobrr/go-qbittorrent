@@ -205,14 +205,23 @@ const (
 	// Torrent is completed
 	TorrentFilterCompleted TorrentFilter = "completed"
 
-	// Torrent is resumed
+	// Torrent is resumed (for backward compatibility with qBittorrent < 4.6.0)
+	// In older versions (e.g., v4.3.9), "resumed" means !isPaused()
+	// Removed in v4.6.0+ (commit 5d1c2496, March 2024) in favor of "running"
 	TorrentFilterResumed TorrentFilter = "resumed"
 
 	// Torrent is paused
 	TorrentFilterPaused TorrentFilter = "paused"
 
 	// Torrent is stopped
+	// Added in qBittorrent v4.6.0+ (commit 5d1c2496, March 2024)
+	// Replaces the old "paused" filter
 	TorrentFilterStopped TorrentFilter = "stopped"
+
+	// Torrent is running (not stopped)
+	// Added in qBittorrent v4.6.0+ (commit 5d1c2496, March 2024)
+	// Replaces the old "resumed" filter
+	TorrentFilterRunning TorrentFilter = "running"
 
 	// Torrent is stalled
 	TorrentFilterStalled TorrentFilter = "stalled"
@@ -405,10 +414,12 @@ func ParseTorrentFilter(filter string) TorrentFilter {
 		return TorrentFilterUploading
 	case "completed":
 		return TorrentFilterCompleted
+	case "resumed":
+		return TorrentFilterResumed
 	case "stopped":
 		return TorrentFilterStopped
 	case "running":
-		return TorrentFilterActive
+		return TorrentFilterRunning
 	case "active":
 		return TorrentFilterActive
 	case "inactive":

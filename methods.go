@@ -141,6 +141,60 @@ func (c *Client) getApiVersion() (*semver.Version, error) {
 	return c.version, nil
 }
 
+// translateFilter translates filter names based on qBittorrent version for compatibility
+// qBittorrent 4.6.0+ changed from "paused/resumed" to "stopped/running"
+func (c *Client) translateFilter(filter TorrentFilter) string {
+	// Get the API version, but don't fail if we can't get it
+	ver, err := c.getApiVersion()
+	if err != nil {
+		// If we can't get version, just return the filter as-is
+		return string(filter)
+	}
+
+	// Check if this is qBittorrent 4.6.0 or later
+	// The filter change happened in 4.6.0 (March 2024)
+	v460 := semver.MustParse("4.6.0")
+	isModernVersion := ver.GreaterThan(v460) || ver.Equal(v460)
+
+	switch filter {
+	case TorrentFilterResumed:
+		// "resumed" filter - translate based on version
+		if isModernVersion {
+			// Modern qBittorrent doesn't recognize "resumed", use "running"
+			return "running"
+		}
+		// Older versions use "resumed"
+		return "resumed"
+	case TorrentFilterRunning:
+		// "running" filter - translate based on version
+		if !isModernVersion {
+			// Older qBittorrent doesn't recognize "running", use "resumed"
+			return "resumed"
+		}
+		// Modern versions use "running"
+		return "running"
+	case TorrentFilterPaused:
+		// "paused" filter - translate based on version
+		if isModernVersion {
+			// Modern qBittorrent uses "stopped" instead of "paused"
+			return "stopped"
+		}
+		// Older versions use "paused"
+		return "paused"
+	case TorrentFilterStopped:
+		// "stopped" filter - translate based on version
+		if !isModernVersion {
+			// Older qBittorrent doesn't recognize "stopped", use "paused"
+			return "paused"
+		}
+		// Modern versions use "stopped"
+		return "stopped"
+	default:
+		// All other filters remain unchanged
+		return string(filter)
+	}
+}
+
 func (c *Client) GetAppPreferences() (AppPreferences, error) {
 	return c.GetAppPreferencesCtx(context.Background())
 }
@@ -239,7 +293,9 @@ func (c *Client) GetTorrentsCtx(ctx context.Context, o TorrentFilterOptions) ([]
 	}
 
 	if o.Filter != "" {
-		opts["filter"] = string(o.Filter)
+		// Translate filter based on qBittorrent version for compatibility
+		filter := c.translateFilter(o.Filter)
+		opts["filter"] = filter
 	}
 
 	if o.Category != "" {
