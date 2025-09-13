@@ -2344,6 +2344,47 @@ func (c *Client) GetTorrentsWebSeedsCtx(ctx context.Context, hash string) ([]Web
 	return m, nil
 }
 
+// GetTorrentPeers retrieves the list of peers for a torrent
+func (c *Client) GetTorrentPeers(hash string, rid int64) (*TorrentPeersResponse, error) {
+	return c.GetTorrentPeersCtx(context.Background(), hash, rid)
+}
+
+// GetTorrentPeersCtx retrieves the list of peers for a torrent with context
+func (c *Client) GetTorrentPeersCtx(ctx context.Context, hash string, rid int64) (*TorrentPeersResponse, error) {
+	opts := map[string]string{
+		"hash": hash,
+		"rid":  strconv.FormatInt(rid, 10),
+	}
+
+	resp, err := c.getCtx(ctx, "sync/torrentPeers", opts)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get torrent peers; hash: %v", hash)
+	}
+
+	defer drainAndClose(resp)
+
+	switch resp.StatusCode {
+	case http.StatusNotFound:
+		return nil, errors.Wrap(ErrTorrentNotFound, "hash: %s", hash)
+	case http.StatusOK:
+		break
+	default:
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get peers for torrent; hash: %v, status code: %d", hash, resp.StatusCode)
+	}
+
+	var peersResp TorrentPeersResponse
+	if err = json.NewDecoder(resp.Body).Decode(&peersResp); err != nil {
+		return nil, errors.Wrap(err, "could not decode response")
+	}
+
+	// Initialize peers map if it's nil
+	if peersResp.Peers == nil {
+		peersResp.Peers = make(map[string]TorrentPeer)
+	}
+
+	return &peersResp, nil
+}
+
 // Check if status not working or something else
 // https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-4.1)#get-torrent-trackers
 //

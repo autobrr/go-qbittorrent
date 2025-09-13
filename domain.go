@@ -718,6 +718,35 @@ type PeerLog struct {
 	Reason    string `json:"reason"`
 }
 
+// TorrentPeer represents a peer connected to a torrent
+type TorrentPeer struct {
+	IP           string  `json:"ip,omitempty"`
+	Connection   string  `json:"connection,omitempty"`
+	Flags        string  `json:"flags,omitempty"`
+	FlagsDesc    string  `json:"flags_desc,omitempty"`
+	Client       string  `json:"client,omitempty"`
+	Files        string  `json:"files,omitempty"`
+	Country      string  `json:"country,omitempty"`
+	CountryCode  string  `json:"country_code,omitempty"`
+	PeerIDClient string  `json:"peer_id_client,omitempty"`
+	Port         int     `json:"port,omitempty"`
+	Progress     float64 `json:"progress"` // Progress should always be included (0 is valid)
+	DownSpeed    int64   `json:"dl_speed,omitempty"`
+	UpSpeed      int64   `json:"up_speed,omitempty"`
+	Downloaded   int64   `json:"downloaded,omitempty"`
+	Uploaded     int64   `json:"uploaded,omitempty"`
+	Relevance    float64 `json:"relevance,omitempty"`
+}
+
+// TorrentPeersResponse represents the response from sync/torrentPeers endpoint
+type TorrentPeersResponse struct {
+	Peers        map[string]TorrentPeer `json:"peers,omitempty"`
+	PeersRemoved []string               `json:"peers_removed,omitempty"`
+	Rid          int64                  `json:"rid"`
+	FullUpdate   bool                   `json:"full_update"`
+	ShowFlags    bool                   `json:"show_flags,omitempty"`
+}
+
 type BuildInfo struct {
 	Qt         string `json:"qt"`         // QT version
 	Libtorrent string `json:"libtorrent"` // libtorrent version
