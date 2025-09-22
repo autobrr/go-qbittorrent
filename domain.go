@@ -1,6 +1,7 @@
 package qbittorrent
 
 import (
+	"encoding/json"
 	"strconv"
 
 	"github.com/autobrr/go-qbittorrent/errors"
@@ -747,6 +748,41 @@ type TorrentPeer struct {
 	Downloaded   int64   `json:"downloaded,omitempty"`
 	Uploaded     int64   `json:"uploaded,omitempty"`
 	Relevance    float64 `json:"relevance,omitempty"`
+	progressSet  bool    `json:"-"`
+}
+
+// HasProgress reports whether the progress field was present in the JSON payload.
+func (tp TorrentPeer) HasProgress() bool {
+	return tp.progressSet
+}
+
+// UnmarshalJSON captures whether optional fields such as progress were present in the payload.
+func (tp *TorrentPeer) UnmarshalJSON(data []byte) error {
+	type torrentPeerAlias TorrentPeer
+	aux := &struct {
+		*torrentPeerAlias
+	}{
+		torrentPeerAlias: (*torrentPeerAlias)(tp),
+	}
+
+	// Reset presence flags before decoding
+	tp.progressSet = false
+
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	if _, ok := raw["progress"]; ok {
+		// Field explicitly present in update
+		tp.progressSet = true
+	}
+
+	return nil
 }
 
 // TorrentPeersResponse represents the response from sync/torrentPeers endpoint

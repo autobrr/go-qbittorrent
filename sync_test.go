@@ -1127,20 +1127,22 @@ func TestMergePeers_PartialUpdate(t *testing.T) {
 		Rid: 1,
 		Peers: map[string]TorrentPeer{
 			"192.168.1.1:6881": {
-				IP:         "192.168.1.1",
-				Port:       6881,
-				Client:     "qBittorrent 4.5.0",
-				Progress:   0.5,
-				DownSpeed:  1000,
-				UpSpeed:    500,
-				Downloaded: 1024000,
-				Uploaded:   512000,
+				IP:          "192.168.1.1",
+				Port:        6881,
+				Client:      "qBittorrent 4.5.0",
+				Progress:    0.5,
+				progressSet: true,
+				DownSpeed:   1000,
+				UpSpeed:     500,
+				Downloaded:  1024000,
+				Uploaded:    512000,
 			},
 			"192.168.1.2:6882": {
-				IP:       "192.168.1.2",
-				Port:     6882,
-				Client:   "Transmission 3.0",
-				Progress: 0.75,
+				IP:          "192.168.1.2",
+				Port:        6882,
+				Client:      "Transmission 3.0",
+				Progress:    0.75,
+				progressSet: true,
 			},
 		},
 	}
@@ -1150,16 +1152,18 @@ func TestMergePeers_PartialUpdate(t *testing.T) {
 		FullUpdate: false,
 		Peers: map[string]TorrentPeer{
 			"192.168.1.1:6881": {
-				Progress:  0.75, // Updated progress
-				DownSpeed: 2000, // Updated speed
-				UpSpeed:   0,    // Explicitly set to 0 (numeric fields always update)
+				Progress:    0.75, // Updated progress
+				progressSet: true,
+				DownSpeed:   2000, // Updated speed
+				UpSpeed:     0,    // Explicitly set to 0 (numeric fields always update)
 				// String fields not in update should be preserved
 			},
 			"192.168.1.3:6883": { // New peer
-				IP:       "192.168.1.3",
-				Port:     6883,
-				Client:   "Deluge 2.0",
-				Progress: 0.25,
+				IP:          "192.168.1.3",
+				Port:        6883,
+				Client:      "Deluge 2.0",
+				Progress:    0.25,
+				progressSet: true,
 			},
 		},
 		PeersRemoved: []string{"192.168.1.2:6882"}, // Remove this peer
@@ -1203,6 +1207,64 @@ func TestMergePeers_PartialUpdate(t *testing.T) {
 	}
 }
 
+func TestMergePeers_PartialUpdate_NoProgressChange(t *testing.T) {
+	existing := &TorrentPeersResponse{
+		Peers: map[string]TorrentPeer{
+			"peer1": {
+				Progress:    1.0,
+				progressSet: true,
+				DownSpeed:   900,
+			},
+		},
+	}
+
+	update := &TorrentPeersResponse{
+		Rid: 2,
+		Peers: map[string]TorrentPeer{
+			"peer1": {
+				DownSpeed:   1200,
+				progressSet: false,
+			},
+		},
+	}
+
+	existing.MergePeers(update)
+
+	peer := existing.Peers["peer1"]
+	if peer.Progress != 1.0 {
+		t.Errorf("Expected progress to remain 1.0 when update omitted progress, got %f", peer.Progress)
+	}
+	if !peer.HasProgress() {
+		t.Errorf("Expected peer to retain progress presence flag")
+	}
+	if peer.DownSpeed != 1200 {
+		t.Errorf("Expected DownSpeed to update to 1200, got %d", peer.DownSpeed)
+	}
+}
+
+func TestTorrentPeerUnmarshalJSONProgressPresence(t *testing.T) {
+	withProgress := []byte(`{"ip":"1.2.3.4","progress":0.5}`)
+	var peer TorrentPeer
+	if err := json.Unmarshal(withProgress, &peer); err != nil {
+		t.Fatalf("unexpected error decoding peer: %v", err)
+	}
+	if !peer.HasProgress() {
+		t.Errorf("Expected progress flag to be set when field is present")
+	}
+	if peer.Progress != 0.5 {
+		t.Errorf("Expected progress 0.5, got %f", peer.Progress)
+	}
+
+	withoutProgress := []byte(`{"ip":"1.2.3.4"}`)
+	peer = TorrentPeer{}
+	if err := json.Unmarshal(withoutProgress, &peer); err != nil {
+		t.Fatalf("unexpected error decoding peer without progress: %v", err)
+	}
+	if peer.HasProgress() {
+		t.Errorf("Expected progress flag to be unset when field missing")
+	}
+}
+
 func TestMergePeerFields(t *testing.T) {
 	existing := TorrentPeer{
 		IP:           "192.168.1.1",
@@ -1212,6 +1274,7 @@ func TestMergePeerFields(t *testing.T) {
 		FlagsDesc:    "Encryption, Download, Upload",
 		Client:       "qBittorrent 4.5.0",
 		Progress:     0.5,
+		progressSet:  true,
 		DownSpeed:    1000,
 		UpSpeed:      500,
 		Downloaded:   1024000,
@@ -1225,10 +1288,11 @@ func TestMergePeerFields(t *testing.T) {
 
 	// Test partial update with zero Downloaded/Uploaded (should preserve existing values)
 	update := TorrentPeer{
-		Progress:  0.75,
-		DownSpeed: 2000,
-		UpSpeed:   1000,
-		Country:   "Canada",
+		Progress:    0.75,
+		progressSet: true,
+		DownSpeed:   2000,
+		UpSpeed:     1000,
+		Country:     "Canada",
 		// Downloaded and Uploaded are 0 - should preserve existing values
 	}
 
@@ -1246,6 +1310,9 @@ func TestMergePeerFields(t *testing.T) {
 	}
 	if result.Country != "Canada" {
 		t.Errorf("Expected Country Canada, got %s", result.Country)
+	}
+	if !result.HasProgress() {
+		t.Errorf("Expected progress presence to remain true after update")
 	}
 
 	// IMPORTANT: Check that Downloaded/Uploaded are preserved when 0 in update
