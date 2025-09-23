@@ -60,6 +60,8 @@ type Torrent struct {
 	Hash               string           `json:"hash"`
 	InfohashV1         string           `json:"infohash_v1"`
 	InfohashV2         string           `json:"infohash_v2"`
+	Popularity         float64          `json:"popularity"`
+	Private            bool             `json:"private"`
 	LastActivity       int64            `json:"last_activity"`
 	MagnetURI          string           `json:"magnet_uri"`
 	MaxRatio           float64          `json:"max_ratio"`
@@ -73,6 +75,7 @@ type Torrent struct {
 	Progress           float64          `json:"progress"`
 	Ratio              float64          `json:"ratio"`
 	RatioLimit         float64          `json:"ratio_limit"`
+	Reannounce         int64            `json:"reannounce"`
 	SavePath           string           `json:"save_path"`
 	SeedingTime        int64            `json:"seeding_time"`
 	SeedingTimeLimit   int64            `json:"seeding_time_limit"`

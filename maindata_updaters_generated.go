@@ -136,6 +136,20 @@ func updateTorrentInfohashV2(val interface{}, obj *Torrent) {
 	}
 }
 
+// updateTorrentPopularity updates the Popularity field of Torrent
+func updateTorrentPopularity(val interface{}, obj *Torrent) {
+	if p, ok := val.(float64); ok {
+		obj.Popularity = p
+	}
+}
+
+// updateTorrentPrivate updates the Private field of Torrent
+func updateTorrentPrivate(val interface{}, obj *Torrent) {
+	if p, ok := val.(bool); ok {
+		obj.Private = p
+	}
+}
+
 // updateTorrentLastActivity updates the LastActivity field of Torrent
 func updateTorrentLastActivity(val interface{}, obj *Torrent) {
 	if l, ok := val.(float64); ok {
@@ -224,6 +238,13 @@ func updateTorrentRatio(val interface{}, obj *Torrent) {
 func updateTorrentRatioLimit(val interface{}, obj *Torrent) {
 	if r, ok := val.(float64); ok {
 		obj.RatioLimit = r
+	}
+}
+
+// updateTorrentReannounce updates the Reannounce field of Torrent
+func updateTorrentReannounce(val interface{}, obj *Torrent) {
+	if r, ok := val.(float64); ok {
+		obj.Reannounce = int64(r)
 	}
 }
 
@@ -383,6 +404,8 @@ var torrentFieldUpdaters = map[string]func(val interface{}, obj *Torrent){
 	"hash": updateTorrentHash,
 	"infohash_v1": updateTorrentInfohashV1,
 	"infohash_v2": updateTorrentInfohashV2,
+	"popularity": updateTorrentPopularity,
+	"private": updateTorrentPrivate,
 	"last_activity": updateTorrentLastActivity,
 	"magnet_uri": updateTorrentMagnetURI,
 	"max_ratio": updateTorrentMaxRatio,
@@ -396,6 +419,7 @@ var torrentFieldUpdaters = map[string]func(val interface{}, obj *Torrent){
 	"progress": updateTorrentProgress,
 	"ratio": updateTorrentRatio,
 	"ratio_limit": updateTorrentRatioLimit,
+	"reannounce": updateTorrentReannounce,
 	"save_path": updateTorrentSavePath,
 	"seeding_time": updateTorrentSeedingTime,
 	"seeding_time_limit": updateTorrentSeedingTimeLimit,
