@@ -180,6 +180,25 @@ func compareInfohashV2(a, b *Torrent) int {
 	return 1
 }
 
+func comparePopularity(a, b *Torrent) int {
+	if a.Popularity < b.Popularity {
+		return -1
+	} else if a.Popularity > b.Popularity {
+		return 1
+	}
+	return 0
+}
+
+func comparePrivate(a, b *Torrent) int {
+	if a.Private != b.Private {
+		if a.Private {
+			return 1
+		}
+		return -1
+	}
+	return 0
+}
+
 func compareLastActivity(a, b *Torrent) int {
 	if a.LastActivity < b.LastActivity {
 		return -1
@@ -292,6 +311,15 @@ func compareRatioLimit(a, b *Torrent) int {
 	if a.RatioLimit < b.RatioLimit {
 		return -1
 	} else if a.RatioLimit > b.RatioLimit {
+		return 1
+	}
+	return 0
+}
+
+func compareReannounce(a, b *Torrent) int {
+	if a.Reannounce < b.Reannounce {
+		return -1
+	} else if a.Reannounce > b.Reannounce {
 		return 1
 	}
 	return 0
@@ -482,6 +510,8 @@ var torrentComparators = map[string]func(a, b *Torrent) int{
 	"hash": compareHash,
 	"infohash_v1": compareInfohashV1,
 	"infohash_v2": compareInfohashV2,
+	"popularity": comparePopularity,
+	"private": comparePrivate,
 	"last_activity": compareLastActivity,
 	"magnet_uri": compareMagnetURI,
 	"max_ratio": compareMaxRatio,
@@ -495,6 +525,7 @@ var torrentComparators = map[string]func(a, b *Torrent) int{
 	"progress": compareProgress,
 	"ratio": compareRatio,
 	"ratio_limit": compareRatioLimit,
+	"reannounce": compareReannounce,
 	"save_path": compareSavePath,
 	"seeding_time": compareSeedingTime,
 	"seeding_time_limit": compareSeedingTimeLimit,
