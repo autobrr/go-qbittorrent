@@ -3,7 +3,6 @@ package qbittorrent
 import (
 	"context"
 	"math/rand"
-	"sort"
 	"sync"
 	"time"
 )
@@ -103,12 +102,12 @@ func (sm *SyncManager) Sync(ctx context.Context) error {
 	if sm.syncing {
 		// Another sync is in progress, wait for it to complete
 		sm.syncCond.Wait()
-		// Get the cached error from the last sync
+		sm.syncMu.Unlock()
+
+		// Now safely read the cached error from the completed sync
 		sm.mu.RLock()
 		cachedError := sm.lastError
 		sm.mu.RUnlock()
-		sm.syncMu.Unlock()
-		// Return the cached error from the sync that just completed
 		return cachedError
 	}
 
@@ -159,7 +158,7 @@ func (sm *SyncManager) Sync(ctx context.Context) error {
 
 	// Call update callback if set
 	if sm.options.OnUpdate != nil {
-		sm.options.OnUpdate(sm.data)
+		sm.options.OnUpdate(sm.copyMainData(sm.data))
 	}
 
 	// Success - clear any previous error
@@ -246,27 +245,14 @@ func (sm *SyncManager) GetTorrents(options TorrentFilterOptions) []Torrent {
 		return nil
 	}
 
-	// Get hashes in deterministic order to ensure consistent results
-	hashes := make([]string, 0, len(sm.data.Torrents))
-	for hash := range sm.data.Torrents {
-		hashes = append(hashes, hash)
-	}
-	sort.Strings(hashes)
-
-	result := make([]Torrent, len(sm.data.Torrents))
-	count := 0
-	for _, hash := range hashes {
-		torrent := sm.data.Torrents[hash]
+	result := make([]Torrent, 0, len(sm.data.Torrents))
+	for _, torrent := range sm.data.Torrents {
 		if matchesTorrentFilter(torrent, options) {
-			result[count] = torrent
-			count++
+			result = append(result, torrent)
 		}
 	}
-	filtered := result[:count]
 
-	filtered = applyTorrentFilterOptions(filtered, options)
-
-	return filtered
+	return applyTorrentFilterOptions(result, options)
 }
 
 // GetTorrentMap returns a filtered map of torrents keyed by hash

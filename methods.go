@@ -141,6 +141,60 @@ func (c *Client) getApiVersion() (*semver.Version, error) {
 	return c.version, nil
 }
 
+// translateFilter translates filter names based on qBittorrent version for compatibility
+// qBittorrent 4.6.0+ changed from "paused/resumed" to "stopped/running"
+func (c *Client) translateFilter(filter TorrentFilter) string {
+	// Get the API version, but don't fail if we can't get it
+	ver, err := c.getApiVersion()
+	if err != nil {
+		// If we can't get version, just return the filter as-is
+		return string(filter)
+	}
+
+	// Check if this is qBittorrent 4.6.0 or later
+	// The filter change happened in 4.6.0 (March 2024)
+	v460 := semver.MustParse("4.6.0")
+	isModernVersion := ver.GreaterThan(v460) || ver.Equal(v460)
+
+	switch filter {
+	case TorrentFilterResumed:
+		// "resumed" filter - translate based on version
+		if isModernVersion {
+			// Modern qBittorrent doesn't recognize "resumed", use "running"
+			return "running"
+		}
+		// Older versions use "resumed"
+		return "resumed"
+	case TorrentFilterRunning:
+		// "running" filter - translate based on version
+		if !isModernVersion {
+			// Older qBittorrent doesn't recognize "running", use "resumed"
+			return "resumed"
+		}
+		// Modern versions use "running"
+		return "running"
+	case TorrentFilterPaused:
+		// "paused" filter - translate based on version
+		if isModernVersion {
+			// Modern qBittorrent uses "stopped" instead of "paused"
+			return "stopped"
+		}
+		// Older versions use "paused"
+		return "paused"
+	case TorrentFilterStopped:
+		// "stopped" filter - translate based on version
+		if !isModernVersion {
+			// Older qBittorrent doesn't recognize "stopped", use "paused"
+			return "paused"
+		}
+		// Modern versions use "stopped"
+		return "stopped"
+	default:
+		// All other filters remain unchanged
+		return string(filter)
+	}
+}
+
 func (c *Client) GetAppPreferences() (AppPreferences, error) {
 	return c.GetAppPreferencesCtx(context.Background())
 }
@@ -239,7 +293,9 @@ func (c *Client) GetTorrentsCtx(ctx context.Context, o TorrentFilterOptions) ([]
 	}
 
 	if o.Filter != "" {
-		opts["filter"] = string(o.Filter)
+		// Translate filter based on qBittorrent version for compatibility
+		filter := c.translateFilter(o.Filter)
+		opts["filter"] = filter
 	}
 
 	if o.Category != "" {
@@ -564,24 +620,30 @@ func (c *Client) SyncMainDataCtxWithRaw(ctx context.Context, rid int64) (*MainDa
 
 	defer drainAndClose(resp)
 
-	// Read the entire response body
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "could not read response body")
-	}
-
-	// First, decode into raw map to preserve field presence information
+	rp, wp := io.Pipe()
 	var rawData map[string]interface{}
-	if err := json.Unmarshal(bodyBytes, &rawData); err != nil {
-		return nil, nil, errors.Wrap(err, "could not unmarshal body")
-	}
+	var mapErr error
+	go func() {
+		defer wp.Close()
+		mapErr = json.NewDecoder(io.TeeReader(resp.Body, wp)).Decode(&rawData)
+		if mapErr == nil {
+			normalizeHashesRaw(rawData)
+		}
+	}()
 
 	// Then decode into structured MainData
 	var info MainData
-	if err := json.Unmarshal(bodyBytes, &info); err != nil {
+	if err := json.NewDecoder(rp).Decode(&info); err != nil {
 		return nil, nil, errors.Wrap(err, "could not unmarshal body")
 	}
 
+	io.Copy(io.Discard, rp)
+
+	if mapErr != nil {
+		return nil, nil, errors.Wrap(mapErr, "could not unmarshal body to map")
+	}
+
+	normalizeHashes(info.Torrents)
 	return &info, rawData, nil
 
 }
@@ -1136,7 +1198,7 @@ func (c *Client) GetTagsCtx(ctx context.Context) ([]string, error) {
 
 	defer drainAndClose(resp)
 
-	m := make([]string, 0)
+	var m []string
 	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
 		return nil, errors.Wrap(err, "could not unmarshal body")
 	}
@@ -1148,21 +1210,19 @@ func (c *Client) CreateTags(tags []string) error {
 }
 
 func (c *Client) CreateTagsCtx(ctx context.Context, tags []string) error {
-	t := strings.Join(tags, ",")
-
 	opts := map[string]string{
-		"tags": t,
+		"tags": strings.Join(tags, ","),
 	}
 
 	resp, err := c.postCtx(ctx, "torrents/createTags", opts)
 	if err != nil {
-		return errors.Wrap(err, "could not create tags; tags: %v", t)
+		return errors.Wrap(err, "could not create tags; tags: %v", strings.Join(tags, ","))
 	}
 
 	defer drainAndClose(resp)
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.Wrap(ErrUnexpectedStatus, "could not create tags; tags: %v | status code: %d", t, resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not create tags; tags: %v | status code: %d", strings.Join(tags, ","), resp.StatusCode)
 	}
 
 	return nil
@@ -2170,9 +2230,9 @@ func (c *Client) GetLogsCtx(ctx context.Context) ([]Log, error) {
 
 	defer drainAndClose(resp)
 
-	m := make([]Log, 0)
+	var m []Log
 	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
-		return m, errors.Wrap(err, "could not unmarshal body")
+		return nil, errors.Wrap(err, "could not unmarshal body")
 	}
 	return m, nil
 }
@@ -2191,7 +2251,7 @@ func (c *Client) GetPeerLogsCtx(ctx context.Context) ([]PeerLog, error) {
 
 	defer drainAndClose(resp)
 
-	m := make([]PeerLog, 0)
+	var m []PeerLog
 	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
 		return m, errors.Wrap(err, "could not unmarshal body")
 	}
@@ -2338,6 +2398,47 @@ func (c *Client) GetTorrentsWebSeedsCtx(ctx context.Context, hash string) ([]Web
 	}
 
 	return m, nil
+}
+
+// GetTorrentPeers retrieves the list of peers for a torrent
+func (c *Client) GetTorrentPeers(hash string, rid int64) (*TorrentPeersResponse, error) {
+	return c.GetTorrentPeersCtx(context.Background(), hash, rid)
+}
+
+// GetTorrentPeersCtx retrieves the list of peers for a torrent with context
+func (c *Client) GetTorrentPeersCtx(ctx context.Context, hash string, rid int64) (*TorrentPeersResponse, error) {
+	opts := map[string]string{
+		"hash": hash,
+		"rid":  strconv.FormatInt(rid, 10),
+	}
+
+	resp, err := c.getCtx(ctx, "sync/torrentPeers", opts)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get torrent peers; hash: %v", hash)
+	}
+
+	defer drainAndClose(resp)
+
+	switch resp.StatusCode {
+	case http.StatusNotFound:
+		return nil, errors.Wrap(ErrTorrentNotFound, "hash: %s", hash)
+	case http.StatusOK:
+		break
+	default:
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get peers for torrent; hash: %v, status code: %d", hash, resp.StatusCode)
+	}
+
+	var peersResp TorrentPeersResponse
+	if err = json.NewDecoder(resp.Body).Decode(&peersResp); err != nil {
+		return nil, errors.Wrap(err, "could not decode response")
+	}
+
+	// Initialize peers map if it's nil
+	if peersResp.Peers == nil {
+		peersResp.Peers = make(map[string]TorrentPeer)
+	}
+
+	return &peersResp, nil
 }
 
 // Check if status not working or something else

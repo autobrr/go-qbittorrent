@@ -3,445 +3,755 @@
 
 package qbittorrent
 
-// updateTorrentFields updates only the fields that are present in the update map
-func (dest *MainData) updateTorrentFields(obj *Torrent, updateMap map[string]interface{}) {
-	// Only update fields that are explicitly present in the JSON
-	if val, exists := updateMap["added_on"]; exists {
-		if a, ok := val.(float64); ok {
-			obj.AddedOn = int64(a)
-		}
+// updateTorrentAddedOn updates the AddedOn field of Torrent
+func updateTorrentAddedOn(val interface{}, obj *Torrent) {
+	if a, ok := val.(float64); ok {
+		obj.AddedOn = int64(a)
 	}
-	if val, exists := updateMap["amount_left"]; exists {
-		if a, ok := val.(float64); ok {
-			obj.AmountLeft = int64(a)
-		}
+}
+
+// updateTorrentAmountLeft updates the AmountLeft field of Torrent
+func updateTorrentAmountLeft(val interface{}, obj *Torrent) {
+	if a, ok := val.(float64); ok {
+		obj.AmountLeft = int64(a)
 	}
-	if val, exists := updateMap["auto_tmm"]; exists {
-		if a, ok := val.(bool); ok {
-			obj.AutoManaged = a
-		}
+}
+
+// updateTorrentAutoManaged updates the AutoManaged field of Torrent
+func updateTorrentAutoManaged(val interface{}, obj *Torrent) {
+	if a, ok := val.(bool); ok {
+		obj.AutoManaged = a
 	}
-	if val, exists := updateMap["availability"]; exists {
-		if a, ok := val.(float64); ok {
-			obj.Availability = a
-		}
+}
+
+// updateTorrentAvailability updates the Availability field of Torrent
+func updateTorrentAvailability(val interface{}, obj *Torrent) {
+	if a, ok := val.(float64); ok {
+		obj.Availability = a
 	}
-	if val, exists := updateMap["category"]; exists {
-		if c, ok := val.(string); ok {
-			obj.Category = c
-		}
+}
+
+// updateTorrentCategory updates the Category field of Torrent
+func updateTorrentCategory(val interface{}, obj *Torrent) {
+	if c, ok := val.(string); ok {
+		obj.Category = c
 	}
-	if val, exists := updateMap["completed"]; exists {
-		if c, ok := val.(float64); ok {
-			obj.Completed = int64(c)
-		}
+}
+
+// updateTorrentCompleted updates the Completed field of Torrent
+func updateTorrentCompleted(val interface{}, obj *Torrent) {
+	if c, ok := val.(float64); ok {
+		obj.Completed = int64(c)
 	}
-	if val, exists := updateMap["completion_on"]; exists {
-		if c, ok := val.(float64); ok {
-			obj.CompletionOn = int64(c)
-		}
+}
+
+// updateTorrentCompletionOn updates the CompletionOn field of Torrent
+func updateTorrentCompletionOn(val interface{}, obj *Torrent) {
+	if c, ok := val.(float64); ok {
+		obj.CompletionOn = int64(c)
 	}
-	if val, exists := updateMap["content_path"]; exists {
-		if c, ok := val.(string); ok {
-			obj.ContentPath = c
-		}
+}
+
+// updateTorrentContentPath updates the ContentPath field of Torrent
+func updateTorrentContentPath(val interface{}, obj *Torrent) {
+	if c, ok := val.(string); ok {
+		obj.ContentPath = c
 	}
-	if val, exists := updateMap["dl_limit"]; exists {
-		if d, ok := val.(float64); ok {
-			obj.DlLimit = int64(d)
-		}
+}
+
+// updateTorrentDlLimit updates the DlLimit field of Torrent
+func updateTorrentDlLimit(val interface{}, obj *Torrent) {
+	if d, ok := val.(float64); ok {
+		obj.DlLimit = int64(d)
 	}
-	if val, exists := updateMap["dlspeed"]; exists {
-		if d, ok := val.(float64); ok {
-			obj.DlSpeed = int64(d)
-		}
+}
+
+// updateTorrentDlSpeed updates the DlSpeed field of Torrent
+func updateTorrentDlSpeed(val interface{}, obj *Torrent) {
+	if d, ok := val.(float64); ok {
+		obj.DlSpeed = int64(d)
 	}
-	if val, exists := updateMap["download_path"]; exists {
-		if d, ok := val.(string); ok {
-			obj.DownloadPath = d
-		}
+}
+
+// updateTorrentDownloadPath updates the DownloadPath field of Torrent
+func updateTorrentDownloadPath(val interface{}, obj *Torrent) {
+	if d, ok := val.(string); ok {
+		obj.DownloadPath = d
 	}
-	if val, exists := updateMap["downloaded"]; exists {
-		if d, ok := val.(float64); ok {
-			obj.Downloaded = int64(d)
-		}
+}
+
+// updateTorrentDownloaded updates the Downloaded field of Torrent
+func updateTorrentDownloaded(val interface{}, obj *Torrent) {
+	if d, ok := val.(float64); ok {
+		obj.Downloaded = int64(d)
 	}
-	if val, exists := updateMap["downloaded_session"]; exists {
-		if d, ok := val.(float64); ok {
-			obj.DownloadedSession = int64(d)
-		}
+}
+
+// updateTorrentDownloadedSession updates the DownloadedSession field of Torrent
+func updateTorrentDownloadedSession(val interface{}, obj *Torrent) {
+	if d, ok := val.(float64); ok {
+		obj.DownloadedSession = int64(d)
 	}
-	if val, exists := updateMap["eta"]; exists {
-		if e, ok := val.(float64); ok {
-			obj.ETA = int64(e)
-		}
+}
+
+// updateTorrentETA updates the ETA field of Torrent
+func updateTorrentETA(val interface{}, obj *Torrent) {
+	if e, ok := val.(float64); ok {
+		obj.ETA = int64(e)
 	}
-	if val, exists := updateMap["f_l_piece_prio"]; exists {
-		if f, ok := val.(bool); ok {
-			obj.FirstLastPiecePrio = f
-		}
+}
+
+// updateTorrentFirstLastPiecePrio updates the FirstLastPiecePrio field of Torrent
+func updateTorrentFirstLastPiecePrio(val interface{}, obj *Torrent) {
+	if f, ok := val.(bool); ok {
+		obj.FirstLastPiecePrio = f
 	}
-	if val, exists := updateMap["force_start"]; exists {
-		if f, ok := val.(bool); ok {
-			obj.ForceStart = f
-		}
+}
+
+// updateTorrentForceStart updates the ForceStart field of Torrent
+func updateTorrentForceStart(val interface{}, obj *Torrent) {
+	if f, ok := val.(bool); ok {
+		obj.ForceStart = f
 	}
-	if val, exists := updateMap["hash"]; exists {
-		if h, ok := val.(string); ok {
-			obj.Hash = h
-		}
+}
+
+// updateTorrentHash updates the Hash field of Torrent
+func updateTorrentHash(val interface{}, obj *Torrent) {
+	if h, ok := val.(string); ok {
+		obj.Hash = h
 	}
-	if val, exists := updateMap["infohash_v1"]; exists {
-		if i, ok := val.(string); ok {
-			obj.InfohashV1 = i
-		}
+}
+
+// updateTorrentInfohashV1 updates the InfohashV1 field of Torrent
+func updateTorrentInfohashV1(val interface{}, obj *Torrent) {
+	if i, ok := val.(string); ok {
+		obj.InfohashV1 = i
 	}
-	if val, exists := updateMap["infohash_v2"]; exists {
-		if i, ok := val.(string); ok {
-			obj.InfohashV2 = i
-		}
+}
+
+// updateTorrentInfohashV2 updates the InfohashV2 field of Torrent
+func updateTorrentInfohashV2(val interface{}, obj *Torrent) {
+	if i, ok := val.(string); ok {
+		obj.InfohashV2 = i
 	}
-	if val, exists := updateMap["last_activity"]; exists {
-		if l, ok := val.(float64); ok {
-			obj.LastActivity = int64(l)
-		}
+}
+
+// updateTorrentPopularity updates the Popularity field of Torrent
+func updateTorrentPopularity(val interface{}, obj *Torrent) {
+	if p, ok := val.(float64); ok {
+		obj.Popularity = p
 	}
-	if val, exists := updateMap["magnet_uri"]; exists {
-		if m, ok := val.(string); ok {
-			obj.MagnetURI = m
-		}
+}
+
+// updateTorrentPrivate updates the Private field of Torrent
+func updateTorrentPrivate(val interface{}, obj *Torrent) {
+	if p, ok := val.(bool); ok {
+		obj.Private = p
 	}
-	if val, exists := updateMap["max_ratio"]; exists {
-		if m, ok := val.(float64); ok {
-			obj.MaxRatio = m
-		}
+}
+
+// updateTorrentLastActivity updates the LastActivity field of Torrent
+func updateTorrentLastActivity(val interface{}, obj *Torrent) {
+	if l, ok := val.(float64); ok {
+		obj.LastActivity = int64(l)
 	}
-	if val, exists := updateMap["max_seeding_time"]; exists {
-		if m, ok := val.(float64); ok {
-			obj.MaxSeedingTime = int64(m)
-		}
+}
+
+// updateTorrentMagnetURI updates the MagnetURI field of Torrent
+func updateTorrentMagnetURI(val interface{}, obj *Torrent) {
+	if m, ok := val.(string); ok {
+		obj.MagnetURI = m
 	}
-	if val, exists := updateMap["name"]; exists {
-		if n, ok := val.(string); ok {
-			obj.Name = n
-		}
+}
+
+// updateTorrentMaxRatio updates the MaxRatio field of Torrent
+func updateTorrentMaxRatio(val interface{}, obj *Torrent) {
+	if m, ok := val.(float64); ok {
+		obj.MaxRatio = m
 	}
-	if val, exists := updateMap["num_complete"]; exists {
-		if n, ok := val.(float64); ok {
-			obj.NumComplete = int64(n)
-		}
+}
+
+// updateTorrentMaxSeedingTime updates the MaxSeedingTime field of Torrent
+func updateTorrentMaxSeedingTime(val interface{}, obj *Torrent) {
+	if m, ok := val.(float64); ok {
+		obj.MaxSeedingTime = int64(m)
 	}
-	if val, exists := updateMap["num_incomplete"]; exists {
-		if n, ok := val.(float64); ok {
-			obj.NumIncomplete = int64(n)
-		}
+}
+
+// updateTorrentName updates the Name field of Torrent
+func updateTorrentName(val interface{}, obj *Torrent) {
+	if n, ok := val.(string); ok {
+		obj.Name = n
 	}
-	if val, exists := updateMap["num_leechs"]; exists {
-		if n, ok := val.(float64); ok {
-			obj.NumLeechs = int64(n)
-		}
+}
+
+// updateTorrentNumComplete updates the NumComplete field of Torrent
+func updateTorrentNumComplete(val interface{}, obj *Torrent) {
+	if n, ok := val.(float64); ok {
+		obj.NumComplete = int64(n)
 	}
-	if val, exists := updateMap["num_seeds"]; exists {
-		if n, ok := val.(float64); ok {
-			obj.NumSeeds = int64(n)
-		}
+}
+
+// updateTorrentNumIncomplete updates the NumIncomplete field of Torrent
+func updateTorrentNumIncomplete(val interface{}, obj *Torrent) {
+	if n, ok := val.(float64); ok {
+		obj.NumIncomplete = int64(n)
 	}
-	if val, exists := updateMap["priority"]; exists {
-		if p, ok := val.(float64); ok {
-			obj.Priority = int64(p)
-		}
+}
+
+// updateTorrentNumLeechs updates the NumLeechs field of Torrent
+func updateTorrentNumLeechs(val interface{}, obj *Torrent) {
+	if n, ok := val.(float64); ok {
+		obj.NumLeechs = int64(n)
 	}
-	if val, exists := updateMap["progress"]; exists {
-		if p, ok := val.(float64); ok {
-			obj.Progress = p
-		}
+}
+
+// updateTorrentNumSeeds updates the NumSeeds field of Torrent
+func updateTorrentNumSeeds(val interface{}, obj *Torrent) {
+	if n, ok := val.(float64); ok {
+		obj.NumSeeds = int64(n)
 	}
-	if val, exists := updateMap["ratio"]; exists {
-		if r, ok := val.(float64); ok {
-			obj.Ratio = r
-		}
+}
+
+// updateTorrentPriority updates the Priority field of Torrent
+func updateTorrentPriority(val interface{}, obj *Torrent) {
+	if p, ok := val.(float64); ok {
+		obj.Priority = int64(p)
 	}
-	if val, exists := updateMap["ratio_limit"]; exists {
-		if r, ok := val.(float64); ok {
-			obj.RatioLimit = r
-		}
+}
+
+// updateTorrentProgress updates the Progress field of Torrent
+func updateTorrentProgress(val interface{}, obj *Torrent) {
+	if p, ok := val.(float64); ok {
+		obj.Progress = p
 	}
-	if val, exists := updateMap["save_path"]; exists {
-		if s, ok := val.(string); ok {
-			obj.SavePath = s
-		}
+}
+
+// updateTorrentRatio updates the Ratio field of Torrent
+func updateTorrentRatio(val interface{}, obj *Torrent) {
+	if r, ok := val.(float64); ok {
+		obj.Ratio = r
 	}
-	if val, exists := updateMap["seeding_time"]; exists {
-		if s, ok := val.(float64); ok {
-			obj.SeedingTime = int64(s)
-		}
+}
+
+// updateTorrentRatioLimit updates the RatioLimit field of Torrent
+func updateTorrentRatioLimit(val interface{}, obj *Torrent) {
+	if r, ok := val.(float64); ok {
+		obj.RatioLimit = r
 	}
-	if val, exists := updateMap["seeding_time_limit"]; exists {
-		if s, ok := val.(float64); ok {
-			obj.SeedingTimeLimit = int64(s)
-		}
+}
+
+// updateTorrentReannounce updates the Reannounce field of Torrent
+func updateTorrentReannounce(val interface{}, obj *Torrent) {
+	if r, ok := val.(float64); ok {
+		obj.Reannounce = int64(r)
 	}
-	if val, exists := updateMap["seen_complete"]; exists {
-		if s, ok := val.(float64); ok {
-			obj.SeenComplete = int64(s)
-		}
+}
+
+// updateTorrentSavePath updates the SavePath field of Torrent
+func updateTorrentSavePath(val interface{}, obj *Torrent) {
+	if s, ok := val.(string); ok {
+		obj.SavePath = s
 	}
-	if val, exists := updateMap["seq_dl"]; exists {
-		if s, ok := val.(bool); ok {
-			obj.SequentialDownload = s
-		}
+}
+
+// updateTorrentSeedingTime updates the SeedingTime field of Torrent
+func updateTorrentSeedingTime(val interface{}, obj *Torrent) {
+	if s, ok := val.(float64); ok {
+		obj.SeedingTime = int64(s)
 	}
-	if val, exists := updateMap["size"]; exists {
-		if s, ok := val.(float64); ok {
-			obj.Size = int64(s)
-		}
+}
+
+// updateTorrentSeedingTimeLimit updates the SeedingTimeLimit field of Torrent
+func updateTorrentSeedingTimeLimit(val interface{}, obj *Torrent) {
+	if s, ok := val.(float64); ok {
+		obj.SeedingTimeLimit = int64(s)
 	}
-	if val, exists := updateMap["state"]; exists {
-		if s, ok := val.(string); ok {
-			obj.State = TorrentState(s)
-		}
+}
+
+// updateTorrentSeenComplete updates the SeenComplete field of Torrent
+func updateTorrentSeenComplete(val interface{}, obj *Torrent) {
+	if s, ok := val.(float64); ok {
+		obj.SeenComplete = int64(s)
 	}
-	if val, exists := updateMap["super_seeding"]; exists {
-		if s, ok := val.(bool); ok {
-			obj.SuperSeeding = s
-		}
+}
+
+// updateTorrentSequentialDownload updates the SequentialDownload field of Torrent
+func updateTorrentSequentialDownload(val interface{}, obj *Torrent) {
+	if s, ok := val.(bool); ok {
+		obj.SequentialDownload = s
 	}
-	if val, exists := updateMap["tags"]; exists {
-		if t, ok := val.(string); ok {
-			obj.Tags = t
-		}
+}
+
+// updateTorrentSize updates the Size field of Torrent
+func updateTorrentSize(val interface{}, obj *Torrent) {
+	if s, ok := val.(float64); ok {
+		obj.Size = int64(s)
 	}
-	if val, exists := updateMap["time_active"]; exists {
-		if t, ok := val.(float64); ok {
-			obj.TimeActive = int64(t)
-		}
+}
+
+// updateTorrentState updates the State field of Torrent
+func updateTorrentState(val interface{}, obj *Torrent) {
+	if s, ok := val.(string); ok {
+		obj.State = TorrentState(s)
 	}
-	if val, exists := updateMap["total_size"]; exists {
-		if t, ok := val.(float64); ok {
-			obj.TotalSize = int64(t)
-		}
+}
+
+// updateTorrentSuperSeeding updates the SuperSeeding field of Torrent
+func updateTorrentSuperSeeding(val interface{}, obj *Torrent) {
+	if s, ok := val.(bool); ok {
+		obj.SuperSeeding = s
 	}
-	if val, exists := updateMap["tracker"]; exists {
-		if t, ok := val.(string); ok {
-			obj.Tracker = t
-		}
+}
+
+// updateTorrentTags updates the Tags field of Torrent
+func updateTorrentTags(val interface{}, obj *Torrent) {
+	if t, ok := val.(string); ok {
+		obj.Tags = t
 	}
-	if val, exists := updateMap["trackers_count"]; exists {
-		if t, ok := val.(float64); ok {
-			obj.TrackersCount = int64(t)
-		}
+}
+
+// updateTorrentTimeActive updates the TimeActive field of Torrent
+func updateTorrentTimeActive(val interface{}, obj *Torrent) {
+	if t, ok := val.(float64); ok {
+		obj.TimeActive = int64(t)
 	}
-	if val, exists := updateMap["up_limit"]; exists {
-		if u, ok := val.(float64); ok {
-			obj.UpLimit = int64(u)
-		}
+}
+
+// updateTorrentTotalSize updates the TotalSize field of Torrent
+func updateTorrentTotalSize(val interface{}, obj *Torrent) {
+	if t, ok := val.(float64); ok {
+		obj.TotalSize = int64(t)
 	}
-	if val, exists := updateMap["uploaded"]; exists {
-		if u, ok := val.(float64); ok {
-			obj.Uploaded = int64(u)
-		}
+}
+
+// updateTorrentTracker updates the Tracker field of Torrent
+func updateTorrentTracker(val interface{}, obj *Torrent) {
+	if t, ok := val.(string); ok {
+		obj.Tracker = t
 	}
-	if val, exists := updateMap["uploaded_session"]; exists {
-		if u, ok := val.(float64); ok {
-			obj.UploadedSession = int64(u)
-		}
+}
+
+// updateTorrentTrackersCount updates the TrackersCount field of Torrent
+func updateTorrentTrackersCount(val interface{}, obj *Torrent) {
+	if t, ok := val.(float64); ok {
+		obj.TrackersCount = int64(t)
 	}
-	if val, exists := updateMap["upspeed"]; exists {
-		if u, ok := val.(float64); ok {
-			obj.UpSpeed = int64(u)
-		}
+}
+
+// updateTorrentUpLimit updates the UpLimit field of Torrent
+func updateTorrentUpLimit(val interface{}, obj *Torrent) {
+	if u, ok := val.(float64); ok {
+		obj.UpLimit = int64(u)
 	}
-	if val, exists := updateMap["trackers"]; exists {
-		if t, ok := val.([]interface{}); ok {
-			var trackers []TorrentTracker
-			for _, item := range t {
-				if trackerMap, ok := item.(map[string]interface{}); ok {
-					var tracker TorrentTracker
-					dest.updateTorrentTrackerFields(&tracker, trackerMap)
-					trackers = append(trackers, tracker)
-				}
+}
+
+// updateTorrentUploaded updates the Uploaded field of Torrent
+func updateTorrentUploaded(val interface{}, obj *Torrent) {
+	if u, ok := val.(float64); ok {
+		obj.Uploaded = int64(u)
+	}
+}
+
+// updateTorrentUploadedSession updates the UploadedSession field of Torrent
+func updateTorrentUploadedSession(val interface{}, obj *Torrent) {
+	if u, ok := val.(float64); ok {
+		obj.UploadedSession = int64(u)
+	}
+}
+
+// updateTorrentUpSpeed updates the UpSpeed field of Torrent
+func updateTorrentUpSpeed(val interface{}, obj *Torrent) {
+	if u, ok := val.(float64); ok {
+		obj.UpSpeed = int64(u)
+	}
+}
+
+// updateTorrentTrackers updates the Trackers field of Torrent
+func updateTorrentTrackers(val interface{}, obj *Torrent) {
+	if t, ok := val.([]interface{}); ok {
+		// Preallocate slice to avoid reallocations
+		trackers := make([]TorrentTracker, 0, len(t))
+		for _, item := range t {
+			if trackerMap, ok := item.(map[string]interface{}); ok {
+				var tracker TorrentTracker
+				updateTorrentTrackerFields(&tracker, trackerMap)
+				trackers = append(trackers, tracker)
 			}
-			obj.Trackers = trackers
+		}
+		obj.Trackers = trackers
+	}
+}
+
+// Precomputed field updaters for Torrent - created once at package init
+var torrentFieldUpdaters = map[string]func(val interface{}, obj *Torrent){
+	"added_on": updateTorrentAddedOn,
+	"amount_left": updateTorrentAmountLeft,
+	"auto_tmm": updateTorrentAutoManaged,
+	"availability": updateTorrentAvailability,
+	"category": updateTorrentCategory,
+	"completed": updateTorrentCompleted,
+	"completion_on": updateTorrentCompletionOn,
+	"content_path": updateTorrentContentPath,
+	"dl_limit": updateTorrentDlLimit,
+	"dlspeed": updateTorrentDlSpeed,
+	"download_path": updateTorrentDownloadPath,
+	"downloaded": updateTorrentDownloaded,
+	"downloaded_session": updateTorrentDownloadedSession,
+	"eta": updateTorrentETA,
+	"f_l_piece_prio": updateTorrentFirstLastPiecePrio,
+	"force_start": updateTorrentForceStart,
+	"hash": updateTorrentHash,
+	"infohash_v1": updateTorrentInfohashV1,
+	"infohash_v2": updateTorrentInfohashV2,
+	"popularity": updateTorrentPopularity,
+	"private": updateTorrentPrivate,
+	"last_activity": updateTorrentLastActivity,
+	"magnet_uri": updateTorrentMagnetURI,
+	"max_ratio": updateTorrentMaxRatio,
+	"max_seeding_time": updateTorrentMaxSeedingTime,
+	"name": updateTorrentName,
+	"num_complete": updateTorrentNumComplete,
+	"num_incomplete": updateTorrentNumIncomplete,
+	"num_leechs": updateTorrentNumLeechs,
+	"num_seeds": updateTorrentNumSeeds,
+	"priority": updateTorrentPriority,
+	"progress": updateTorrentProgress,
+	"ratio": updateTorrentRatio,
+	"ratio_limit": updateTorrentRatioLimit,
+	"reannounce": updateTorrentReannounce,
+	"save_path": updateTorrentSavePath,
+	"seeding_time": updateTorrentSeedingTime,
+	"seeding_time_limit": updateTorrentSeedingTimeLimit,
+	"seen_complete": updateTorrentSeenComplete,
+	"seq_dl": updateTorrentSequentialDownload,
+	"size": updateTorrentSize,
+	"state": updateTorrentState,
+	"super_seeding": updateTorrentSuperSeeding,
+	"tags": updateTorrentTags,
+	"time_active": updateTorrentTimeActive,
+	"total_size": updateTorrentTotalSize,
+	"tracker": updateTorrentTracker,
+	"trackers_count": updateTorrentTrackersCount,
+	"up_limit": updateTorrentUpLimit,
+	"uploaded": updateTorrentUploaded,
+	"uploaded_session": updateTorrentUploadedSession,
+	"upspeed": updateTorrentUpSpeed,
+	"trackers": updateTorrentTrackers,
+}
+
+// updateTorrentFields updates only the fields that are present in the update map
+func updateTorrentFields(obj *Torrent, updateMap map[string]interface{}) {
+	// Update only fields that are present in the map using precomputed updaters
+	for fieldName, val := range updateMap {
+		if updater, exists := torrentFieldUpdaters[fieldName]; exists {
+			updater(val, obj)
 		}
 	}
+}
+
+// updateTorrentTrackerUrl updates the Url field of TorrentTracker
+func updateTorrentTrackerUrl(val interface{}, obj *TorrentTracker) {
+	if u, ok := val.(string); ok {
+		obj.Url = u
+	}
+}
+
+// updateTorrentTrackerStatus updates the Status field of TorrentTracker
+func updateTorrentTrackerStatus(val interface{}, obj *TorrentTracker) {
+	if s, ok := val.(float64); ok {
+		obj.Status = TrackerStatus(int(s))
+	}
+}
+
+// updateTorrentTrackerNumPeers updates the NumPeers field of TorrentTracker
+func updateTorrentTrackerNumPeers(val interface{}, obj *TorrentTracker) {
+	if n, ok := val.(float64); ok {
+		obj.NumPeers = int(n)
+	}
+}
+
+// updateTorrentTrackerNumSeeds updates the NumSeeds field of TorrentTracker
+func updateTorrentTrackerNumSeeds(val interface{}, obj *TorrentTracker) {
+	if n, ok := val.(float64); ok {
+		obj.NumSeeds = int(n)
+	}
+}
+
+// updateTorrentTrackerNumLeechers updates the NumLeechers field of TorrentTracker
+func updateTorrentTrackerNumLeechers(val interface{}, obj *TorrentTracker) {
+	if n, ok := val.(float64); ok {
+		obj.NumLeechers = int(n)
+	}
+}
+
+// updateTorrentTrackerNumDownloaded updates the NumDownloaded field of TorrentTracker
+func updateTorrentTrackerNumDownloaded(val interface{}, obj *TorrentTracker) {
+	if n, ok := val.(float64); ok {
+		obj.NumDownloaded = int(n)
+	}
+}
+
+// updateTorrentTrackerMessage updates the Message field of TorrentTracker
+func updateTorrentTrackerMessage(val interface{}, obj *TorrentTracker) {
+	if m, ok := val.(string); ok {
+		obj.Message = m
+	}
+}
+
+// Precomputed field updaters for TorrentTracker - created once at package init
+var torrenttrackerFieldUpdaters = map[string]func(val interface{}, obj *TorrentTracker){
+	"url": updateTorrentTrackerUrl,
+	"status": updateTorrentTrackerStatus,
+	"num_peers": updateTorrentTrackerNumPeers,
+	"num_seeds": updateTorrentTrackerNumSeeds,
+	"num_leechers": updateTorrentTrackerNumLeechers,
+	"num_downloaded": updateTorrentTrackerNumDownloaded,
+	"msg": updateTorrentTrackerMessage,
 }
 
 // updateTorrentTrackerFields updates only the fields that are present in the update map
-func (dest *MainData) updateTorrentTrackerFields(obj *TorrentTracker, updateMap map[string]interface{}) {
-	// Only update fields that are explicitly present in the JSON
-	if val, exists := updateMap["url"]; exists {
-		if u, ok := val.(string); ok {
-			obj.Url = u
+func updateTorrentTrackerFields(obj *TorrentTracker, updateMap map[string]interface{}) {
+	// Update only fields that are present in the map using precomputed updaters
+	for fieldName, val := range updateMap {
+		if updater, exists := torrenttrackerFieldUpdaters[fieldName]; exists {
+			updater(val, obj)
 		}
 	}
-	if val, exists := updateMap["status"]; exists {
-		if s, ok := val.(float64); ok {
-			obj.Status = TrackerStatus(int(s))
-		}
+}
+
+// updateCategoryName updates the Name field of Category
+func updateCategoryName(val interface{}, obj *Category) {
+	if n, ok := val.(string); ok {
+		obj.Name = n
 	}
-	if val, exists := updateMap["num_peers"]; exists {
-		if n, ok := val.(float64); ok {
-			obj.NumPeers = int(n)
-		}
+}
+
+// updateCategorySavePath updates the SavePath field of Category
+func updateCategorySavePath(val interface{}, obj *Category) {
+	if s, ok := val.(string); ok {
+		obj.SavePath = s
 	}
-	if val, exists := updateMap["num_seeds"]; exists {
-		if n, ok := val.(float64); ok {
-			obj.NumSeeds = int(n)
-		}
-	}
-	if val, exists := updateMap["num_leechers"]; exists {
-		if n, ok := val.(float64); ok {
-			obj.NumLeechers = int(n)
-		}
-	}
-	if val, exists := updateMap["num_downloaded"]; exists {
-		if n, ok := val.(float64); ok {
-			obj.NumDownloaded = int(n)
-		}
-	}
-	if val, exists := updateMap["msg"]; exists {
-		if m, ok := val.(string); ok {
-			obj.Message = m
-		}
-	}
+}
+
+// Precomputed field updaters for Category - created once at package init
+var categoryFieldUpdaters = map[string]func(val interface{}, obj *Category){
+	"name": updateCategoryName,
+	"savePath": updateCategorySavePath,
 }
 
 // updateCategoryFields updates only the fields that are present in the update map
-func (dest *MainData) updateCategoryFields(obj *Category, updateMap map[string]interface{}) {
-	// Only update fields that are explicitly present in the JSON
-	if val, exists := updateMap["name"]; exists {
-		if n, ok := val.(string); ok {
-			obj.Name = n
-		}
-	}
-	if val, exists := updateMap["savePath"]; exists {
-		if s, ok := val.(string); ok {
-			obj.SavePath = s
+func updateCategoryFields(obj *Category, updateMap map[string]interface{}) {
+	// Update only fields that are present in the map using precomputed updaters
+	for fieldName, val := range updateMap {
+		if updater, exists := categoryFieldUpdaters[fieldName]; exists {
+			updater(val, obj)
 		}
 	}
 }
 
+// updateServerStateAlltimeDl updates the AlltimeDl field of ServerState
+func updateServerStateAlltimeDl(val interface{}, obj *ServerState) {
+	if a, ok := val.(float64); ok {
+		obj.AlltimeDl = int64(a)
+	}
+}
+
+// updateServerStateAlltimeUl updates the AlltimeUl field of ServerState
+func updateServerStateAlltimeUl(val interface{}, obj *ServerState) {
+	if a, ok := val.(float64); ok {
+		obj.AlltimeUl = int64(a)
+	}
+}
+
+// updateServerStateAverageTimeQueue updates the AverageTimeQueue field of ServerState
+func updateServerStateAverageTimeQueue(val interface{}, obj *ServerState) {
+	if a, ok := val.(float64); ok {
+		obj.AverageTimeQueue = int64(a)
+	}
+}
+
+// updateServerStateConnectionStatus updates the ConnectionStatus field of ServerState
+func updateServerStateConnectionStatus(val interface{}, obj *ServerState) {
+	if c, ok := val.(string); ok {
+		obj.ConnectionStatus = c
+	}
+}
+
+// updateServerStateDhtNodes updates the DhtNodes field of ServerState
+func updateServerStateDhtNodes(val interface{}, obj *ServerState) {
+	if d, ok := val.(float64); ok {
+		obj.DhtNodes = int64(d)
+	}
+}
+
+// updateServerStateDlInfoData updates the DlInfoData field of ServerState
+func updateServerStateDlInfoData(val interface{}, obj *ServerState) {
+	if d, ok := val.(float64); ok {
+		obj.DlInfoData = int64(d)
+	}
+}
+
+// updateServerStateDlInfoSpeed updates the DlInfoSpeed field of ServerState
+func updateServerStateDlInfoSpeed(val interface{}, obj *ServerState) {
+	if d, ok := val.(float64); ok {
+		obj.DlInfoSpeed = int64(d)
+	}
+}
+
+// updateServerStateDlRateLimit updates the DlRateLimit field of ServerState
+func updateServerStateDlRateLimit(val interface{}, obj *ServerState) {
+	if d, ok := val.(float64); ok {
+		obj.DlRateLimit = int64(d)
+	}
+}
+
+// updateServerStateFreeSpaceOnDisk updates the FreeSpaceOnDisk field of ServerState
+func updateServerStateFreeSpaceOnDisk(val interface{}, obj *ServerState) {
+	if f, ok := val.(float64); ok {
+		obj.FreeSpaceOnDisk = int64(f)
+	}
+}
+
+// updateServerStateGlobalRatio updates the GlobalRatio field of ServerState
+func updateServerStateGlobalRatio(val interface{}, obj *ServerState) {
+	if g, ok := val.(string); ok {
+		obj.GlobalRatio = g
+	}
+}
+
+// updateServerStateQueuedIoJobs updates the QueuedIoJobs field of ServerState
+func updateServerStateQueuedIoJobs(val interface{}, obj *ServerState) {
+	if q, ok := val.(float64); ok {
+		obj.QueuedIoJobs = int64(q)
+	}
+}
+
+// updateServerStateQueueing updates the Queueing field of ServerState
+func updateServerStateQueueing(val interface{}, obj *ServerState) {
+	if q, ok := val.(bool); ok {
+		obj.Queueing = q
+	}
+}
+
+// updateServerStateReadCacheHits updates the ReadCacheHits field of ServerState
+func updateServerStateReadCacheHits(val interface{}, obj *ServerState) {
+	if r, ok := val.(string); ok {
+		obj.ReadCacheHits = r
+	}
+}
+
+// updateServerStateReadCacheOverload updates the ReadCacheOverload field of ServerState
+func updateServerStateReadCacheOverload(val interface{}, obj *ServerState) {
+	if r, ok := val.(string); ok {
+		obj.ReadCacheOverload = r
+	}
+}
+
+// updateServerStateRefreshInterval updates the RefreshInterval field of ServerState
+func updateServerStateRefreshInterval(val interface{}, obj *ServerState) {
+	if r, ok := val.(float64); ok {
+		obj.RefreshInterval = int64(r)
+	}
+}
+
+// updateServerStateTotalBuffersSize updates the TotalBuffersSize field of ServerState
+func updateServerStateTotalBuffersSize(val interface{}, obj *ServerState) {
+	if t, ok := val.(float64); ok {
+		obj.TotalBuffersSize = int64(t)
+	}
+}
+
+// updateServerStateTotalPeerConnections updates the TotalPeerConnections field of ServerState
+func updateServerStateTotalPeerConnections(val interface{}, obj *ServerState) {
+	if t, ok := val.(float64); ok {
+		obj.TotalPeerConnections = int64(t)
+	}
+}
+
+// updateServerStateTotalQueuedSize updates the TotalQueuedSize field of ServerState
+func updateServerStateTotalQueuedSize(val interface{}, obj *ServerState) {
+	if t, ok := val.(float64); ok {
+		obj.TotalQueuedSize = int64(t)
+	}
+}
+
+// updateServerStateTotalWastedSession updates the TotalWastedSession field of ServerState
+func updateServerStateTotalWastedSession(val interface{}, obj *ServerState) {
+	if t, ok := val.(float64); ok {
+		obj.TotalWastedSession = int64(t)
+	}
+}
+
+// updateServerStateUpInfoData updates the UpInfoData field of ServerState
+func updateServerStateUpInfoData(val interface{}, obj *ServerState) {
+	if u, ok := val.(float64); ok {
+		obj.UpInfoData = int64(u)
+	}
+}
+
+// updateServerStateUpInfoSpeed updates the UpInfoSpeed field of ServerState
+func updateServerStateUpInfoSpeed(val interface{}, obj *ServerState) {
+	if u, ok := val.(float64); ok {
+		obj.UpInfoSpeed = int64(u)
+	}
+}
+
+// updateServerStateUpRateLimit updates the UpRateLimit field of ServerState
+func updateServerStateUpRateLimit(val interface{}, obj *ServerState) {
+	if u, ok := val.(float64); ok {
+		obj.UpRateLimit = int64(u)
+	}
+}
+
+// updateServerStateUseAltSpeedLimits updates the UseAltSpeedLimits field of ServerState
+func updateServerStateUseAltSpeedLimits(val interface{}, obj *ServerState) {
+	if u, ok := val.(bool); ok {
+		obj.UseAltSpeedLimits = u
+	}
+}
+
+// updateServerStateWriteCacheOverload updates the WriteCacheOverload field of ServerState
+func updateServerStateWriteCacheOverload(val interface{}, obj *ServerState) {
+	if w, ok := val.(string); ok {
+		obj.WriteCacheOverload = w
+	}
+}
+
+// Precomputed field updaters for ServerState - created once at package init
+var serverstateFieldUpdaters = map[string]func(val interface{}, obj *ServerState){
+	"alltime_dl": updateServerStateAlltimeDl,
+	"alltime_ul": updateServerStateAlltimeUl,
+	"average_time_queue": updateServerStateAverageTimeQueue,
+	"connection_status": updateServerStateConnectionStatus,
+	"dht_nodes": updateServerStateDhtNodes,
+	"dl_info_data": updateServerStateDlInfoData,
+	"dl_info_speed": updateServerStateDlInfoSpeed,
+	"dl_rate_limit": updateServerStateDlRateLimit,
+	"free_space_on_disk": updateServerStateFreeSpaceOnDisk,
+	"global_ratio": updateServerStateGlobalRatio,
+	"queued_io_jobs": updateServerStateQueuedIoJobs,
+	"queueing": updateServerStateQueueing,
+	"read_cache_hits": updateServerStateReadCacheHits,
+	"read_cache_overload": updateServerStateReadCacheOverload,
+	"refresh_interval": updateServerStateRefreshInterval,
+	"total_buffers_size": updateServerStateTotalBuffersSize,
+	"total_peer_connections": updateServerStateTotalPeerConnections,
+	"total_queued_size": updateServerStateTotalQueuedSize,
+	"total_wasted_session": updateServerStateTotalWastedSession,
+	"up_info_data": updateServerStateUpInfoData,
+	"up_info_speed": updateServerStateUpInfoSpeed,
+	"up_rate_limit": updateServerStateUpRateLimit,
+	"use_alt_speed_limits": updateServerStateUseAltSpeedLimits,
+	"write_cache_overload": updateServerStateWriteCacheOverload,
+}
+
 // updateServerStateFields updates only the fields that are present in the update map
-func (dest *MainData) updateServerStateFields(obj *ServerState, updateMap map[string]interface{}) {
-	// Only update fields that are explicitly present in the JSON
-	if val, exists := updateMap["alltime_dl"]; exists {
-		if a, ok := val.(float64); ok {
-			obj.AlltimeDl = int64(a)
-		}
-	}
-	if val, exists := updateMap["alltime_ul"]; exists {
-		if a, ok := val.(float64); ok {
-			obj.AlltimeUl = int64(a)
-		}
-	}
-	if val, exists := updateMap["average_time_queue"]; exists {
-		if a, ok := val.(float64); ok {
-			obj.AverageTimeQueue = int64(a)
-		}
-	}
-	if val, exists := updateMap["connection_status"]; exists {
-		if c, ok := val.(string); ok {
-			obj.ConnectionStatus = c
-		}
-	}
-	if val, exists := updateMap["dht_nodes"]; exists {
-		if d, ok := val.(float64); ok {
-			obj.DhtNodes = int64(d)
-		}
-	}
-	if val, exists := updateMap["dl_info_data"]; exists {
-		if d, ok := val.(float64); ok {
-			obj.DlInfoData = int64(d)
-		}
-	}
-	if val, exists := updateMap["dl_info_speed"]; exists {
-		if d, ok := val.(float64); ok {
-			obj.DlInfoSpeed = int64(d)
-		}
-	}
-	if val, exists := updateMap["dl_rate_limit"]; exists {
-		if d, ok := val.(float64); ok {
-			obj.DlRateLimit = int64(d)
-		}
-	}
-	if val, exists := updateMap["free_space_on_disk"]; exists {
-		if f, ok := val.(float64); ok {
-			obj.FreeSpaceOnDisk = int64(f)
-		}
-	}
-	if val, exists := updateMap["global_ratio"]; exists {
-		if g, ok := val.(string); ok {
-			obj.GlobalRatio = g
-		}
-	}
-	if val, exists := updateMap["queued_io_jobs"]; exists {
-		if q, ok := val.(float64); ok {
-			obj.QueuedIoJobs = int64(q)
-		}
-	}
-	if val, exists := updateMap["queueing"]; exists {
-		if q, ok := val.(bool); ok {
-			obj.Queueing = q
-		}
-	}
-	if val, exists := updateMap["read_cache_hits"]; exists {
-		if r, ok := val.(string); ok {
-			obj.ReadCacheHits = r
-		}
-	}
-	if val, exists := updateMap["read_cache_overload"]; exists {
-		if r, ok := val.(string); ok {
-			obj.ReadCacheOverload = r
-		}
-	}
-	if val, exists := updateMap["refresh_interval"]; exists {
-		if r, ok := val.(float64); ok {
-			obj.RefreshInterval = int64(r)
-		}
-	}
-	if val, exists := updateMap["total_buffers_size"]; exists {
-		if t, ok := val.(float64); ok {
-			obj.TotalBuffersSize = int64(t)
-		}
-	}
-	if val, exists := updateMap["total_peer_connections"]; exists {
-		if t, ok := val.(float64); ok {
-			obj.TotalPeerConnections = int64(t)
-		}
-	}
-	if val, exists := updateMap["total_queued_size"]; exists {
-		if t, ok := val.(float64); ok {
-			obj.TotalQueuedSize = int64(t)
-		}
-	}
-	if val, exists := updateMap["total_wasted_session"]; exists {
-		if t, ok := val.(float64); ok {
-			obj.TotalWastedSession = int64(t)
-		}
-	}
-	if val, exists := updateMap["up_info_data"]; exists {
-		if u, ok := val.(float64); ok {
-			obj.UpInfoData = int64(u)
-		}
-	}
-	if val, exists := updateMap["up_info_speed"]; exists {
-		if u, ok := val.(float64); ok {
-			obj.UpInfoSpeed = int64(u)
-		}
-	}
-	if val, exists := updateMap["up_rate_limit"]; exists {
-		if u, ok := val.(float64); ok {
-			obj.UpRateLimit = int64(u)
-		}
-	}
-	if val, exists := updateMap["use_alt_speed_limits"]; exists {
-		if u, ok := val.(bool); ok {
-			obj.UseAltSpeedLimits = u
-		}
-	}
-	if val, exists := updateMap["write_cache_overload"]; exists {
-		if w, ok := val.(string); ok {
-			obj.WriteCacheOverload = w
+func updateServerStateFields(obj *ServerState, updateMap map[string]interface{}) {
+	// Update only fields that are present in the map using precomputed updaters
+	for fieldName, val := range updateMap {
+		if updater, exists := serverstateFieldUpdaters[fieldName]; exists {
+			updater(val, obj)
 		}
 	}
 }

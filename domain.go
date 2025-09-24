@@ -1,6 +1,7 @@
 package qbittorrent
 
 import (
+	"encoding/json"
 	"strconv"
 
 	"github.com/autobrr/go-qbittorrent/errors"
@@ -59,6 +60,8 @@ type Torrent struct {
 	Hash               string           `json:"hash"`
 	InfohashV1         string           `json:"infohash_v1"`
 	InfohashV2         string           `json:"infohash_v2"`
+	Popularity         float64          `json:"popularity"`
+	Private            bool             `json:"private"`
 	LastActivity       int64            `json:"last_activity"`
 	MagnetURI          string           `json:"magnet_uri"`
 	MaxRatio           float64          `json:"max_ratio"`
@@ -72,6 +75,7 @@ type Torrent struct {
 	Progress           float64          `json:"progress"`
 	Ratio              float64          `json:"ratio"`
 	RatioLimit         float64          `json:"ratio_limit"`
+	Reannounce         int64            `json:"reannounce"`
 	SavePath           string           `json:"save_path"`
 	SeedingTime        int64            `json:"seeding_time"`
 	SeedingTimeLimit   int64            `json:"seeding_time_limit"`
@@ -205,14 +209,23 @@ const (
 	// Torrent is completed
 	TorrentFilterCompleted TorrentFilter = "completed"
 
-	// Torrent is resumed
+	// Torrent is resumed (for backward compatibility with qBittorrent < 4.6.0)
+	// In older versions (e.g., v4.3.9), "resumed" means !isPaused()
+	// Removed in v4.6.0+ (commit 5d1c2496, March 2024) in favor of "running"
 	TorrentFilterResumed TorrentFilter = "resumed"
 
 	// Torrent is paused
 	TorrentFilterPaused TorrentFilter = "paused"
 
 	// Torrent is stopped
+	// Added in qBittorrent v4.6.0+ (commit 5d1c2496, March 2024)
+	// Replaces the old "paused" filter
 	TorrentFilterStopped TorrentFilter = "stopped"
+
+	// Torrent is running (not stopped)
+	// Added in qBittorrent v4.6.0+ (commit 5d1c2496, March 2024)
+	// Replaces the old "resumed" filter
+	TorrentFilterRunning TorrentFilter = "running"
 
 	// Torrent is stalled
 	TorrentFilterStalled TorrentFilter = "stalled"
@@ -231,9 +244,13 @@ const (
 
 	// Torrent is errored
 	TorrentFilterError TorrentFilter = "errored"
-)
 
-// TrackerStatus https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-4.1)#get-torrent-trackers
+	// Torrent is checking
+	TorrentFilterChecking TorrentFilter = "checking"
+
+	// Torrent is moving
+	TorrentFilterMoving TorrentFilter = "moving"
+) // TrackerStatus https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-4.1)#get-torrent-trackers
 type TrackerStatus int
 
 const (
@@ -391,6 +408,41 @@ func (o *TorrentAddOptions) Prepare() map[string]string {
 	}
 
 	return options
+}
+
+func ParseTorrentFilter(filter string) TorrentFilter {
+	switch filter {
+	case "downloading":
+		return TorrentFilterDownloading
+	case "seeding":
+		return TorrentFilterUploading
+	case "completed":
+		return TorrentFilterCompleted
+	case "resumed":
+		return TorrentFilterResumed
+	case "stopped":
+		return TorrentFilterStopped
+	case "running":
+		return TorrentFilterRunning
+	case "active":
+		return TorrentFilterActive
+	case "inactive":
+		return TorrentFilterInactive
+	case "stalled":
+		return TorrentFilterStalled
+	case "stalled_uploading":
+		return TorrentFilterStalledUploading
+	case "stalled_downloading":
+		return TorrentFilterStalledDownloading
+	case "checking":
+		return TorrentFilterChecking
+	case "moving":
+		return TorrentFilterMoving
+	case "errored":
+		return TorrentFilterError
+	default:
+		return TorrentFilterAll
+	}
 }
 
 type TorrentFilterOptions struct {
@@ -679,6 +731,70 @@ type PeerLog struct {
 	Blocked   bool   `json:"blocked"`
 	Timestamp int64  `json:"timestamp"`
 	Reason    string `json:"reason"`
+}
+
+// TorrentPeer represents a peer connected to a torrent
+type TorrentPeer struct {
+	IP           string  `json:"ip,omitempty"`
+	Connection   string  `json:"connection,omitempty"`
+	Flags        string  `json:"flags,omitempty"`
+	FlagsDesc    string  `json:"flags_desc,omitempty"`
+	Client       string  `json:"client,omitempty"`
+	Files        string  `json:"files,omitempty"`
+	Country      string  `json:"country,omitempty"`
+	CountryCode  string  `json:"country_code,omitempty"`
+	PeerIDClient string  `json:"peer_id_client,omitempty"`
+	Port         int     `json:"port,omitempty"`
+	Progress     float64 `json:"progress"` // Progress should always be included (0 is valid)
+	DownSpeed    int64   `json:"dl_speed,omitempty"`
+	UpSpeed      int64   `json:"up_speed,omitempty"`
+	Downloaded   int64   `json:"downloaded,omitempty"`
+	Uploaded     int64   `json:"uploaded,omitempty"`
+	Relevance    float64 `json:"relevance,omitempty"`
+	progressSet  bool    `json:"-"`
+}
+
+// HasProgress reports whether the progress field was present in the JSON payload.
+func (tp TorrentPeer) HasProgress() bool {
+	return tp.progressSet
+}
+
+// UnmarshalJSON captures whether optional fields such as progress were present in the payload.
+func (tp *TorrentPeer) UnmarshalJSON(data []byte) error {
+	type torrentPeerAlias TorrentPeer
+	aux := &struct {
+		*torrentPeerAlias
+	}{
+		torrentPeerAlias: (*torrentPeerAlias)(tp),
+	}
+
+	// Reset presence flags before decoding
+	tp.progressSet = false
+
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	if _, ok := raw["progress"]; ok {
+		// Field explicitly present in update
+		tp.progressSet = true
+	}
+
+	return nil
+}
+
+// TorrentPeersResponse represents the response from sync/torrentPeers endpoint
+type TorrentPeersResponse struct {
+	Peers        map[string]TorrentPeer `json:"peers,omitempty"`
+	PeersRemoved []string               `json:"peers_removed,omitempty"`
+	Rid          int64                  `json:"rid"`
+	FullUpdate   bool                   `json:"full_update"`
+	ShowFlags    bool                   `json:"show_flags,omitempty"`
 }
 
 type BuildInfo struct {

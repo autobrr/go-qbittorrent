@@ -872,3 +872,655 @@ func TestSyncManager_LastError(t *testing.T) {
 		t.Errorf("Expected DeadlineExceeded, got %v", err)
 	}
 }
+
+// PeerSyncManager Tests
+
+// MockPeerClient creates a client with mocked peer responses
+type MockPeerClient struct {
+	*Client
+	mockPeerResponses map[string]*TorrentPeersResponse
+	peerCallCount     int
+}
+
+func NewMockPeerClient() *MockPeerClient {
+	client := NewClient(Config{Host: "http://localhost:8080"})
+	return &MockPeerClient{
+		Client:            client,
+		mockPeerResponses: make(map[string]*TorrentPeersResponse),
+	}
+}
+
+func (m *MockPeerClient) GetTorrentPeersCtx(ctx context.Context, hash string, rid int64) (*TorrentPeersResponse, error) {
+	m.peerCallCount++
+	key := hash
+	if rid > 0 {
+		key = hash + "_partial"
+	}
+
+	response, exists := m.mockPeerResponses[key]
+	if !exists {
+		return nil, context.DeadlineExceeded
+	}
+
+	// Return a copy to avoid modifying the mock data
+	peers := make(map[string]TorrentPeer, len(response.Peers))
+	for k, v := range response.Peers {
+		peers[k] = v
+	}
+
+	removed := make([]string, len(response.PeersRemoved))
+	copy(removed, response.PeersRemoved)
+
+	return &TorrentPeersResponse{
+		Peers:        peers,
+		PeersRemoved: removed,
+		Rid:          response.Rid,
+		FullUpdate:   response.FullUpdate,
+		ShowFlags:    response.ShowFlags,
+	}, nil
+}
+
+func TestPeerSyncManager_BasicCreation(t *testing.T) {
+	client := NewClient(Config{Host: "http://localhost:8080"})
+	psm := NewPeerSyncManager(client, "abc123")
+
+	if psm == nil {
+		t.Fatal("NewPeerSyncManager returned nil")
+	}
+
+	if psm.hash != "abc123" {
+		t.Errorf("Expected hash abc123, got %s", psm.hash)
+	}
+
+	// Test default options
+	if psm.options.AutoSync {
+		t.Error("Expected AutoSync to be false by default")
+	}
+
+	if psm.options.SyncInterval != 5*time.Second {
+		t.Errorf("Expected default sync interval of 5s, got %v", psm.options.SyncInterval)
+	}
+}
+
+func TestPeerSyncManager_WithOptions(t *testing.T) {
+	client := NewClient(Config{Host: "http://localhost:8080"})
+
+	options := PeerSyncOptions{
+		AutoSync:     true,
+		SyncInterval: 10 * time.Second,
+	}
+
+	psm := NewPeerSyncManager(client, "def456", options)
+
+	if !psm.options.AutoSync {
+		t.Error("AutoSync option not set correctly")
+	}
+
+	if psm.options.SyncInterval != 10*time.Second {
+		t.Errorf("Expected sync interval of 10s, got %v", psm.options.SyncInterval)
+	}
+}
+
+func TestDefaultPeerSyncOptions(t *testing.T) {
+	opts := DefaultPeerSyncOptions()
+
+	if opts.AutoSync {
+		t.Error("Expected AutoSync to be false by default")
+	}
+
+	if opts.SyncInterval != 5*time.Second {
+		t.Errorf("Expected SyncInterval to be 5s by default, got %v", opts.SyncInterval)
+	}
+
+	if opts.OnUpdate != nil {
+		t.Error("Expected OnUpdate to be nil by default")
+	}
+
+	if opts.OnError != nil {
+		t.Error("Expected OnError to be nil by default")
+	}
+}
+
+func TestPeerSyncManager_GetPeersWhenEmpty(t *testing.T) {
+	client := NewClient(Config{Host: "http://localhost:8080"})
+	psm := NewPeerSyncManager(client, "abc123")
+
+	peers := psm.GetPeers()
+	if peers == nil {
+		t.Fatal("Expected non-nil peers response")
+	}
+
+	if len(peers.Peers) != 0 {
+		t.Errorf("Expected 0 peers initially, got %d", len(peers.Peers))
+	}
+
+	count := psm.GetPeerCount()
+	if count != 0 {
+		t.Errorf("Expected peer count 0, got %d", count)
+	}
+}
+
+func TestPeerSyncManager_GetPeersWithData(t *testing.T) {
+	client := NewClient(Config{Host: "http://localhost:8080"})
+	psm := NewPeerSyncManager(client, "abc123")
+
+	// Manually set peer data
+	psm.data = &TorrentPeersResponse{
+		Rid:        1,
+		FullUpdate: true,
+		ShowFlags:  true,
+		Peers: map[string]TorrentPeer{
+			"192.168.1.1:6881": {
+				IP:         "192.168.1.1",
+				Port:       6881,
+				Client:     "qBittorrent 4.5.0",
+				Progress:   0.5,
+				DownSpeed:  1000,
+				UpSpeed:    500,
+				Downloaded: 1024000,
+				Uploaded:   512000,
+				Connection: "BT",
+				Flags:      "XEDU",
+				Country:    "United States",
+			},
+			"192.168.1.2:6882": {
+				IP:         "192.168.1.2",
+				Port:       6882,
+				Client:     "Transmission 3.0",
+				Progress:   0.75,
+				DownSpeed:  2000,
+				UpSpeed:    1000,
+				Downloaded: 2048000,
+				Uploaded:   1024000,
+				Connection: "uTP",
+				Flags:      "XEDI",
+				Country:    "Canada",
+			},
+		},
+	}
+
+	// Test GetPeers returns a copy
+	peers := psm.GetPeers()
+	if peers == nil {
+		t.Fatal("Expected peers, got nil")
+	}
+
+	if len(peers.Peers) != 2 {
+		t.Errorf("Expected 2 peers, got %d", len(peers.Peers))
+	}
+
+	// Verify it's a copy by modifying it
+	peers.Peers["192.168.1.3:6883"] = TorrentPeer{IP: "192.168.1.3"}
+
+	// Original should still have 2 peers
+	if len(psm.data.Peers) != 2 {
+		t.Error("Modifying copy affected original data")
+	}
+
+	// Test GetPeerCount
+	count := psm.GetPeerCount()
+	if count != 2 {
+		t.Errorf("Expected peer count 2, got %d", count)
+	}
+}
+
+func TestMergePeers_FullUpdate(t *testing.T) {
+	existing := &TorrentPeersResponse{
+		Rid: 1,
+		Peers: map[string]TorrentPeer{
+			"192.168.1.1:6881": {
+				IP:       "192.168.1.1",
+				Port:     6881,
+				Client:   "qBittorrent 4.5.0",
+				Progress: 0.5,
+			},
+		},
+	}
+
+	update := &TorrentPeersResponse{
+		Rid:        2,
+		FullUpdate: true,
+		Peers: map[string]TorrentPeer{
+			"192.168.1.2:6882": {
+				IP:       "192.168.1.2",
+				Port:     6882,
+				Client:   "Transmission 3.0",
+				Progress: 0.75,
+			},
+			"192.168.1.3:6883": {
+				IP:       "192.168.1.3",
+				Port:     6883,
+				Client:   "Deluge 2.0",
+				Progress: 0.25,
+			},
+		},
+	}
+
+	existing.MergePeers(update)
+
+	// Full update should replace all peers
+	if len(existing.Peers) != 2 {
+		t.Errorf("Expected 2 peers after full update, got %d", len(existing.Peers))
+	}
+
+	// Old peer should be gone
+	if _, exists := existing.Peers["192.168.1.1:6881"]; exists {
+		t.Error("Old peer should be removed after full update")
+	}
+
+	// New peers should exist
+	if _, exists := existing.Peers["192.168.1.2:6882"]; !exists {
+		t.Error("New peer 192.168.1.2:6882 should exist")
+	}
+
+	if _, exists := existing.Peers["192.168.1.3:6883"]; !exists {
+		t.Error("New peer 192.168.1.3:6883 should exist")
+	}
+
+	if existing.Rid != 2 {
+		t.Errorf("Expected RID 2, got %d", existing.Rid)
+	}
+}
+
+func TestMergePeers_PartialUpdate(t *testing.T) {
+	existing := &TorrentPeersResponse{
+		Rid: 1,
+		Peers: map[string]TorrentPeer{
+			"192.168.1.1:6881": {
+				IP:          "192.168.1.1",
+				Port:        6881,
+				Client:      "qBittorrent 4.5.0",
+				Progress:    0.5,
+				progressSet: true,
+				DownSpeed:   1000,
+				UpSpeed:     500,
+				Downloaded:  1024000,
+				Uploaded:    512000,
+			},
+			"192.168.1.2:6882": {
+				IP:          "192.168.1.2",
+				Port:        6882,
+				Client:      "Transmission 3.0",
+				Progress:    0.75,
+				progressSet: true,
+			},
+		},
+	}
+
+	update := &TorrentPeersResponse{
+		Rid:        2,
+		FullUpdate: false,
+		Peers: map[string]TorrentPeer{
+			"192.168.1.1:6881": {
+				Progress:    0.75, // Updated progress
+				progressSet: true,
+				DownSpeed:   2000, // Updated speed
+				UpSpeed:     0,    // Explicitly set to 0 (numeric fields always update)
+				// String fields not in update should be preserved
+			},
+			"192.168.1.3:6883": { // New peer
+				IP:          "192.168.1.3",
+				Port:        6883,
+				Client:      "Deluge 2.0",
+				Progress:    0.25,
+				progressSet: true,
+			},
+		},
+		PeersRemoved: []string{"192.168.1.2:6882"}, // Remove this peer
+	}
+
+	existing.MergePeers(update)
+
+	// Should have 2 peers (1 updated, 1 new, 1 removed)
+	if len(existing.Peers) != 2 {
+		t.Errorf("Expected 2 peers after partial update, got %d", len(existing.Peers))
+	}
+
+	// Check updated peer preserved non-updated fields
+	peer1 := existing.Peers["192.168.1.1:6881"]
+	if peer1.Progress != 0.75 {
+		t.Errorf("Expected updated progress 0.75, got %f", peer1.Progress)
+	}
+	if peer1.DownSpeed != 2000 {
+		t.Errorf("Expected updated DownSpeed 2000, got %d", peer1.DownSpeed)
+	}
+	if peer1.Client != "qBittorrent 4.5.0" {
+		t.Errorf("Expected preserved Client, got %s", peer1.Client)
+	}
+	// Note: Numeric fields are always updated even when 0 (as they can legitimately be 0)
+	if peer1.UpSpeed != 0 {
+		t.Errorf("Expected UpSpeed to be updated to 0, got %d", peer1.UpSpeed)
+	}
+
+	// Check new peer exists
+	if _, exists := existing.Peers["192.168.1.3:6883"]; !exists {
+		t.Error("New peer should be added")
+	}
+
+	// Check removed peer is gone
+	if _, exists := existing.Peers["192.168.1.2:6882"]; exists {
+		t.Error("Removed peer should be deleted")
+	}
+
+	if existing.Rid != 2 {
+		t.Errorf("Expected RID 2, got %d", existing.Rid)
+	}
+}
+
+func TestMergePeers_PartialUpdate_NoProgressChange(t *testing.T) {
+	existing := &TorrentPeersResponse{
+		Peers: map[string]TorrentPeer{
+			"peer1": {
+				Progress:    1.0,
+				progressSet: true,
+				DownSpeed:   900,
+			},
+		},
+	}
+
+	update := &TorrentPeersResponse{
+		Rid: 2,
+		Peers: map[string]TorrentPeer{
+			"peer1": {
+				DownSpeed:   1200,
+				progressSet: false,
+			},
+		},
+	}
+
+	existing.MergePeers(update)
+
+	peer := existing.Peers["peer1"]
+	if peer.Progress != 1.0 {
+		t.Errorf("Expected progress to remain 1.0 when update omitted progress, got %f", peer.Progress)
+	}
+	if !peer.HasProgress() {
+		t.Errorf("Expected peer to retain progress presence flag")
+	}
+	if peer.DownSpeed != 1200 {
+		t.Errorf("Expected DownSpeed to update to 1200, got %d", peer.DownSpeed)
+	}
+}
+
+func TestTorrentPeerUnmarshalJSONProgressPresence(t *testing.T) {
+	withProgress := []byte(`{"ip":"1.2.3.4","progress":0.5}`)
+	var peer TorrentPeer
+	if err := json.Unmarshal(withProgress, &peer); err != nil {
+		t.Fatalf("unexpected error decoding peer: %v", err)
+	}
+	if !peer.HasProgress() {
+		t.Errorf("Expected progress flag to be set when field is present")
+	}
+	if peer.Progress != 0.5 {
+		t.Errorf("Expected progress 0.5, got %f", peer.Progress)
+	}
+
+	withoutProgress := []byte(`{"ip":"1.2.3.4"}`)
+	peer = TorrentPeer{}
+	if err := json.Unmarshal(withoutProgress, &peer); err != nil {
+		t.Fatalf("unexpected error decoding peer without progress: %v", err)
+	}
+	if peer.HasProgress() {
+		t.Errorf("Expected progress flag to be unset when field missing")
+	}
+}
+
+func TestMergePeerFields(t *testing.T) {
+	existing := TorrentPeer{
+		IP:           "192.168.1.1",
+		Port:         6881,
+		Connection:   "BT",
+		Flags:        "XEDU",
+		FlagsDesc:    "Encryption, Download, Upload",
+		Client:       "qBittorrent 4.5.0",
+		Progress:     0.5,
+		progressSet:  true,
+		DownSpeed:    1000,
+		UpSpeed:      500,
+		Downloaded:   1024000,
+		Uploaded:     512000,
+		Country:      "United States",
+		CountryCode:  "US",
+		PeerIDClient: "qB4500",
+		Files:        "file1.mkv",
+		Relevance:    0.9,
+	}
+
+	// Test partial update with zero Downloaded/Uploaded (should preserve existing values)
+	update := TorrentPeer{
+		Progress:    0.75,
+		progressSet: true,
+		DownSpeed:   2000,
+		UpSpeed:     1000,
+		Country:     "Canada",
+		// Downloaded and Uploaded are 0 - should preserve existing values
+	}
+
+	result := mergePeerFields(existing, update)
+
+	// Check updated fields
+	if result.Progress != 0.75 {
+		t.Errorf("Expected Progress 0.75, got %f", result.Progress)
+	}
+	if result.DownSpeed != 2000 {
+		t.Errorf("Expected DownSpeed 2000, got %d", result.DownSpeed)
+	}
+	if result.UpSpeed != 1000 {
+		t.Errorf("Expected UpSpeed 1000, got %d", result.UpSpeed)
+	}
+	if result.Country != "Canada" {
+		t.Errorf("Expected Country Canada, got %s", result.Country)
+	}
+	if !result.HasProgress() {
+		t.Errorf("Expected progress presence to remain true after update")
+	}
+
+	// IMPORTANT: Check that Downloaded/Uploaded are preserved when 0 in update
+	if result.Downloaded != 1024000 {
+		t.Errorf("Expected Downloaded to be preserved as 1024000, got %d", result.Downloaded)
+	}
+	if result.Uploaded != 512000 {
+		t.Errorf("Expected Uploaded to be preserved as 512000, got %d", result.Uploaded)
+	}
+
+	// Check other preserved fields
+	if result.IP != "192.168.1.1" {
+		t.Errorf("Expected preserved IP, got %s", result.IP)
+	}
+	if result.Client != "qBittorrent 4.5.0" {
+		t.Errorf("Expected preserved Client, got %s", result.Client)
+	}
+
+	// Test update with non-zero Downloaded/Uploaded (should update)
+	update2 := TorrentPeer{
+		Downloaded: 2048000,
+		Uploaded:   1024000,
+	}
+
+	result2 := mergePeerFields(existing, update2)
+
+	if result2.Downloaded != 2048000 {
+		t.Errorf("Expected Downloaded to update to 2048000, got %d", result2.Downloaded)
+	}
+	if result2.Uploaded != 1024000 {
+		t.Errorf("Expected Uploaded to update to 1024000, got %d", result2.Uploaded)
+	}
+}
+
+func TestPeerSyncManager_Callbacks(t *testing.T) {
+	client := NewClient(Config{Host: "http://localhost:8080"})
+
+	var updateCalled bool
+	var errorCalled bool
+	var lastPeerData *TorrentPeersResponse
+	var lastError error
+
+	options := PeerSyncOptions{
+		OnUpdate: func(data *TorrentPeersResponse) {
+			updateCalled = true
+			lastPeerData = data
+		},
+		OnError: func(err error) {
+			errorCalled = true
+			lastError = err
+		},
+	}
+
+	psm := NewPeerSyncManager(client, "abc123", options)
+
+	// Manually trigger callbacks to test them
+	testData := &TorrentPeersResponse{
+		Rid:        1,
+		FullUpdate: true,
+		Peers: map[string]TorrentPeer{
+			"192.168.1.1:6881": {
+				IP:   "192.168.1.1",
+				Port: 6881,
+			},
+		},
+	}
+
+	if psm.options.OnUpdate != nil {
+		psm.options.OnUpdate(testData)
+	}
+
+	if !updateCalled {
+		t.Error("Expected OnUpdate callback to be called")
+	}
+
+	if lastPeerData != testData {
+		t.Error("Expected lastPeerData to be set correctly")
+	}
+
+	// Test error callback
+	testError := context.DeadlineExceeded
+	if psm.options.OnError != nil {
+		psm.options.OnError(testError)
+	}
+
+	if !errorCalled {
+		t.Error("Expected OnError callback to be called")
+	}
+
+	if lastError != testError {
+		t.Error("Expected lastError to be set correctly")
+	}
+}
+
+func TestPeerSyncManager_ConcurrentAccess(t *testing.T) {
+	client := NewClient(Config{Host: "http://localhost:8080"})
+	psm := NewPeerSyncManager(client, "abc123")
+
+	// Set initial data
+	psm.data = &TorrentPeersResponse{
+		Rid: 1,
+		Peers: map[string]TorrentPeer{
+			"192.168.1.1:6881": {
+				IP:       "192.168.1.1",
+				Port:     6881,
+				Progress: 0.5,
+			},
+		},
+	}
+
+	const numGoroutines = 10
+	var wg sync.WaitGroup
+
+	// Start multiple readers
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 100; j++ {
+				peers := psm.GetPeers()
+				_ = psm.GetPeerCount()
+				if peers == nil {
+					t.Error("GetPeers returned nil during concurrent access")
+				}
+			}
+		}()
+	}
+
+	// Start a writer that updates peer data
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for j := 0; j < 100; j++ {
+			update := &TorrentPeersResponse{
+				Rid:        int64(j + 2),
+				FullUpdate: false,
+				Peers: map[string]TorrentPeer{
+					"192.168.1.1:6881": {
+						Progress: float64(j) / 100.0,
+					},
+				},
+			}
+			// Need to acquire lock before modifying data
+			psm.mu.Lock()
+			psm.data.MergePeers(update)
+			psm.mu.Unlock()
+			time.Sleep(time.Microsecond) // Small delay to interleave operations
+		}
+	}()
+
+	wg.Wait()
+
+	// Verify final state is consistent
+	finalPeers := psm.GetPeers()
+	if finalPeers == nil {
+		t.Error("Final peers should not be nil")
+		return
+	}
+
+	if len(finalPeers.Peers) == 0 {
+		t.Error("Should have at least one peer after concurrent operations")
+	}
+}
+
+func TestMergePeers_NilInitialization(t *testing.T) {
+	// Test that MergePeers handles nil Peers map correctly
+	existing := &TorrentPeersResponse{
+		Rid:   1,
+		Peers: nil, // Explicitly nil
+	}
+
+	update := &TorrentPeersResponse{
+		Rid:        2,
+		FullUpdate: false,
+		Peers: map[string]TorrentPeer{
+			"192.168.1.1:6881": {
+				IP:       "192.168.1.1",
+				Port:     6881,
+				Progress: 0.5,
+			},
+		},
+	}
+
+	existing.MergePeers(update)
+
+	if existing.Peers == nil {
+		t.Error("Peers map should be initialized")
+	}
+
+	if len(existing.Peers) != 1 {
+		t.Errorf("Expected 1 peer, got %d", len(existing.Peers))
+	}
+
+	if _, exists := existing.Peers["192.168.1.1:6881"]; !exists {
+		t.Error("Peer should have been added")
+	}
+}
+
+func TestPeerSyncManager_ZeroSyncInterval(t *testing.T) {
+	client := NewClient(Config{Host: "http://localhost:8080"})
+
+	options := PeerSyncOptions{
+		SyncInterval: 0, // Zero interval should default to 5s
+	}
+
+	psm := NewPeerSyncManager(client, "abc123", options)
+
+	if psm.options.SyncInterval != 5*time.Second {
+		t.Errorf("Expected SyncInterval to default to 5s when zero, got %v", psm.options.SyncInterval)
+	}
+}
