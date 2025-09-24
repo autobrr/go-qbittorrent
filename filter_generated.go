@@ -4,158 +4,614 @@
 package qbittorrent
 
 import (
-	"cmp"
 	"slices"
 )
+func compareAddedOn(a, b *Torrent) int {
+	if a.AddedOn < b.AddedOn {
+		return -1
+	} else if a.AddedOn > b.AddedOn {
+		return 1
+	}
+	return 0
+}
 
-// applyTorrentSorting applies sorting to torrents based on the sort field
+func compareAmountLeft(a, b *Torrent) int {
+	if a.AmountLeft < b.AmountLeft {
+		return -1
+	} else if a.AmountLeft > b.AmountLeft {
+		return 1
+	}
+	return 0
+}
+
+func compareAutoManaged(a, b *Torrent) int {
+	if a.AutoManaged != b.AutoManaged {
+		if a.AutoManaged {
+			return 1
+		}
+		return -1
+	}
+	return 0
+}
+
+func compareAvailability(a, b *Torrent) int {
+	if a.Availability < b.Availability {
+		return -1
+	} else if a.Availability > b.Availability {
+		return 1
+	}
+	return 0
+}
+
+func compareCategory(a, b *Torrent) int {
+	if a.Category == b.Category {
+		return 0
+	} else if a.Category < b.Category {
+		return -1
+	}
+	return 1
+}
+
+func compareCompleted(a, b *Torrent) int {
+	if a.Completed < b.Completed {
+		return -1
+	} else if a.Completed > b.Completed {
+		return 1
+	}
+	return 0
+}
+
+func compareCompletionOn(a, b *Torrent) int {
+	if a.CompletionOn < b.CompletionOn {
+		return -1
+	} else if a.CompletionOn > b.CompletionOn {
+		return 1
+	}
+	return 0
+}
+
+func compareContentPath(a, b *Torrent) int {
+	if a.ContentPath == b.ContentPath {
+		return 0
+	} else if a.ContentPath < b.ContentPath {
+		return -1
+	}
+	return 1
+}
+
+func compareDlLimit(a, b *Torrent) int {
+	if a.DlLimit < b.DlLimit {
+		return -1
+	} else if a.DlLimit > b.DlLimit {
+		return 1
+	}
+	return 0
+}
+
+func compareDlSpeed(a, b *Torrent) int {
+	if a.DlSpeed < b.DlSpeed {
+		return -1
+	} else if a.DlSpeed > b.DlSpeed {
+		return 1
+	}
+	return 0
+}
+
+func compareDownloadPath(a, b *Torrent) int {
+	if a.DownloadPath == b.DownloadPath {
+		return 0
+	} else if a.DownloadPath < b.DownloadPath {
+		return -1
+	}
+	return 1
+}
+
+func compareDownloaded(a, b *Torrent) int {
+	if a.Downloaded < b.Downloaded {
+		return -1
+	} else if a.Downloaded > b.Downloaded {
+		return 1
+	}
+	return 0
+}
+
+func compareDownloadedSession(a, b *Torrent) int {
+	if a.DownloadedSession < b.DownloadedSession {
+		return -1
+	} else if a.DownloadedSession > b.DownloadedSession {
+		return 1
+	}
+	return 0
+}
+
+func compareETA(a, b *Torrent) int {
+	if a.ETA < b.ETA {
+		return -1
+	} else if a.ETA > b.ETA {
+		return 1
+	}
+	return 0
+}
+
+func compareFirstLastPiecePrio(a, b *Torrent) int {
+	if a.FirstLastPiecePrio != b.FirstLastPiecePrio {
+		if a.FirstLastPiecePrio {
+			return 1
+		}
+		return -1
+	}
+	return 0
+}
+
+func compareForceStart(a, b *Torrent) int {
+	if a.ForceStart != b.ForceStart {
+		if a.ForceStart {
+			return 1
+		}
+		return -1
+	}
+	return 0
+}
+
+func compareHash(a, b *Torrent) int {
+	if a.Hash == b.Hash {
+		return 0
+	} else if a.Hash < b.Hash {
+		return -1
+	}
+	return 1
+}
+
+func compareInfohashV1(a, b *Torrent) int {
+	if a.InfohashV1 == b.InfohashV1 {
+		return 0
+	} else if a.InfohashV1 < b.InfohashV1 {
+		return -1
+	}
+	return 1
+}
+
+func compareInfohashV2(a, b *Torrent) int {
+	if a.InfohashV2 == b.InfohashV2 {
+		return 0
+	} else if a.InfohashV2 < b.InfohashV2 {
+		return -1
+	}
+	return 1
+}
+
+func comparePopularity(a, b *Torrent) int {
+	if a.Popularity < b.Popularity {
+		return -1
+	} else if a.Popularity > b.Popularity {
+		return 1
+	}
+	return 0
+}
+
+func comparePrivate(a, b *Torrent) int {
+	if a.Private != b.Private {
+		if a.Private {
+			return 1
+		}
+		return -1
+	}
+	return 0
+}
+
+func compareLastActivity(a, b *Torrent) int {
+	if a.LastActivity < b.LastActivity {
+		return -1
+	} else if a.LastActivity > b.LastActivity {
+		return 1
+	}
+	return 0
+}
+
+func compareMagnetURI(a, b *Torrent) int {
+	if a.MagnetURI == b.MagnetURI {
+		return 0
+	} else if a.MagnetURI < b.MagnetURI {
+		return -1
+	}
+	return 1
+}
+
+func compareMaxRatio(a, b *Torrent) int {
+	if a.MaxRatio < b.MaxRatio {
+		return -1
+	} else if a.MaxRatio > b.MaxRatio {
+		return 1
+	}
+	return 0
+}
+
+func compareMaxSeedingTime(a, b *Torrent) int {
+	if a.MaxSeedingTime < b.MaxSeedingTime {
+		return -1
+	} else if a.MaxSeedingTime > b.MaxSeedingTime {
+		return 1
+	}
+	return 0
+}
+
+func compareName(a, b *Torrent) int {
+	if a.Name == b.Name {
+		return 0
+	} else if a.Name < b.Name {
+		return -1
+	}
+	return 1
+}
+
+func compareNumComplete(a, b *Torrent) int {
+	if a.NumComplete < b.NumComplete {
+		return -1
+	} else if a.NumComplete > b.NumComplete {
+		return 1
+	}
+	return 0
+}
+
+func compareNumIncomplete(a, b *Torrent) int {
+	if a.NumIncomplete < b.NumIncomplete {
+		return -1
+	} else if a.NumIncomplete > b.NumIncomplete {
+		return 1
+	}
+	return 0
+}
+
+func compareNumLeechs(a, b *Torrent) int {
+	if a.NumLeechs < b.NumLeechs {
+		return -1
+	} else if a.NumLeechs > b.NumLeechs {
+		return 1
+	}
+	return 0
+}
+
+func compareNumSeeds(a, b *Torrent) int {
+	if a.NumSeeds < b.NumSeeds {
+		return -1
+	} else if a.NumSeeds > b.NumSeeds {
+		return 1
+	}
+	return 0
+}
+
+func comparePriority(a, b *Torrent) int {
+	if a.Priority < b.Priority {
+		return -1
+	} else if a.Priority > b.Priority {
+		return 1
+	}
+	return 0
+}
+
+func compareProgress(a, b *Torrent) int {
+	if a.Progress < b.Progress {
+		return -1
+	} else if a.Progress > b.Progress {
+		return 1
+	}
+	return 0
+}
+
+func compareRatio(a, b *Torrent) int {
+	if a.Ratio < b.Ratio {
+		return -1
+	} else if a.Ratio > b.Ratio {
+		return 1
+	}
+	return 0
+}
+
+func compareRatioLimit(a, b *Torrent) int {
+	if a.RatioLimit < b.RatioLimit {
+		return -1
+	} else if a.RatioLimit > b.RatioLimit {
+		return 1
+	}
+	return 0
+}
+
+func compareReannounce(a, b *Torrent) int {
+	if a.Reannounce < b.Reannounce {
+		return -1
+	} else if a.Reannounce > b.Reannounce {
+		return 1
+	}
+	return 0
+}
+
+func compareSavePath(a, b *Torrent) int {
+	if a.SavePath == b.SavePath {
+		return 0
+	} else if a.SavePath < b.SavePath {
+		return -1
+	}
+	return 1
+}
+
+func compareSeedingTime(a, b *Torrent) int {
+	if a.SeedingTime < b.SeedingTime {
+		return -1
+	} else if a.SeedingTime > b.SeedingTime {
+		return 1
+	}
+	return 0
+}
+
+func compareSeedingTimeLimit(a, b *Torrent) int {
+	if a.SeedingTimeLimit < b.SeedingTimeLimit {
+		return -1
+	} else if a.SeedingTimeLimit > b.SeedingTimeLimit {
+		return 1
+	}
+	return 0
+}
+
+func compareSeenComplete(a, b *Torrent) int {
+	if a.SeenComplete < b.SeenComplete {
+		return -1
+	} else if a.SeenComplete > b.SeenComplete {
+		return 1
+	}
+	return 0
+}
+
+func compareSequentialDownload(a, b *Torrent) int {
+	if a.SequentialDownload != b.SequentialDownload {
+		if a.SequentialDownload {
+			return 1
+		}
+		return -1
+	}
+	return 0
+}
+
+func compareSize(a, b *Torrent) int {
+	if a.Size < b.Size {
+		return -1
+	} else if a.Size > b.Size {
+		return 1
+	}
+	return 0
+}
+
+func compareState(a, b *Torrent) int {
+	if a.State == b.State {
+		return 0
+	} else if string(a.State) < string(b.State) {
+		return -1
+	}
+	return 1
+}
+
+func compareSuperSeeding(a, b *Torrent) int {
+	if a.SuperSeeding != b.SuperSeeding {
+		if a.SuperSeeding {
+			return 1
+		}
+		return -1
+	}
+	return 0
+}
+
+func compareTags(a, b *Torrent) int {
+	if a.Tags == b.Tags {
+		return 0
+	} else if a.Tags < b.Tags {
+		return -1
+	}
+	return 1
+}
+
+func compareTimeActive(a, b *Torrent) int {
+	if a.TimeActive < b.TimeActive {
+		return -1
+	} else if a.TimeActive > b.TimeActive {
+		return 1
+	}
+	return 0
+}
+
+func compareTotalSize(a, b *Torrent) int {
+	if a.TotalSize < b.TotalSize {
+		return -1
+	} else if a.TotalSize > b.TotalSize {
+		return 1
+	}
+	return 0
+}
+
+func compareTracker(a, b *Torrent) int {
+	if a.Tracker == b.Tracker {
+		return 0
+	} else if a.Tracker < b.Tracker {
+		return -1
+	}
+	return 1
+}
+
+func compareTrackersCount(a, b *Torrent) int {
+	if a.TrackersCount < b.TrackersCount {
+		return -1
+	} else if a.TrackersCount > b.TrackersCount {
+		return 1
+	}
+	return 0
+}
+
+func compareUpLimit(a, b *Torrent) int {
+	if a.UpLimit < b.UpLimit {
+		return -1
+	} else if a.UpLimit > b.UpLimit {
+		return 1
+	}
+	return 0
+}
+
+func compareUploaded(a, b *Torrent) int {
+	if a.Uploaded < b.Uploaded {
+		return -1
+	} else if a.Uploaded > b.Uploaded {
+		return 1
+	}
+	return 0
+}
+
+func compareUploadedSession(a, b *Torrent) int {
+	if a.UploadedSession < b.UploadedSession {
+		return -1
+	} else if a.UploadedSession > b.UploadedSession {
+		return 1
+	}
+	return 0
+}
+
+func compareUpSpeed(a, b *Torrent) int {
+	if a.UpSpeed < b.UpSpeed {
+		return -1
+	} else if a.UpSpeed > b.UpSpeed {
+		return 1
+	}
+	return 0
+}
+
+func compareDefault(a, b *Torrent) int {
+	if a.Name == b.Name {
+		return 0
+	} else if a.Name < b.Name {
+		return -1
+	}
+	return 1
+}
+
+// Precomputed comparators for sorting torrents
+var torrentComparators = map[string]func(a, b *Torrent) int{
+	"added_on": compareAddedOn,
+	"amount_left": compareAmountLeft,
+	"auto_tmm": compareAutoManaged,
+	"availability": compareAvailability,
+	"category": compareCategory,
+	"completed": compareCompleted,
+	"completion_on": compareCompletionOn,
+	"content_path": compareContentPath,
+	"dl_limit": compareDlLimit,
+	"dlspeed": compareDlSpeed,
+	"download_path": compareDownloadPath,
+	"downloaded": compareDownloaded,
+	"downloaded_session": compareDownloadedSession,
+	"eta": compareETA,
+	"f_l_piece_prio": compareFirstLastPiecePrio,
+	"force_start": compareForceStart,
+	"hash": compareHash,
+	"infohash_v1": compareInfohashV1,
+	"infohash_v2": compareInfohashV2,
+	"popularity": comparePopularity,
+	"private": comparePrivate,
+	"last_activity": compareLastActivity,
+	"magnet_uri": compareMagnetURI,
+	"max_ratio": compareMaxRatio,
+	"max_seeding_time": compareMaxSeedingTime,
+	"name": compareName,
+	"num_complete": compareNumComplete,
+	"num_incomplete": compareNumIncomplete,
+	"num_leechs": compareNumLeechs,
+	"num_seeds": compareNumSeeds,
+	"priority": comparePriority,
+	"progress": compareProgress,
+	"ratio": compareRatio,
+	"ratio_limit": compareRatioLimit,
+	"reannounce": compareReannounce,
+	"save_path": compareSavePath,
+	"seeding_time": compareSeedingTime,
+	"seeding_time_limit": compareSeedingTimeLimit,
+	"seen_complete": compareSeenComplete,
+	"seq_dl": compareSequentialDownload,
+	"size": compareSize,
+	"state": compareState,
+	"super_seeding": compareSuperSeeding,
+	"tags": compareTags,
+	"time_active": compareTimeActive,
+	"total_size": compareTotalSize,
+	"tracker": compareTracker,
+	"trackers_count": compareTrackersCount,
+	"up_limit": compareUpLimit,
+	"uploaded": compareUploaded,
+	"uploaded_session": compareUploadedSession,
+	"upspeed": compareUpSpeed,
+	"default": compareDefault,
+}
+
+// torrentSorter is a reusable struct for sorting torrents without allocations
+type torrentSorter struct {
+	torrents   []Torrent
+	comparator func(a, b *Torrent) int
+	reverse    bool
+}
+
+// compare is a static method that doesn't allocate
+func (s *torrentSorter) compare(i, j int) int {
+	result := s.comparator(&s.torrents[i], &s.torrents[j])
+	if result == 0 {
+		if s.torrents[i].Hash == s.torrents[j].Hash {
+			result = 0
+		} else if s.torrents[i].Hash < s.torrents[j].Hash {
+			result = -1
+		} else {
+			result = 1
+		} // secondary sort by hash for stability
+	}
+	if s.reverse {
+		return -result
+	}
+	return result
+}
+
 func applyTorrentSorting(torrents []Torrent, sortField string, reverse bool) {
 	if sortField == "" {
 		return
 	}
 
-	slices.SortFunc(torrents, func(a, b Torrent) int {
-		result := cmp.Or(
-			func() int {
-				switch sortField {
-				case "added_on":
-					return cmp.Compare(a.AddedOn, b.AddedOn)
-				case "amount_left":
-					return cmp.Compare(a.AmountLeft, b.AmountLeft)
-				case "auto_tmm":
-					if a.AutoManaged != b.AutoManaged {
-						if a.AutoManaged {
-							return 1
-						}
-						return -1
-					}
-					return 0
-				case "availability":
-					return cmp.Compare(a.Availability, b.Availability)
-				case "category":
-					return cmp.Compare(a.Category, b.Category)
-				case "completed":
-					return cmp.Compare(a.Completed, b.Completed)
-				case "completion_on":
-					return cmp.Compare(a.CompletionOn, b.CompletionOn)
-				case "content_path":
-					return cmp.Compare(a.ContentPath, b.ContentPath)
-				case "dl_limit":
-					return cmp.Compare(a.DlLimit, b.DlLimit)
-				case "dlspeed":
-					return cmp.Compare(a.DlSpeed, b.DlSpeed)
-				case "download_path":
-					return cmp.Compare(a.DownloadPath, b.DownloadPath)
-				case "downloaded":
-					return cmp.Compare(a.Downloaded, b.Downloaded)
-				case "downloaded_session":
-					return cmp.Compare(a.DownloadedSession, b.DownloadedSession)
-				case "eta":
-					return cmp.Compare(a.ETA, b.ETA)
-				case "f_l_piece_prio":
-					if a.FirstLastPiecePrio != b.FirstLastPiecePrio {
-						if a.FirstLastPiecePrio {
-							return 1
-						}
-						return -1
-					}
-					return 0
-				case "force_start":
-					if a.ForceStart != b.ForceStart {
-						if a.ForceStart {
-							return 1
-						}
-						return -1
-					}
-					return 0
-				case "hash":
-					return cmp.Compare(a.Hash, b.Hash)
-				case "infohash_v1":
-					return cmp.Compare(a.InfohashV1, b.InfohashV1)
-				case "infohash_v2":
-					return cmp.Compare(a.InfohashV2, b.InfohashV2)
-				case "last_activity":
-					return cmp.Compare(a.LastActivity, b.LastActivity)
-				case "magnet_uri":
-					return cmp.Compare(a.MagnetURI, b.MagnetURI)
-				case "max_ratio":
-					return cmp.Compare(a.MaxRatio, b.MaxRatio)
-				case "max_seeding_time":
-					return cmp.Compare(a.MaxSeedingTime, b.MaxSeedingTime)
-				case "name":
-					return cmp.Compare(a.Name, b.Name)
-				case "num_complete":
-					return cmp.Compare(a.NumComplete, b.NumComplete)
-				case "num_incomplete":
-					return cmp.Compare(a.NumIncomplete, b.NumIncomplete)
-				case "num_leechs":
-					return cmp.Compare(a.NumLeechs, b.NumLeechs)
-				case "num_seeds":
-					return cmp.Compare(a.NumSeeds, b.NumSeeds)
-				case "priority":
-					return cmp.Compare(a.Priority, b.Priority)
-				case "progress":
-					return cmp.Compare(a.Progress, b.Progress)
-				case "ratio":
-					return cmp.Compare(a.Ratio, b.Ratio)
-				case "ratio_limit":
-					return cmp.Compare(a.RatioLimit, b.RatioLimit)
-				case "save_path":
-					return cmp.Compare(a.SavePath, b.SavePath)
-				case "seeding_time":
-					return cmp.Compare(a.SeedingTime, b.SeedingTime)
-				case "seeding_time_limit":
-					return cmp.Compare(a.SeedingTimeLimit, b.SeedingTimeLimit)
-				case "seen_complete":
-					return cmp.Compare(a.SeenComplete, b.SeenComplete)
-				case "seq_dl":
-					if a.SequentialDownload != b.SequentialDownload {
-						if a.SequentialDownload {
-							return 1
-						}
-						return -1
-					}
-					return 0
-				case "size":
-					return cmp.Compare(a.Size, b.Size)
-				case "state":
-					return cmp.Compare(string(a.State), string(b.State))
-				case "super_seeding":
-					if a.SuperSeeding != b.SuperSeeding {
-						if a.SuperSeeding {
-							return 1
-						}
-						return -1
-					}
-					return 0
-				case "tags":
-					return cmp.Compare(a.Tags, b.Tags)
-				case "time_active":
-					return cmp.Compare(a.TimeActive, b.TimeActive)
-				case "total_size":
-					return cmp.Compare(a.TotalSize, b.TotalSize)
-				case "tracker":
-					return cmp.Compare(a.Tracker, b.Tracker)
-				case "trackers_count":
-					return cmp.Compare(a.TrackersCount, b.TrackersCount)
-				case "up_limit":
-					return cmp.Compare(a.UpLimit, b.UpLimit)
-				case "uploaded":
-					return cmp.Compare(a.Uploaded, b.Uploaded)
-				case "uploaded_session":
-					return cmp.Compare(a.UploadedSession, b.UploadedSession)
-				case "upspeed":
-					return cmp.Compare(a.UpSpeed, b.UpSpeed)
-				default:
-					return cmp.Compare(a.Name, b.Name) // default to name
-				}
-			}(),
-			cmp.Compare(a.Hash, b.Hash), // secondary sort by hash for stability
-		)
+	comparator, exists := torrentComparators[sortField]
+	if !exists {
+		comparator = torrentComparators["default"]
+	}
 
-		if reverse {
-			return -result
+	// Create indices to sort instead of large structs
+	indices := make([]int, len(torrents))
+	for i := range indices {
+		indices[i] = i
+	}
+
+	sorter := &torrentSorter{
+		torrents:  torrents,
+		comparator: comparator,
+		reverse:   reverse,
+	}
+
+	// Sort indices using the static method - no allocation!
+	slices.SortFunc(indices, sorter.compare)
+
+	// Apply permutation in place using cycle decomposition
+	for i := 0; i < len(torrents); i++ {
+		if indices[i] != i {
+			// Start of a cycle
+			temp := torrents[i]
+			j := i
+			for {
+				k := indices[j]
+				indices[j] = j // Mark as processed
+				if k == i {
+					torrents[j] = temp
+					break
+				}
+				torrents[j] = torrents[k]
+				j = k
+			}
 		}
-		return result
-	})
+	}
 }

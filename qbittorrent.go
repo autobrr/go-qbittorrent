@@ -128,6 +128,11 @@ func (c *Client) NewSyncManager(options ...SyncOptions) *SyncManager {
 	return NewSyncManager(c, options...)
 }
 
+// NewPeerSyncManager creates a new peer sync manager for a specific torrent
+func (c *Client) NewPeerSyncManager(hash string, options ...PeerSyncOptions) *PeerSyncManager {
+	return NewPeerSyncManager(c, hash, options...)
+}
+
 // GetHTTPClient allows you to a receive the implemented [http.Client].
 func (c *Client) GetHTTPClient() *http.Client {
 	return c.http
