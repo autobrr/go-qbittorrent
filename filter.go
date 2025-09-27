@@ -3,6 +3,7 @@
 package qbittorrent
 
 import (
+	"slices"
 	"strings"
 )
 
@@ -49,13 +50,7 @@ func removeStrings(input []string, toRemove []string) []string {
 // matchesTorrentFilter checks if a torrent matches the given filter options
 func matchesTorrentFilter(torrent Torrent, options TorrentFilterOptions) bool {
 	if len(options.Hashes) > 0 {
-		found := false
-		for _, h := range options.Hashes {
-			if h == torrent.Hash {
-				found = true
-				break
-			}
-		}
+		found := slices.Contains(options.Hashes, torrent.Hash)
 		if !found {
 			return false
 		}
@@ -63,13 +58,40 @@ func matchesTorrentFilter(torrent Torrent, options TorrentFilterOptions) bool {
 	if options.Category != "" && torrent.Category != options.Category {
 		return false
 	}
-	if options.Tag != "" && !strings.Contains(torrent.Tags, options.Tag) {
+	if options.Tag != "" && !hasExactTag(torrent.Tags, options.Tag) {
 		return false
 	}
 	if options.Filter != "" && !matchesStateFilter(torrent.State, options.Filter) {
 		return false
 	}
 	return true
+}
+
+// hasExactTag returns true if the comma-separated tag list contains the target tag as a full token.
+func hasExactTag(tags string, target string) bool {
+	if tags == "" || target == "" {
+		return false
+	}
+
+	return slices.Contains(parseTags(tags), target)
+}
+
+// parseTags splits a qBittorrent tag string into individual tags, trimming whitespace and dropping empties.
+func parseTags(tags string) []string {
+	if tags == "" {
+		return nil
+	}
+
+	parts := strings.Split(tags, ",")
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		tag := strings.TrimSpace(part)
+		if tag != "" {
+			result = append(result, tag)
+		}
+	}
+
+	return result
 }
 
 // stateFilterMatches is a precomputed lookup table for state-filter matches
