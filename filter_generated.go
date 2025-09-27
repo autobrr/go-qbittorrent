@@ -235,6 +235,15 @@ func compareMaxSeedingTime(a, b *Torrent) int {
 	return 0
 }
 
+func compareMaxInactiveSeedingTime(a, b *Torrent) int {
+	if a.MaxInactiveSeedingTime < b.MaxInactiveSeedingTime {
+		return -1
+	} else if a.MaxInactiveSeedingTime > b.MaxInactiveSeedingTime {
+		return 1
+	}
+	return 0
+}
+
 func compareName(a, b *Torrent) int {
 	if a.Name == b.Name {
 		return 0
@@ -347,6 +356,15 @@ func compareSeedingTimeLimit(a, b *Torrent) int {
 	if a.SeedingTimeLimit < b.SeedingTimeLimit {
 		return -1
 	} else if a.SeedingTimeLimit > b.SeedingTimeLimit {
+		return 1
+	}
+	return 0
+}
+
+func compareInactiveSeedingTimeLimit(a, b *Torrent) int {
+	if a.InactiveSeedingTimeLimit < b.InactiveSeedingTimeLimit {
+		return -1
+	} else if a.InactiveSeedingTimeLimit > b.InactiveSeedingTimeLimit {
 		return 1
 	}
 	return 0
@@ -516,6 +534,7 @@ var torrentComparators = map[string]func(a, b *Torrent) int{
 	"magnet_uri": compareMagnetURI,
 	"max_ratio": compareMaxRatio,
 	"max_seeding_time": compareMaxSeedingTime,
+	"max_inactive_seeding_time": compareMaxInactiveSeedingTime,
 	"name": compareName,
 	"num_complete": compareNumComplete,
 	"num_incomplete": compareNumIncomplete,
@@ -529,6 +548,7 @@ var torrentComparators = map[string]func(a, b *Torrent) int{
 	"save_path": compareSavePath,
 	"seeding_time": compareSeedingTime,
 	"seeding_time_limit": compareSeedingTimeLimit,
+	"inactive_seeding_time_limit": compareInactiveSeedingTimeLimit,
 	"seen_complete": compareSeenComplete,
 	"seq_dl": compareSequentialDownload,
 	"size": compareSize,
