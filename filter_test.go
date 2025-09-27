@@ -12,6 +12,8 @@ func TestHasExactTag(t *testing.T) {
 		{name: "matches exact tag", input: "bc,abcd,abcde", tag: "bc", expect: true},
 		{name: "ignores prefix", input: "abcd,abcde", tag: "bc", expect: false},
 		{name: "trims whitespace", input: "tag1, tag2 , tag3", tag: "tag2", expect: true},
+		{name: "keeps internal spaces", input: "tag 1,tag 2", tag: "tag 2", expect: true},
+		{name: "matches spaced tag with surrounding whitespace", input: "  spaced tag  ,other", tag: "spaced tag", expect: true},
 		{name: "empty input", input: "", tag: "tag", expect: false},
 		{name: "empty target", input: "tag1,tag2", tag: "", expect: false},
 	}
