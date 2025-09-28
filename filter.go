@@ -58,7 +58,7 @@ func matchesTorrentFilter(torrent Torrent, options TorrentFilterOptions) bool {
 	if options.Category != "" && torrent.Category != options.Category {
 		return false
 	}
-	if options.Tag != "" && !hasExactTag(torrent.Tags, options.Tag) {
+	if options.Tag != "" && !containsExactTag(torrent.Tags, options.Tag) {
 		return false
 	}
 	if options.Filter != "" && !matchesStateFilter(torrent.State, options.Filter) {
@@ -67,31 +67,24 @@ func matchesTorrentFilter(torrent Torrent, options TorrentFilterOptions) bool {
 	return true
 }
 
-// hasExactTag returns true if the comma-separated tag list contains the target tag as a full token.
-func hasExactTag(tags string, target string) bool {
+// containsExactTag reports whether the comma-separated tags string includes the target as a full token.
+func containsExactTag(tags string, target string) bool {
 	if tags == "" || target == "" {
 		return false
 	}
 
-	return slices.Contains(parseTags(tags), target)
-}
-
-// parseTags splits a qBittorrent tag string into individual tags, trimming whitespace and dropping empties.
-func parseTags(tags string) []string {
-	if tags == "" {
-		return nil
+	trimmed := strings.TrimSpace(target)
+	if trimmed == "" {
+		return false
 	}
 
-	parts := strings.Split(tags, ",")
-	result := make([]string, 0, len(parts))
-	for _, part := range parts {
-		tag := strings.TrimSpace(part)
-		if tag != "" {
-			result = append(result, tag)
+	for tag := range strings.SplitSeq(tags, ",") {
+		if strings.TrimSpace(tag) == trimmed {
+			return true
 		}
 	}
 
-	return result
+	return false
 }
 
 // stateFilterMatches is a precomputed lookup table for state-filter matches

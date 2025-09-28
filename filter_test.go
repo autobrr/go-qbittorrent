@@ -2,40 +2,61 @@ package qbittorrent
 
 import "testing"
 
-func TestHasExactTag(t *testing.T) {
+func TestContainsExactTag(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name   string
-		input  string
-		tag    string
-		expect bool
+		tags   string
+		target string
+		want   bool
 	}{
-		{name: "matches exact tag", input: "bc,abcd,abcde", tag: "bc", expect: true},
-		{name: "ignores prefix", input: "abcd,abcde", tag: "bc", expect: false},
-		{name: "trims whitespace", input: "tag1, tag2 , tag3", tag: "tag2", expect: true},
-		{name: "keeps internal spaces", input: "tag 1,tag 2", tag: "tag 2", expect: true},
-		{name: "matches spaced tag with surrounding whitespace", input: "  spaced tag  ,other", tag: "spaced tag", expect: true},
-		{name: "empty input", input: "", tag: "tag", expect: false},
-		{name: "empty target", input: "tag1,tag2", tag: "", expect: false},
+		{name: "exact match", tags: "foo,bar", target: "foo", want: true},
+		{name: "trimmed match", tags: "foo, bar", target: "bar", want: true},
+		{name: "no match", tags: "foo,bar", target: "baz", want: false},
+		{name: "substring not match", tags: "foobar,baz", target: "foo", want: false},
+		{name: "empty tags", tags: "", target: "foo", want: false},
+		{name: "blank target", tags: "foo,bar", target: " ", want: false},
+		{name: "ab exact match", tags: "a,ab,abc", target: "ab", want: true},
+		{name: "abc exact match", tags: "a,ab,abc", target: "abc", want: true},
+		{name: "ab not substring of abc", tags: "abc,def", target: "ab", want: false},
+		{name: "abc not superstring of ab", tags: "ab,def", target: "abc", want: false},
 	}
 
 	for _, tt := range tests {
-		tc := tt
-		t.Run(tc.name, func(t *testing.T) {
-			if got := hasExactTag(tc.input, tc.tag); got != tc.expect {
-				t.Fatalf("hasExactTag(%q, %q) = %v, expect %v", tc.input, tc.tag, got, tc.expect)
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := containsExactTag(tt.tags, tt.target); got != tt.want {
+				t.Fatalf("containsExactTag(%q, %q) = %v, want %v", tt.tags, tt.target, got, tt.want)
 			}
 		})
 	}
 }
 
 func TestMatchesTorrentFilter_Tag(t *testing.T) {
-	torrent := Torrent{Tags: "bc,abcd"}
+	t.Parallel()
 
-	if !matchesTorrentFilter(torrent, TorrentFilterOptions{Tag: "bc"}) {
-		t.Fatalf("expected torrent to match tag 'bc'")
+	torrent := Torrent{Tags: "alpha, beta"}
+
+	tests := []struct {
+		name    string
+		options TorrentFilterOptions
+		want    bool
+	}{
+		{name: "match", options: TorrentFilterOptions{Tag: "alpha"}, want: true},
+		{name: "substring not match", options: TorrentFilterOptions{Tag: "alp"}, want: false},
+		{name: "trim spaces", options: TorrentFilterOptions{Tag: "beta"}, want: true},
+		{name: "no tag filter", options: TorrentFilterOptions{}, want: true},
 	}
 
-	if matchesTorrentFilter(torrent, TorrentFilterOptions{Tag: "b"}) {
-		t.Fatalf("expected torrent not to match partial tag 'b'")
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := matchesTorrentFilter(torrent, tt.options); got != tt.want {
+				t.Fatalf("matchesTorrentFilter() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
