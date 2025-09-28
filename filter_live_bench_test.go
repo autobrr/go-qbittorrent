@@ -160,6 +160,64 @@ func TestLiveContainsExactTagMatchesTokens(t *testing.T) {
 
 var liveBenchSink int
 
+// containsExactTagSplit uses strings.Split (allocates)
+func containsExactTagSplit(tags string, target string) bool {
+	if tags == "" || target == "" {
+		return false
+	}
+
+	parts := strings.Split(tags, ",")
+	for _, part := range parts {
+		if strings.TrimSpace(part) == target {
+			return true
+		}
+	}
+	return false
+}
+
+// containsTagNoAlloc avoids allocations by manually parsing
+func containsTagNoAlloc(tags string, target string) bool {
+	if tags == "" || target == "" {
+		return false
+	}
+
+	start := 0
+	for i := 0; i <= len(tags); i++ {
+		if i == len(tags) || tags[i] == ',' {
+			// Trim spaces manually
+			tagStart := start
+			tagEnd := i
+
+			// Trim leading spaces
+			for tagStart < tagEnd && tags[tagStart] == ' ' {
+				tagStart++
+			}
+
+			// Trim trailing spaces
+			for tagEnd > tagStart && tags[tagEnd-1] == ' ' {
+				tagEnd--
+			}
+
+			// Compare the trimmed tag
+			if tagEnd-tagStart == len(target) {
+				match := true
+				for j := 0; j < len(target); j++ {
+					if tags[tagStart+j] != target[j] {
+						match = false
+						break
+					}
+				}
+				if match {
+					return true
+				}
+			}
+
+			start = i + 1
+		}
+	}
+	return false
+}
+
 func BenchmarkContainsExactTagLiveSplitSeq(b *testing.B) {
 	dataset := requireLiveDataset(b)
 
