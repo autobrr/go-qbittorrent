@@ -3,6 +3,7 @@
 package qbittorrent
 
 import (
+	"slices"
 	"strings"
 )
 
@@ -49,13 +50,7 @@ func removeStrings(input []string, toRemove []string) []string {
 // matchesTorrentFilter checks if a torrent matches the given filter options
 func matchesTorrentFilter(torrent Torrent, options TorrentFilterOptions) bool {
 	if len(options.Hashes) > 0 {
-		found := false
-		for _, h := range options.Hashes {
-			if h == torrent.Hash {
-				found = true
-				break
-			}
-		}
+		found := slices.Contains(options.Hashes, torrent.Hash)
 		if !found {
 			return false
 		}
@@ -63,13 +58,33 @@ func matchesTorrentFilter(torrent Torrent, options TorrentFilterOptions) bool {
 	if options.Category != "" && torrent.Category != options.Category {
 		return false
 	}
-	if options.Tag != "" && !strings.Contains(torrent.Tags, options.Tag) {
+	if options.Tag != "" && !containsExactTag(torrent.Tags, options.Tag) {
 		return false
 	}
 	if options.Filter != "" && !matchesStateFilter(torrent.State, options.Filter) {
 		return false
 	}
 	return true
+}
+
+// containsExactTag reports whether the comma-separated tags string includes the target as a full token.
+func containsExactTag(tags string, target string) bool {
+	if tags == "" || target == "" {
+		return false
+	}
+
+	trimmed := strings.TrimSpace(target)
+	if trimmed == "" {
+		return false
+	}
+
+	for tag := range strings.SplitSeq(tags, ",") {
+		if strings.TrimSpace(tag) == trimmed {
+			return true
+		}
+	}
+
+	return false
 }
 
 // stateFilterMatches is a precomputed lookup table for state-filter matches
