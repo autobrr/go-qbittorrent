@@ -178,6 +178,13 @@ func updateTorrentMaxSeedingTime(val interface{}, obj *Torrent) {
 	}
 }
 
+// updateTorrentMaxInactiveSeedingTime updates the MaxInactiveSeedingTime field of Torrent
+func updateTorrentMaxInactiveSeedingTime(val interface{}, obj *Torrent) {
+	if m, ok := val.(float64); ok {
+		obj.MaxInactiveSeedingTime = int64(m)
+	}
+}
+
 // updateTorrentName updates the Name field of Torrent
 func updateTorrentName(val interface{}, obj *Torrent) {
 	if n, ok := val.(string); ok {
@@ -266,6 +273,13 @@ func updateTorrentSeedingTime(val interface{}, obj *Torrent) {
 func updateTorrentSeedingTimeLimit(val interface{}, obj *Torrent) {
 	if s, ok := val.(float64); ok {
 		obj.SeedingTimeLimit = int64(s)
+	}
+}
+
+// updateTorrentInactiveSeedingTimeLimit updates the InactiveSeedingTimeLimit field of Torrent
+func updateTorrentInactiveSeedingTimeLimit(val interface{}, obj *Torrent) {
+	if i, ok := val.(float64); ok {
+		obj.InactiveSeedingTimeLimit = int64(i)
 	}
 }
 
@@ -410,6 +424,7 @@ var torrentFieldUpdaters = map[string]func(val interface{}, obj *Torrent){
 	"magnet_uri": updateTorrentMagnetURI,
 	"max_ratio": updateTorrentMaxRatio,
 	"max_seeding_time": updateTorrentMaxSeedingTime,
+	"max_inactive_seeding_time": updateTorrentMaxInactiveSeedingTime,
 	"name": updateTorrentName,
 	"num_complete": updateTorrentNumComplete,
 	"num_incomplete": updateTorrentNumIncomplete,
@@ -423,6 +438,7 @@ var torrentFieldUpdaters = map[string]func(val interface{}, obj *Torrent){
 	"save_path": updateTorrentSavePath,
 	"seeding_time": updateTorrentSeedingTime,
 	"seeding_time_limit": updateTorrentSeedingTimeLimit,
+	"inactive_seeding_time_limit": updateTorrentInactiveSeedingTimeLimit,
 	"seen_complete": updateTorrentSeenComplete,
 	"seq_dl": updateTorrentSequentialDownload,
 	"size": updateTorrentSize,
