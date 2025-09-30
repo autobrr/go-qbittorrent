@@ -38,6 +38,11 @@ var (
 
 	ErrReannounceTookTooLong = errors.New("reannounce took too long, deleted torrent")
 	ErrUnsupportedVersion    = errors.New("qBittorrent version too old, please upgrade to use this feature")
+
+	ErrTorrentCreationTooManyActiveTasks = errors.New("too many active torrent creation tasks")
+	ErrTorrentCreationTaskNotFound       = errors.New("torrent creation task not found")
+	ErrTorrentCreationUnfinished         = errors.New("torrent creation is still unfinished")
+	ErrTorrentCreationFailed             = errors.New("torrent creation failed")
 )
 
 type Torrent struct {
@@ -833,4 +838,66 @@ var (
 
 type WebSeed struct {
 	URL string `json:"url"`
+}
+
+// TorrentFormat represents the torrent format for creation
+type TorrentFormat string
+
+const (
+	TorrentFormatV1     TorrentFormat = "v1"
+	TorrentFormatV2     TorrentFormat = "v2"
+	TorrentFormatHybrid TorrentFormat = "hybrid"
+)
+
+// TorrentCreationStatus represents the status of a torrent creation task
+type TorrentCreationStatus string
+
+const (
+	TorrentCreationStatusQueued   TorrentCreationStatus = "Queued"
+	TorrentCreationStatusRunning  TorrentCreationStatus = "Running"
+	TorrentCreationStatusFinished TorrentCreationStatus = "Finished"
+	TorrentCreationStatusFailed   TorrentCreationStatus = "Failed"
+)
+
+// TorrentCreationParams represents the parameters for creating a torrent
+type TorrentCreationParams struct {
+	SourcePath          string        `json:"sourcePath"`
+	TorrentFilePath     string        `json:"torrentFilePath,omitempty"`
+	Private             bool          `json:"private,omitempty"`
+	Format              TorrentFormat `json:"format,omitempty"`
+	OptimizeAlignment   bool          `json:"optimizeAlignment,omitempty"`
+	PaddedFileSizeLimit int           `json:"paddedFileSizeLimit,omitempty"`
+	PieceSize           int           `json:"pieceSize,omitempty"`
+	Comment             string        `json:"comment,omitempty"`
+	Source              string        `json:"source,omitempty"`
+	Trackers            []string      `json:"trackers,omitempty"`
+	URLSeeds            []string      `json:"urlSeeds,omitempty"`
+	StartSeeding        *bool         `json:"startSeeding,omitempty"` // nil = default (true), false = don't seed, true = seed
+}
+
+// TorrentCreationTask represents a torrent creation task
+type TorrentCreationTask struct {
+	TaskID              string                `json:"taskID"`
+	SourcePath          string                `json:"sourcePath"`
+	TorrentFilePath     string                `json:"torrentFilePath,omitempty"`
+	PieceSize           int                   `json:"pieceSize"`
+	Private             bool                  `json:"private"`
+	Format              TorrentFormat         `json:"format,omitempty"`
+	OptimizeAlignment   bool                  `json:"optimizeAlignment,omitempty"`
+	PaddedFileSizeLimit int                   `json:"paddedFileSizeLimit,omitempty"`
+	Status              TorrentCreationStatus `json:"status"`
+	Comment             string                `json:"comment,omitempty"`
+	Source              string                `json:"source,omitempty"`
+	Trackers            []string              `json:"trackers,omitempty"`
+	URLSeeds            []string              `json:"urlSeeds,omitempty"`
+	TimeAdded           string                `json:"timeAdded"`
+	TimeStarted         string                `json:"timeStarted,omitempty"`
+	TimeFinished        string                `json:"timeFinished,omitempty"`
+	Progress            float64               `json:"progress,omitempty"`
+	ErrorMessage        string                `json:"errorMessage,omitempty"`
+}
+
+// TorrentCreationTaskResponse represents the response when adding a torrent creation task
+type TorrentCreationTaskResponse struct {
+	TaskID string `json:"taskID"`
 }
