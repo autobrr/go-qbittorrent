@@ -158,9 +158,10 @@ func (tm *TrackerManager) HydrateTorrents(ctx context.Context, torrents []Torren
 		}
 	}
 
-	if options.Warmup && options.AllowFetch && len(remaining) > 0 {
-		tm.scheduleWarmup(remaining, trackerWarmupBatchSize)
-	}
+	// Warmup path only mattered for legacy tracker fetches; disable for now while we rely on IncludeTrackers.
+	// if options.Warmup && options.AllowFetch && len(remaining) > 0 {
+	// 	tm.scheduleWarmup(remaining, trackerWarmupBatchSize)
+	// }
 
 	return torrents, trackerMap, remaining, err
 }
@@ -230,16 +231,9 @@ func (tm *TrackerManager) getTrackersForHashes(ctx context.Context, hashes []str
 		fetchLimit = 0
 	}
 
-	if fetchLimit <= 0 && !tm.includeTrackers {
-		fetchLimit = trackerFetchChunkDefault
-	}
-
+	// Legacy fallback (chunked fetch via tracker API) disabled for now – we only support servers with IncludeTrackers.
 	toFetch := missing
 	var remaining []string
-	if fetchLimit > 0 && len(toFetch) > fetchLimit {
-		remaining = append(remaining, toFetch[fetchLimit:]...)
-		toFetch = toFetch[:fetchLimit]
-	}
 
 	fetched, err := tm.fetchAndCacheTrackers(ctx, toFetch)
 	if len(fetched) > 0 {
@@ -269,8 +263,8 @@ func (tm *TrackerManager) fetchAndCacheTrackers(ctx context.Context, hashes []st
 	if tm.includeTrackers {
 		fetched, err = tm.fetchTrackersViaInclude(ctx, hashes)
 	} else {
-		fetcher := tm.ensureFetcher()
-		fetched, err = fetcher.Fetch(ctx, hashes)
+		// Legacy tracker fetch via individual GetTorrentTrackers calls is disabled for now.
+		return map[string][]TorrentTracker{}, fmt.Errorf("includeTrackers support required")
 	}
 
 	if len(fetched) > 0 {
