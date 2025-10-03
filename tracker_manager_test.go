@@ -3,6 +3,7 @@ package qbittorrent
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/Masterminds/semver"
@@ -12,6 +13,7 @@ type fakeTrackerAPI struct {
 	include    bool
 	trackers   map[string][]TorrentTracker
 	trackerErr map[string]error
+	callLens   []int
 }
 
 func newFakeTrackerAPI(include bool, trackers map[string][]TorrentTracker, errs map[string]error) *fakeTrackerAPI {
@@ -30,6 +32,26 @@ func (f *fakeTrackerAPI) getApiVersion() (*semver.Version, error) {
 }
 
 func (f *fakeTrackerAPI) GetTorrentsCtx(ctx context.Context, opts TorrentFilterOptions) ([]Torrent, error) {
+	f.callLens = append(f.callLens, len(opts.Hashes))
+
+	if len(opts.Hashes) == 0 {
+		torrents := make([]Torrent, 0, len(f.trackers))
+		var firstErr error
+		for hash, trackers := range f.trackers {
+			if err, ok := f.trackerErr[hash]; ok {
+				if firstErr == nil {
+					firstErr = err
+				}
+				continue
+			}
+			if trackers == nil {
+				trackers = []TorrentTracker{}
+			}
+			torrents = append(torrents, Torrent{Hash: hash, Trackers: trackers})
+		}
+		return torrents, firstErr
+	}
+
 	torrents := make([]Torrent, 0, len(opts.Hashes))
 	var firstErr error
 	for _, hash := range opts.Hashes {
@@ -153,5 +175,47 @@ func TestTrackerManagerHydrateError(t *testing.T) {
 
 	if len(trackerMap) != 0 {
 		t.Fatalf("expected no tracker data when fetch failed, got %v", trackerMap)
+	}
+}
+
+func TestTrackerManagerHydrateBulkFetchFallback(t *testing.T) {
+	count := trackerIncludeFetchAllThreshold + 10
+	data := make(map[string][]TorrentTracker, count)
+	torrents := make([]Torrent, 0, count)
+	for i := 0; i < count; i++ {
+		hash := fmt.Sprintf("hash-%03d", i)
+		data[hash] = []TorrentTracker{{Url: fmt.Sprintf("udp://tracker/%d", i)}}
+		torrents = append(torrents, Torrent{Hash: hash})
+	}
+
+	api := newFakeTrackerAPI(true, data, nil)
+	manager := NewTrackerManager(api)
+	ctx := context.Background()
+
+	enriched, trackerMap, remaining, err := manager.HydrateTorrents(ctx, torrents)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if len(remaining) != 0 {
+		t.Fatalf("expected no remaining hashes, got %v", remaining)
+	}
+
+	if len(api.callLens) != 1 {
+		t.Fatalf("expected single GetTorrents call, got %d", len(api.callLens))
+	}
+
+	if api.callLens[0] != 0 {
+		t.Fatalf("expected full-fetch call with zero hashes, got %d", api.callLens[0])
+	}
+
+	if len(trackerMap) != count {
+		t.Fatalf("expected tracker data for all hashes, got %d", len(trackerMap))
+	}
+
+	for _, torrent := range enriched {
+		if len(torrent.Trackers) != 1 {
+			t.Fatalf("expected torrent %s to be enriched", torrent.Hash)
+		}
 	}
 }

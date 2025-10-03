@@ -17,6 +17,10 @@ const (
 	// includeTrackers request. Keeping the chunk small prevents oversized URLs/payloads that
 	// can time out or blow past server limits.
 	trackerIncludeChunkSize = 50
+	// trackerIncludeFetchAllThreshold controls when we skip hash-specific batching and request
+	// tracker data for every torrent in a single call. This avoids issuing hundreds of requests
+	// (each scanning the full torrent list anyway) when the missing set is large.
+	trackerIncludeFetchAllThreshold = 200
 )
 
 // trackerAPI describes the subset of Client functionality required by TrackerManager.
@@ -191,7 +195,12 @@ func (tm *TrackerManager) getTrackersForHashes(ctx context.Context, hashes []str
 		return result, missing, nil
 	}
 
-	toFetch := missing
+	fetchAll := tm.includeTrackers && len(missing) >= trackerIncludeFetchAllThreshold
+	var toFetch []string
+	if !fetchAll {
+		toFetch = missing
+	}
+
 	var remaining []string
 
 	fetched, err := tm.fetchAndCacheTrackers(ctx, toFetch)
@@ -199,9 +208,17 @@ func (tm *TrackerManager) getTrackersForHashes(ctx context.Context, hashes []str
 		maps.Copy(result, fetched)
 	}
 
-	for _, hash := range toFetch {
-		if _, ok := fetched[hash]; !ok {
-			remaining = append(remaining, hash)
+	if fetchAll {
+		for _, hash := range missing {
+			if _, ok := fetched[hash]; !ok {
+				remaining = append(remaining, hash)
+			}
+		}
+	} else {
+		for _, hash := range toFetch {
+			if _, ok := fetched[hash]; !ok {
+				remaining = append(remaining, hash)
+			}
 		}
 	}
 
@@ -209,16 +226,19 @@ func (tm *TrackerManager) getTrackersForHashes(ctx context.Context, hashes []str
 }
 
 func (tm *TrackerManager) fetchAndCacheTrackers(ctx context.Context, hashes []string) (map[string][]TorrentTracker, error) {
-	hashes = deduplicateHashes(hashes)
-	if len(hashes) == 0 {
-		return map[string][]TorrentTracker{}, nil
-	}
-
 	if !tm.includeTrackers {
 		return map[string][]TorrentTracker{}, fmt.Errorf("includeTrackers support required")
 	}
 
-	fetched, err := tm.fetchTrackersViaInclude(ctx, hashes)
+	var deduped []string
+	if len(hashes) > 0 {
+		deduped = deduplicateHashes(hashes)
+		if len(deduped) == 0 {
+			return map[string][]TorrentTracker{}, nil
+		}
+	}
+
+	fetched, err := tm.fetchTrackersViaInclude(ctx, deduped)
 
 	if len(fetched) > 0 {
 		for hash, trackers := range fetched {
@@ -232,6 +252,20 @@ func (tm *TrackerManager) fetchAndCacheTrackers(ctx context.Context, hashes []st
 func (tm *TrackerManager) fetchTrackersViaInclude(ctx context.Context, hashes []string) (map[string][]TorrentTracker, error) {
 	result := make(map[string][]TorrentTracker, len(hashes))
 	if len(hashes) == 0 {
+		torrents, err := tm.api.GetTorrentsCtx(ctx, TorrentFilterOptions{IncludeTrackers: true})
+		if err != nil {
+			return result, err
+		}
+
+		result = make(map[string][]TorrentTracker, len(torrents))
+		for _, torrent := range torrents {
+			trackers := torrent.Trackers
+			if trackers == nil {
+				trackers = []TorrentTracker{}
+			}
+			result[torrent.Hash] = trackers
+		}
+
 		return result, nil
 	}
 
