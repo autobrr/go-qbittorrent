@@ -3,18 +3,15 @@ package qbittorrent
 import (
 	"context"
 	"errors"
-	"sync"
 	"testing"
 
 	"github.com/Masterminds/semver"
 )
 
 type fakeTrackerAPI struct {
-	mu         sync.Mutex
 	include    bool
 	trackers   map[string][]TorrentTracker
 	trackerErr map[string]error
-	callCount  map[string]int
 }
 
 func newFakeTrackerAPI(include bool, trackers map[string][]TorrentTracker, errs map[string]error) *fakeTrackerAPI {
@@ -22,7 +19,6 @@ func newFakeTrackerAPI(include bool, trackers map[string][]TorrentTracker, errs 
 		include:    include,
 		trackers:   trackers,
 		trackerErr: errs,
-		callCount:  make(map[string]int),
 	}
 }
 
@@ -34,10 +30,6 @@ func (f *fakeTrackerAPI) getApiVersion() (*semver.Version, error) {
 }
 
 func (f *fakeTrackerAPI) GetTorrentTrackersCtx(ctx context.Context, hash string) ([]TorrentTracker, error) {
-	f.mu.Lock()
-	f.callCount[hash]++
-	f.mu.Unlock()
-
 	if err, ok := f.trackerErr[hash]; ok {
 		return nil, err
 	}
@@ -51,17 +43,24 @@ func (f *fakeTrackerAPI) GetTorrentTrackersCtx(ctx context.Context, hash string)
 
 func (f *fakeTrackerAPI) GetTorrentsCtx(ctx context.Context, opts TorrentFilterOptions) ([]Torrent, error) {
 	torrents := make([]Torrent, 0, len(opts.Hashes))
+	var firstErr error
 	for _, hash := range opts.Hashes {
+		if err, ok := f.trackerErr[hash]; ok {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
 		trackers := f.trackers[hash]
 		if trackers == nil {
 			trackers = []TorrentTracker{}
 		}
 		torrents = append(torrents, Torrent{Hash: hash, Trackers: trackers})
 	}
-	return torrents, nil
+	return torrents, firstErr
 }
 
-func TestTrackerManagerHydrateFallback(t *testing.T) {
+func TestTrackerManagerHydrateRequiresIncludeSupport(t *testing.T) {
 	data := map[string][]TorrentTracker{
 		"hashA": {
 			{Url: "udp://one", Status: TrackerStatusOK},
@@ -77,39 +76,29 @@ func TestTrackerManagerHydrateFallback(t *testing.T) {
 	ctx := context.Background()
 
 	enriched, trackerMap, remaining, err := manager.HydrateTorrents(ctx, torrents)
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
+	if err == nil {
+		t.Fatalf("expected error when includeTrackers unsupported")
 	}
 
-	if len(remaining) != 0 {
-		t.Fatalf("expected no remaining hashes, got %v", remaining)
+	if err.Error() != "includeTrackers support required" {
+		t.Fatalf("expected includeTrackers support error, got %v", err)
 	}
 
-	if len(trackerMap) != 2 {
-		t.Fatalf("expected 2 tracker entries, got %d", len(trackerMap))
+	if len(remaining) != 2 {
+		t.Fatalf("expected remaining hashes, got %v", remaining)
 	}
 
-	if manager.fetcher == nil {
-		t.Fatalf("expected fetcher to be initialized for fallback path")
-	}
-
-	api.mu.Lock()
-	callsA := api.callCount["hashA"]
-	callsB := api.callCount["hashB"]
-	api.mu.Unlock()
-
-	if callsA != 1 {
-		t.Fatalf("expected hashA fetched once, got %d", callsA)
-	}
-	if callsB != 1 {
-		t.Fatalf("expected hashB fetched once, got %d", callsB)
+	if len(trackerMap) != 0 {
+		t.Fatalf("expected no tracker data, got %v", trackerMap)
 	}
 
 	if len(enriched) != 3 {
-		t.Fatalf("expected 3 torrents, got %d", len(enriched))
+		t.Fatalf("expected original torrent slice to be returned")
 	}
-	if len(enriched[0].Trackers) == 0 {
-		t.Fatalf("expected tracker data on first torrent")
+	for _, torrent := range enriched {
+		if len(torrent.Trackers) != 0 {
+			t.Fatalf("expected torrent %s to remain without trackers", torrent.Hash)
+		}
 	}
 }
 
@@ -159,7 +148,7 @@ func TestTrackerManagerHydrateError(t *testing.T) {
 		},
 	}
 	errs := map[string]error{"bad": sentinel}
-	api := newFakeTrackerAPI(false, data, errs)
+	api := newFakeTrackerAPI(true, data, errs)
 	manager := NewTrackerManager(api)
 
 	torrents := []Torrent{{Hash: "good"}, {Hash: "bad"}}
@@ -174,18 +163,15 @@ func TestTrackerManagerHydrateError(t *testing.T) {
 		t.Fatalf("expected sentinel error, got %v", err)
 	}
 
-	if len(trackerMap["good"]) != 1 {
+	if len(remaining) != 0 {
+		t.Fatalf("expected no remaining hashes, got %v", remaining)
+	}
+
+	if trackers := trackerMap["good"]; len(trackers) != 1 {
 		t.Fatalf("expected good hash to hydrate tracker data")
 	}
 
-	found := false
-	for _, hash := range remaining {
-		if hash == "bad" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatalf("expected bad hash in remaining list, got %v", remaining)
+	if trackers := trackerMap["bad"]; len(trackers) != 0 {
+		t.Fatalf("expected bad hash to have empty tracker data on error")
 	}
 }
