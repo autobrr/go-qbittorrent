@@ -163,15 +163,11 @@ func TestTrackerManagerHydrateError(t *testing.T) {
 		t.Fatalf("expected sentinel error, got %v", err)
 	}
 
-	if len(remaining) != 0 {
-		t.Fatalf("expected no remaining hashes, got %v", remaining)
+	if len(remaining) != 2 {
+		t.Fatalf("expected all hashes to remain on error, got %v", remaining)
 	}
 
-	if trackers := trackerMap["good"]; len(trackers) != 1 {
-		t.Fatalf("expected good hash to hydrate tracker data")
-	}
-
-	if trackers := trackerMap["bad"]; len(trackers) != 0 {
-		t.Fatalf("expected bad hash to have empty tracker data on error")
+	if len(trackerMap) != 0 {
+		t.Fatalf("expected no tracker data when fetch failed, got %v", trackerMap)
 	}
 }
