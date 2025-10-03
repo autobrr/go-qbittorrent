@@ -112,7 +112,9 @@ func TestClient_GetBuildInfo(t *testing.T) {
 	assert.NotEmpty(t, bi.Libtorrent)
 	assert.NotEmpty(t, bi.Boost)
 	assert.NotEmpty(t, bi.Openssl)
+	assert.NotEmpty(t, bi.Zlib)
 	assert.NotEmpty(t, bi.Bitness)
+	assert.NotEmpty(t, bi.Platform)
 }
 
 func TestClient_GetTorrentDownloadLimit(t *testing.T) {

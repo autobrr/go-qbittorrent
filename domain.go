@@ -809,7 +809,9 @@ type BuildInfo struct {
 	Libtorrent string `json:"libtorrent"` // libtorrent version
 	Boost      string `json:"boost"`      // Boost version
 	Openssl    string `json:"openssl"`    // OpenSSL version
+	Zlib       string `json:"zlib"`       // zlib version
 	Bitness    int    `json:"bitness"`    // Application bitness (e.g.64-bit)
+	Platform   string `json:"platform"`   // Platform (linux, macos, windows, unknown)
 }
 
 type Cookie struct {
