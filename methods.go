@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/autobrr/go-qbittorrent/errors"
-
 	"github.com/Masterminds/semver"
+
+	"github.com/autobrr/go-qbittorrent/errors"
 )
 
 // Login https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-4.1)#authentication
@@ -2439,6 +2439,231 @@ func (c *Client) GetTorrentPeersCtx(ctx context.Context, hash string, rid int64)
 	}
 
 	return &peersResp, nil
+}
+
+// CreateTorrent creates a new torrent creation task
+func (c *Client) CreateTorrent(params TorrentCreationParams) (*TorrentCreationTaskResponse, error) {
+	return c.CreateTorrentCtx(context.Background(), params)
+}
+
+// CreateTorrentCtx creates a new torrent creation task with context
+// Requires qBittorrent v5.0.0+ (WebAPI v2.11.2+)
+func (c *Client) CreateTorrentCtx(ctx context.Context, params TorrentCreationParams) (*TorrentCreationTaskResponse, error) {
+	// Check version requirement
+	minVersion, _ := semver.NewVersion("2.11.2")
+	if _, err := c.RequiresMinVersion(minVersion); err != nil {
+		return nil, err
+	}
+
+	opts := map[string]string{
+		"sourcePath": params.SourcePath,
+	}
+
+	if params.TorrentFilePath != "" {
+		opts["torrentFilePath"] = params.TorrentFilePath
+	}
+
+	if params.Private {
+		opts["private"] = "true"
+	}
+
+	if params.Format != "" {
+		opts["format"] = string(params.Format)
+	}
+
+	if params.OptimizeAlignment {
+		opts["optimizeAlignment"] = "true"
+	}
+
+	if params.PaddedFileSizeLimit > 0 {
+		opts["paddedFileSizeLimit"] = strconv.Itoa(params.PaddedFileSizeLimit)
+	}
+
+	if params.PieceSize > 0 {
+		opts["pieceSize"] = strconv.Itoa(params.PieceSize)
+	}
+
+	if params.Comment != "" {
+		opts["comment"] = params.Comment
+	}
+
+	if params.Source != "" {
+		opts["source"] = params.Source
+	}
+
+	if len(params.Trackers) > 0 {
+		opts["trackers"] = strings.Join(params.Trackers, "|")
+	}
+
+	if len(params.URLSeeds) > 0 {
+		opts["urlSeeds"] = strings.Join(params.URLSeeds, "|")
+	}
+
+	if params.StartSeeding != nil {
+		if *params.StartSeeding {
+			opts["startSeeding"] = "true"
+		} else {
+			opts["startSeeding"] = "false"
+		}
+	} else {
+		opts["startSeeding"] = "true"
+	}
+
+	resp, err := c.postCtx(ctx, "torrentcreator/addTask", opts)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not create torrent task")
+	}
+
+	defer drainAndClose(resp)
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+		break
+	case http.StatusConflict:
+		return nil, ErrTorrentCreationTooManyActiveTasks
+	default:
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not create torrent task; status code: %d", resp.StatusCode)
+	}
+
+	var taskResp TorrentCreationTaskResponse
+	if err = json.NewDecoder(resp.Body).Decode(&taskResp); err != nil {
+		return nil, errors.Wrap(err, "could not decode response")
+	}
+
+	return &taskResp, nil
+}
+
+// GetTorrentCreationStatus retrieves the status of torrent creation tasks
+// If taskID is empty, returns all tasks
+func (c *Client) GetTorrentCreationStatus(taskID string) ([]TorrentCreationTask, error) {
+	return c.GetTorrentCreationStatusCtx(context.Background(), taskID)
+}
+
+// GetTorrentCreationStatusCtx retrieves the status of torrent creation tasks with context
+// If taskID is empty, returns all tasks
+// Requires qBittorrent v5.0.0+ (WebAPI v2.11.2+)
+func (c *Client) GetTorrentCreationStatusCtx(ctx context.Context, taskID string) ([]TorrentCreationTask, error) {
+	// Check version requirement
+	minVersion, _ := semver.NewVersion("2.11.2")
+	if _, err := c.RequiresMinVersion(minVersion); err != nil {
+		return nil, err
+	}
+
+	opts := map[string]string{}
+	if taskID != "" {
+		opts["taskID"] = taskID
+	}
+
+	resp, err := c.getCtx(ctx, "torrentcreator/status", opts)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get torrent creation status")
+	}
+
+	defer drainAndClose(resp)
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+		break
+	case http.StatusNotFound:
+		return nil, ErrTorrentCreationTaskNotFound
+	default:
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get torrent creation status; status code: %d", resp.StatusCode)
+	}
+
+	var tasks []TorrentCreationTask
+	if err = json.NewDecoder(resp.Body).Decode(&tasks); err != nil {
+		return nil, errors.Wrap(err, "could not decode response")
+	}
+
+	return tasks, nil
+}
+
+// GetTorrentFile downloads the torrent file for a completed torrent creation task
+func (c *Client) GetTorrentFile(taskID string) ([]byte, error) {
+	return c.GetTorrentFileCtx(context.Background(), taskID)
+}
+
+// GetTorrentFileCtx downloads the torrent file for a completed torrent creation task with context
+// Requires qBittorrent v5.0.0+ (WebAPI v2.11.2+)
+func (c *Client) GetTorrentFileCtx(ctx context.Context, taskID string) ([]byte, error) {
+	// Check version requirement
+	minVersion, _ := semver.NewVersion("2.11.2")
+	if _, err := c.RequiresMinVersion(minVersion); err != nil {
+		return nil, err
+	}
+
+	opts := map[string]string{
+		"taskID": taskID,
+	}
+
+	resp, err := c.getCtx(ctx, "torrentcreator/torrentFile", opts)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get torrent file; taskID: %s", taskID)
+	}
+
+	defer drainAndClose(resp)
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+		break
+	case http.StatusNotFound:
+		return nil, ErrTorrentCreationTaskNotFound
+	case http.StatusConflict:
+		// Check if unfinished or failed based on response body
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		bodyString := string(bodyBytes)
+		if strings.Contains(bodyString, "unfinished") {
+			return nil, ErrTorrentCreationUnfinished
+		}
+		if strings.Contains(bodyString, "failed") {
+			return nil, ErrTorrentCreationFailed
+		}
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get torrent file; taskID: %s, status code: %d", taskID, resp.StatusCode)
+	default:
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get torrent file; taskID: %s, status code: %d", taskID, resp.StatusCode)
+	}
+
+	torrentData, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not read torrent file data")
+	}
+
+	return torrentData, nil
+}
+
+// DeleteTorrentCreationTask deletes a torrent creation task
+func (c *Client) DeleteTorrentCreationTask(taskID string) error {
+	return c.DeleteTorrentCreationTaskCtx(context.Background(), taskID)
+}
+
+// DeleteTorrentCreationTaskCtx deletes a torrent creation task with context
+// Requires qBittorrent v5.0.0+ (WebAPI v2.11.2+)
+func (c *Client) DeleteTorrentCreationTaskCtx(ctx context.Context, taskID string) error {
+	// Check version requirement
+	minVersion, _ := semver.NewVersion("2.11.2")
+	if _, err := c.RequiresMinVersion(minVersion); err != nil {
+		return err
+	}
+
+	opts := map[string]string{
+		"taskID": taskID,
+	}
+
+	resp, err := c.postCtx(ctx, "torrentcreator/deleteTask", opts)
+	if err != nil {
+		return errors.Wrap(err, "could not delete torrent creation task; taskID: %s", taskID)
+	}
+
+	defer drainAndClose(resp)
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+		return nil
+	case http.StatusNotFound:
+		return ErrTorrentCreationTaskNotFound
+	default:
+		return errors.Wrap(ErrUnexpectedStatus, "could not delete torrent creation task; taskID: %s, status code: %d", taskID, resp.StatusCode)
+	}
 }
 
 // Check if status not working or something else
