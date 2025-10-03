@@ -29,18 +29,6 @@ func (f *fakeTrackerAPI) getApiVersion() (*semver.Version, error) {
 	return semver.MustParse("2.11.0"), nil
 }
 
-func (f *fakeTrackerAPI) GetTorrentTrackersCtx(ctx context.Context, hash string) ([]TorrentTracker, error) {
-	if err, ok := f.trackerErr[hash]; ok {
-		return nil, err
-	}
-
-	if trackers, ok := f.trackers[hash]; ok {
-		return trackers, nil
-	}
-
-	return nil, nil
-}
-
 func (f *fakeTrackerAPI) GetTorrentsCtx(ctx context.Context, opts TorrentFilterOptions) ([]Torrent, error) {
 	torrents := make([]Torrent, 0, len(opts.Hashes))
 	var firstErr error
@@ -125,10 +113,6 @@ func TestTrackerManagerHydrateInclude(t *testing.T) {
 
 	if len(remaining) != 0 {
 		t.Fatalf("expected no remaining hashes, got %v", remaining)
-	}
-
-	if manager.fetcher != nil {
-		t.Fatalf("did not expect fetcher initialization when includeTrackers supported")
 	}
 
 	if len(trackerMap["good"]) != 1 {
