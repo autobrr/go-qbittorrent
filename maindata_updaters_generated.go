@@ -636,6 +636,20 @@ func updateServerStateGlobalRatio(val interface{}, obj *ServerState) {
 	}
 }
 
+// updateServerStateLastExternalAddressV4 updates the LastExternalAddressV4 field of ServerState
+func updateServerStateLastExternalAddressV4(val interface{}, obj *ServerState) {
+	if l, ok := val.(string); ok {
+		obj.LastExternalAddressV4 = l
+	}
+}
+
+// updateServerStateLastExternalAddressV6 updates the LastExternalAddressV6 field of ServerState
+func updateServerStateLastExternalAddressV6(val interface{}, obj *ServerState) {
+	if l, ok := val.(string); ok {
+		obj.LastExternalAddressV6 = l
+	}
+}
+
 // updateServerStateQueuedIoJobs updates the QueuedIoJobs field of ServerState
 func updateServerStateQueuedIoJobs(val interface{}, obj *ServerState) {
 	if q, ok := val.(float64); ok {
@@ -746,6 +760,8 @@ var serverstateFieldUpdaters = map[string]func(val interface{}, obj *ServerState
 	"dl_rate_limit": updateServerStateDlRateLimit,
 	"free_space_on_disk": updateServerStateFreeSpaceOnDisk,
 	"global_ratio": updateServerStateGlobalRatio,
+	"last_external_address_v4": updateServerStateLastExternalAddressV4,
+	"last_external_address_v6": updateServerStateLastExternalAddressV6,
 	"queued_io_jobs": updateServerStateQueuedIoJobs,
 	"queueing": updateServerStateQueueing,
 	"read_cache_hits": updateServerStateReadCacheHits,
