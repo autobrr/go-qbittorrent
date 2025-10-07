@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"net/http/httputil"
 	"strconv"
 	"strings"
 	"time"
@@ -411,14 +410,6 @@ func (c *Client) GetTorrentTrackersCtx(ctx context.Context, hash string) ([]Torr
 	}
 
 	defer drainAndClose(resp)
-
-	dump, err := httputil.DumpResponse(resp, true)
-	if err != nil {
-		// c.log.Printf("get torrent trackers error dump response: %v\n", string(dump))
-		return nil, errors.Wrap(err, "could not dump response for hash: %v", hash)
-	}
-
-	c.log.Printf("get torrent trackers response dump: %q", dump)
 
 	switch resp.StatusCode {
 	case http.StatusNotFound:

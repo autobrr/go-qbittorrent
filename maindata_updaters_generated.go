@@ -521,7 +521,7 @@ var torrenttrackerFieldUpdaters = map[string]func(val interface{}, obj *TorrentT
 	"status": updateTorrentTrackerStatus,
 	"num_peers": updateTorrentTrackerNumPeers,
 	"num_seeds": updateTorrentTrackerNumSeeds,
-	"num_leechers": updateTorrentTrackerNumLeechers,
+	"num_leeches": updateTorrentTrackerNumLeechers,
 	"num_downloaded": updateTorrentTrackerNumDownloaded,
 	"msg": updateTorrentTrackerMessage,
 }
