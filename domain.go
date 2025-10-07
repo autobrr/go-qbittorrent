@@ -113,7 +113,7 @@ type TorrentTracker struct {
 	Status        TrackerStatus `json:"status"`
 	NumPeers      int           `json:"num_peers"`
 	NumSeeds      int           `json:"num_seeds"`
-	NumLeechers   int           `json:"num_leechers"`
+	NumLeechers   int           `json:"num_leeches"`
 	NumDownloaded int           `json:"num_downloaded"`
 	Message       string        `json:"msg"`
 }
