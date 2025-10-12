@@ -101,6 +101,10 @@ func (dest *MainData) UpdateWithRawData(rawData map[string]interface{}, source *
 
 // mergeTorrentsPartial merges only the fields that are present in the update
 func (dest *MainData) mergeTorrentsPartial(torrentsMap map[string]interface{}) {
+	if dest.Torrents == nil {
+		dest.Torrents = make(map[string]Torrent, len(torrentsMap))
+	}
+
 	for hash, torrentRaw := range torrentsMap {
 		updateMap, ok := torrentRaw.(map[string]interface{})
 		if !ok {
@@ -122,6 +126,10 @@ func (dest *MainData) mergeTorrentsPartial(torrentsMap map[string]interface{}) {
 
 // mergeCategoriesPartial merges only the fields that are present in the update
 func (dest *MainData) mergeCategoriesPartial(categoriesMap map[string]interface{}) {
+	if dest.Categories == nil {
+		dest.Categories = make(map[string]Category, len(categoriesMap))
+	}
+
 	for name, categoryRaw := range categoriesMap {
 		updateMap, ok := categoryRaw.(map[string]interface{})
 		if !ok {
