@@ -77,6 +77,9 @@ func (dest *MainData) UpdateWithRawData(rawData map[string]interface{}, source *
 	// Handle trackers ONLY if present in raw JSON
 	if trackersRaw, exists := rawData["trackers"]; exists {
 		if _, ok := trackersRaw.(map[string]interface{}); ok {
+			if dest.Trackers == nil {
+				dest.Trackers = make(map[string][]string, len(source.Trackers))
+			}
 			merge(source.Trackers, &dest.Trackers)
 		}
 	}
