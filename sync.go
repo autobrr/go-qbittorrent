@@ -137,16 +137,27 @@ func (sm *SyncManager) Sync(ctx context.Context) error {
 
 	// Initialize data if needed
 	if sm.data == nil {
-		sm.data = &MainData{
-			Torrents:   make(map[string]Torrent),
-			Categories: make(map[string]Category),
-			Trackers:   make(map[string][]string),
-			Tags:       make([]string, 0),
-		}
+		sm.data = &MainData{}
 	}
 
 	// Use MainData.Update to handle all the sync logic
-	if err := sm.data.Update(ctx, sm.client); err != nil {
+	err := sm.data.Update(ctx, sm.client)
+
+	// Sometimes this information can be not-present from qB (no tags), ensure we always populate valid items.
+	if sm.data.Torrents == nil {
+		sm.data.Torrents = make(map[string]Torrent)
+	}
+	if sm.data.Categories == nil {
+		sm.data.Categories = make(map[string]Category)
+	}
+	if sm.data.Trackers == nil {
+		sm.data.Trackers = make(map[string][]string)
+	}
+	if sm.data.Tags == nil {
+		sm.data.Tags = make([]string, 0)
+	}
+
+	if err != nil {
 		syncError = err
 		if sm.options.OnError != nil {
 			sm.options.OnError(err)
