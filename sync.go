@@ -147,12 +147,7 @@ func (sm *SyncManager) Sync(ctx context.Context) error {
 
 	// Initialize data if needed
 	if sm.data == nil {
-		sm.data = &MainData{
-			Torrents:   make(map[string]Torrent),
-			Categories: make(map[string]Category),
-			Trackers:   make(map[string][]string),
-			Tags:       make([]string, 0),
-		}
+		sm.data = &MainData{}
 	}
 
 	// Use MainData.Update to handle all the sync logic
