@@ -11,6 +11,7 @@ import (
 // a consistent view of the qBittorrent state across partial updates.
 type SyncManager struct {
 	client           *Client
+	trackerManager   *TrackerManager
 	mu               sync.RWMutex
 	syncMu           sync.Mutex
 	syncCond         *sync.Cond
@@ -70,12 +71,21 @@ func NewSyncManager(client *Client, options ...SyncOptions) *SyncManager {
 	}
 
 	sm := &SyncManager{
-		client:  client,
-		options: opts,
+		client:         client,
+		options:        opts,
+		trackerManager: NewTrackerManager(client),
 	}
 	sm.syncCond = sync.NewCond(&sm.syncMu)
 
 	return sm
+}
+
+// Trackers returns the tracker manager associated with this sync manager.
+func (sm *SyncManager) Trackers() *TrackerManager {
+	if sm == nil {
+		return nil
+	}
+	return sm.trackerManager
 }
 
 // Start initializes the sync manager and optionally starts auto-sync
@@ -137,12 +147,7 @@ func (sm *SyncManager) Sync(ctx context.Context) error {
 
 	// Initialize data if needed
 	if sm.data == nil {
-		sm.data = &MainData{
-			Torrents:   make(map[string]Torrent),
-			Categories: make(map[string]Category),
-			Trackers:   make(map[string][]string),
-			Tags:       make([]string, 0),
-		}
+		sm.data = &MainData{}
 	}
 
 	// Use MainData.Update to handle all the sync logic
