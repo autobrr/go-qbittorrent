@@ -661,6 +661,7 @@ type AppPreferences struct {
 	UpnpLeaseDuration                  int         `json:"upnp_lease_duration"`
 	UseCategoryPathsInManualMode       bool        `json:"use_category_paths_in_manual_mode"`
 	UseHTTPS                           bool        `json:"use_https"`
+	UseSubcategories                   bool        `json:"use_subcategories"`
 	UtpTCPMixedMode                    int         `json:"utp_tcp_mixed_mode"`
 	ValidateHTTPSTrackerCertificate    bool        `json:"validate_https_tracker_certificate"`
 	WebUIAddress                       string      `json:"web_ui_address"`
@@ -722,6 +723,7 @@ type ServerState struct {
 	UpInfoSpeed           int64  `json:"up_info_speed"`
 	UpRateLimit           int64  `json:"up_rate_limit"`
 	UseAltSpeedLimits     bool   `json:"use_alt_speed_limits"`
+	UseSubcategories      bool   `json:"use_subcategories"`
 	WriteCacheOverload    string `json:"write_cache_overload"`
 }
 

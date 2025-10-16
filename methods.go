@@ -1466,6 +1466,11 @@ func (c *Client) SetPreferencesMaxActiveUploads(max int) error {
 	return c.SetPreferences(map[string]interface{}{"max_active_uploads": max})
 }
 
+// SetPreferencesSubcategoriesEnabled enable/disable subcategories
+func (c *Client) SetPreferencesSubcategoriesEnabled(enabled bool) error {
+	return c.SetPreferences(map[string]interface{}{"use_subcategories": enabled})
+}
+
 // SetMaxPriority set torrents to max priority specified by hashes
 func (c *Client) SetMaxPriority(hashes []string) error {
 	return c.SetMaxPriorityCtx(context.Background(), hashes)

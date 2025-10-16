@@ -741,6 +741,13 @@ func updateServerStateUseAltSpeedLimits(val interface{}, obj *ServerState) {
 	}
 }
 
+// updateServerStateUseSubcategories updates the UseSubcategories field of ServerState
+func updateServerStateUseSubcategories(val interface{}, obj *ServerState) {
+	if u, ok := val.(bool); ok {
+		obj.UseSubcategories = u
+	}
+}
+
 // updateServerStateWriteCacheOverload updates the WriteCacheOverload field of ServerState
 func updateServerStateWriteCacheOverload(val interface{}, obj *ServerState) {
 	if w, ok := val.(string); ok {
@@ -775,6 +782,7 @@ var serverstateFieldUpdaters = map[string]func(val interface{}, obj *ServerState
 	"up_info_speed": updateServerStateUpInfoSpeed,
 	"up_rate_limit": updateServerStateUpRateLimit,
 	"use_alt_speed_limits": updateServerStateUseAltSpeedLimits,
+	"use_subcategories": updateServerStateUseSubcategories,
 	"write_cache_overload": updateServerStateWriteCacheOverload,
 }
 
