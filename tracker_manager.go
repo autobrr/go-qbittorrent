@@ -38,7 +38,8 @@ func NewTrackerManager(api trackerAPI) *TrackerManager {
 }
 
 // HydrateTorrents enriches the provided torrents with tracker metadata from cache.
-// For versions that don't support trackers in sync, fetches individually if not cached.
+// For versions that support IncludeTrackers, fetches all trackers at once.
+// Otherwise fetches individually if not cached.
 // It returns the enriched slice and a cache of tracker lists keyed by hash.
 func (tm *TrackerManager) HydrateTorrents(ctx context.Context, torrents []Torrent) ([]Torrent, map[string][]TorrentTracker) {
 	if tm == nil || len(torrents) == 0 {
@@ -46,12 +47,17 @@ func (tm *TrackerManager) HydrateTorrents(ctx context.Context, torrents []Torren
 	}
 
 	trackerMap := make(map[string][]TorrentTracker, len(torrents))
+	hashesToFetch := []string{}
+	hashToTorrentIndex := make(map[string]int)
 
+	// First pass: collect hashes that need fetching
 	for i := range torrents {
 		hash := strings.TrimSpace(torrents[i].Hash)
 		if hash == "" {
 			continue
 		}
+
+		hashToTorrentIndex[hash] = i
 
 		if len(torrents[i].Trackers) > 0 {
 			trackerMap[hash] = torrents[i].Trackers
@@ -64,16 +70,65 @@ func (tm *TrackerManager) HydrateTorrents(ctx context.Context, torrents []Torren
 			continue
 		}
 
-		// For versions that don't support trackers in sync, fetch individually
-		if trackers, err := tm.fetchTrackersForHash(ctx, hash); err == nil && len(trackers) > 0 {
-			torrents[i].Trackers = trackers
-			trackerMap[hash] = trackers
-			// Cache with default TTL since we don't have Reannounce time
-			tm.cache.Set(hash, trackers, trackerCacheTTL)
+		// Need to fetch this hash
+		hashesToFetch = append(hashesToFetch, hash)
+	}
+
+	// Fast path: fetch all trackers at once if supported
+	if tm.detectIncludeTrackers() {
+		hashList := hashesToFetch
+
+		if fetchedTorrents, err := tm.api.GetTorrentsCtx(ctx, TorrentFilterOptions{
+			Hashes:          hashList,
+			IncludeTrackers: true,
+		}); err == nil {
+			// Create a map for quick lookup
+			fetchedMap := make(map[string]Torrent, len(fetchedTorrents))
+			for _, torrent := range fetchedTorrents {
+				fetchedMap[strings.TrimSpace(torrent.Hash)] = torrent
+			}
+
+			// Update torrents and cache
+			for i := range torrents {
+				hash := strings.TrimSpace(torrents[i].Hash)
+				if fetched, ok := fetchedMap[hash]; ok && len(fetched.Trackers) > 0 {
+					torrents[i].Trackers = fetched.Trackers
+					trackerMap[hash] = fetched.Trackers
+					ttl := calculateTrackerTTL(fetched.Reannounce)
+					tm.cache.Set(hash, fetched.Trackers, ttl)
+				}
+			}
+		}
+	} else {
+		// Fetch hashes individually (fallback when fast path not supported)
+		for _, hash := range hashesToFetch {
+			if trackers, err := tm.fetchTrackersForHash(ctx, hash); err == nil && len(trackers) > 0 {
+				i := hashToTorrentIndex[hash]
+				torrents[i].Trackers = trackers
+				trackerMap[hash] = trackers
+				ttl := calculateTrackerTTL(torrents[i].Reannounce)
+				tm.cache.Set(hash, trackers, ttl)
+			}
 		}
 	}
 
 	return torrents, trackerMap
+}
+
+// calculateTrackerTTL calculates the appropriate TTL for tracker cache based on reannounce time
+func calculateTrackerTTL(reannounce int64) time.Duration {
+	ttl := trackerCacheTTL
+
+	if reannounce > 0 {
+		// reannounce is seconds remaining until next announce
+		reannounceDuration := time.Duration(reannounce) * time.Second
+		// Use the reannounce time, but cap at maximum TTL
+		if reannounceDuration < ttl {
+			ttl = reannounceDuration
+		}
+	}
+
+	return ttl
 }
 
 // Invalidate clears cached tracker metadata for the supplied hashes. When no hashes are provided
@@ -99,36 +154,6 @@ func (tm *TrackerManager) Invalidate(hashes ...string) {
 			continue
 		}
 		tm.cache.Delete(hash)
-	}
-}
-
-// UpdateFromSync updates the tracker cache with data from a sync operation.
-// It uses the torrent's Reannounce time to determine cache TTL.
-func (tm *TrackerManager) UpdateFromSync(data *MainData) {
-	if tm == nil || tm.cache == nil || data == nil || len(data.Torrents) == 0 {
-		return
-	}
-
-	now := time.Now()
-	for hash, torrent := range data.Torrents {
-		if len(torrent.Trackers) == 0 {
-			continue
-		}
-
-		// Calculate TTL based on Reannounce time
-		ttl := trackerCacheTTL
-		if torrent.Reannounce > 0 {
-			reannounceTime := time.Unix(torrent.Reannounce, 0)
-			if reannounceTime.After(now) {
-				ttl = reannounceTime.Sub(now)
-				// Cap at maximum TTL to prevent extremely long cache times
-				if ttl > trackerCacheTTL {
-					ttl = trackerCacheTTL
-				}
-			}
-		}
-
-		tm.cache.Set(hash, torrent.Trackers, ttl)
 	}
 }
 

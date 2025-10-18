@@ -161,11 +161,6 @@ func (sm *SyncManager) Sync(ctx context.Context) error {
 
 	sm.rid = sm.data.Rid
 
-	// Update tracker manager with fresh data
-	if sm.trackerManager != nil {
-		sm.trackerManager.UpdateFromSync(sm.data)
-	}
-
 	// Call update callback if set
 	if sm.options.OnUpdate != nil {
 		sm.options.OnUpdate(sm.copyMainData(sm.data))
