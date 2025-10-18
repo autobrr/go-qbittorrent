@@ -115,10 +115,10 @@ func (tm *TrackerManager) HydrateTorrents(ctx context.Context, torrents []Torren
 
 		wg.Add(len(hashesToFetch))
 		for _, hash := range hashesToFetch {
+			sem <- struct{}{} // Acquire semaphore before starting goroutine
 			go func(h string) {
 				defer wg.Done()
-				sem <- struct{}{}        // Acquire
-				defer func() { <-sem }() // Release
+				defer func() { <-sem }() // Release semaphore
 
 				select {
 				case <-ctx.Done():
