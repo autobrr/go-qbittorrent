@@ -32,7 +32,7 @@ type TrackerManager struct {
 func NewTrackerManager(api trackerAPI) *TrackerManager {
 	manager := &TrackerManager{
 		api:   api,
-		cache: ttlcache.New(ttlcache.Options[string, []TorrentTracker]{}.SetDefaultTTL(trackerCacheTTL)),
+		cache: ttlcache.New(ttlcache.Options[string, []TorrentTracker]{}.SetDefaultTTL(trackerCacheTTL).DisableUpdateTime(true)),
 	}
 
 	return manager
@@ -83,21 +83,21 @@ func (tm *TrackerManager) HydrateTorrents(ctx context.Context, torrents []Torren
 			Hashes:          hashList,
 			IncludeTrackers: true,
 		}); err == nil {
-			// Create a map for quick lookup
-			fetchedMap := make(map[string]Torrent, len(fetchedTorrents))
-			for _, torrent := range fetchedTorrents {
-				fetchedMap[strings.TrimSpace(torrent.Hash)] = torrent
-			}
-
 			// Update torrents and cache
-			for i := range torrents {
-				hash := strings.TrimSpace(torrents[i].Hash)
-				if fetched, ok := fetchedMap[hash]; ok && len(fetched.Trackers) > 0 {
-					torrents[i].Trackers = fetched.Trackers
-					trackerMap[hash] = fetched.Trackers
-					ttl := calculateTrackerTTL(fetched.Reannounce)
-					tm.cache.Set(hash, fetched.Trackers, ttl)
+			for _, fetched := range fetchedTorrents {
+				hash := strings.TrimSpace(fetched.Hash)
+				if len(hash) == 0 {
+					continue
 				}
+
+				i, ok := hashToTorrentIndex[hash]
+				if !ok {
+					continue
+				}
+
+				torrents[i].Trackers = fetched.Trackers
+				trackerMap[hash] = fetched.Trackers
+				tm.cache.Set(hash, fetched.Trackers, calculateTrackerTTL(fetched.Reannounce))
 			}
 		}
 	} else {
@@ -144,8 +144,7 @@ func (tm *TrackerManager) HydrateTorrents(ctx context.Context, torrents []Torren
 				i := hashToTorrentIndex[res.hash]
 				torrents[i].Trackers = res.trackers
 				trackerMap[res.hash] = res.trackers
-				ttl := calculateTrackerTTL(torrents[i].Reannounce)
-				tm.cache.Set(res.hash, res.trackers, ttl)
+				tm.cache.Set(res.hash, res.trackers, calculateTrackerTTL(torrents[i].Reannounce))
 			}
 		}
 	}
@@ -158,10 +157,8 @@ func calculateTrackerTTL(reannounce int64) time.Duration {
 	ttl := trackerCacheTTL
 
 	if reannounce > 0 {
-		// reannounce is seconds remaining until next announce
-		reannounceDuration := time.Duration(reannounce) * time.Second
 		// Use the reannounce time, but cap at maximum TTL
-		if reannounceDuration < ttl {
+		if reannounceDuration := time.Duration(reannounce) * time.Second; reannounceDuration < ttl {
 			ttl = reannounceDuration
 		}
 	}
