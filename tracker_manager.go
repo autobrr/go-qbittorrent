@@ -116,6 +116,13 @@ func (tm *TrackerManager) HydrateTorrents(ctx context.Context, torrents []Torren
 				sem <- struct{}{}        // Acquire
 				defer func() { <-sem }() // Release
 
+				select {
+				case <-ctx.Done():
+					results <- fetchResult{hash: h, err: ctx.Err()}
+					return
+				default:
+				}
+
 				trackers, err := tm.fetchTrackersForHash(ctx, h)
 				results <- fetchResult{hash: h, trackers: trackers, err: err}
 			}(hash)
