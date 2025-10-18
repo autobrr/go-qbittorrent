@@ -101,13 +101,35 @@ func (tm *TrackerManager) HydrateTorrents(ctx context.Context, torrents []Torren
 		}
 	} else {
 		// Fetch hashes individually (fallback when fast path not supported)
+		// Use pipelining to fetch in parallel for better performance
+		type fetchResult struct {
+			hash     string
+			trackers []TorrentTracker
+			err      error
+		}
+
+		results := make(chan fetchResult, len(hashesToFetch))
+		sem := make(chan struct{}, 50) // Limit concurrency to 50
+
 		for _, hash := range hashesToFetch {
-			if trackers, err := tm.fetchTrackersForHash(ctx, hash); err == nil && len(trackers) > 0 {
-				i := hashToTorrentIndex[hash]
-				torrents[i].Trackers = trackers
-				trackerMap[hash] = trackers
+			go func(h string) {
+				sem <- struct{}{}        // Acquire
+				defer func() { <-sem }() // Release
+
+				trackers, err := tm.fetchTrackersForHash(ctx, h)
+				results <- fetchResult{hash: h, trackers: trackers, err: err}
+			}(hash)
+		}
+
+		// Collect results
+		for range hashesToFetch {
+			res := <-results
+			if res.err == nil && len(res.trackers) > 0 {
+				i := hashToTorrentIndex[res.hash]
+				torrents[i].Trackers = res.trackers
+				trackerMap[res.hash] = res.trackers
 				ttl := calculateTrackerTTL(torrents[i].Reannounce)
-				tm.cache.Set(hash, trackers, ttl)
+				tm.cache.Set(res.hash, res.trackers, ttl)
 			}
 		}
 	}
