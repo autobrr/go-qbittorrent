@@ -76,7 +76,7 @@ func (tm *TrackerManager) HydrateTorrents(ctx context.Context, torrents []Torren
 	}
 
 	// Fast path: fetch all trackers at once if supported
-	if tm.detectIncludeTrackers() {
+	if tm.SupportsIncludeTrackers() {
 		hashList := hashesToFetch
 
 		if fetchedTorrents, err := tm.api.GetTorrentsCtx(ctx, TorrentFilterOptions{
@@ -192,7 +192,7 @@ func (tm *TrackerManager) Invalidate(hashes ...string) {
 	}
 }
 
-func (tm *TrackerManager) detectIncludeTrackers() bool {
+func (tm *TrackerManager) SupportsIncludeTrackers() bool {
 	if tm == nil || tm.api == nil {
 		return false
 	}
