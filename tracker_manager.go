@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Masterminds/semver"
@@ -110,9 +111,12 @@ func (tm *TrackerManager) HydrateTorrents(ctx context.Context, torrents []Torren
 
 		results := make(chan fetchResult, len(hashesToFetch))
 		sem := make(chan struct{}, 50) // Limit concurrency to 50
+		var wg sync.WaitGroup
 
+		wg.Add(len(hashesToFetch))
 		for _, hash := range hashesToFetch {
 			go func(h string) {
+				defer wg.Done()
 				sem <- struct{}{}        // Acquire
 				defer func() { <-sem }() // Release
 
@@ -128,9 +132,14 @@ func (tm *TrackerManager) HydrateTorrents(ctx context.Context, torrents []Torren
 			}(hash)
 		}
 
+		// Close results channel after all goroutines finish
+		go func() {
+			wg.Wait()
+			close(results)
+		}()
+
 		// Collect results
-		for range hashesToFetch {
-			res := <-results
+		for res := range results {
 			if res.err == nil && len(res.trackers) > 0 {
 				i := hashToTorrentIndex[res.hash]
 				torrents[i].Trackers = res.trackers
