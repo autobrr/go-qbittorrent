@@ -51,8 +51,10 @@ type Torrent struct {
 	AutoManaged              bool             `json:"auto_tmm"`
 	Availability             float64          `json:"availability"`
 	Category                 string           `json:"category"`
+	Comment                  string           `json:"comment"`
 	Completed                int64            `json:"completed"`
 	CompletionOn             int64            `json:"completion_on"`
+	CreatedBy                string           `json:"created_by"`
 	ContentPath              string           `json:"content_path"`
 	DlLimit                  int64            `json:"dl_limit"`
 	DlSpeed                  int64            `json:"dlspeed"`
