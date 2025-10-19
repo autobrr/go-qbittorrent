@@ -52,6 +52,15 @@ func compareCategory(a, b *Torrent) int {
 	return 1
 }
 
+func compareComment(a, b *Torrent) int {
+	if a.Comment == b.Comment {
+		return 0
+	} else if a.Comment < b.Comment {
+		return -1
+	}
+	return 1
+}
+
 func compareCompleted(a, b *Torrent) int {
 	if a.Completed < b.Completed {
 		return -1
@@ -68,6 +77,15 @@ func compareCompletionOn(a, b *Torrent) int {
 		return 1
 	}
 	return 0
+}
+
+func compareCreatedBy(a, b *Torrent) int {
+	if a.CreatedBy == b.CreatedBy {
+		return 0
+	} else if a.CreatedBy < b.CreatedBy {
+		return -1
+	}
+	return 1
 }
 
 func compareContentPath(a, b *Torrent) int {
@@ -514,8 +532,10 @@ var torrentComparators = map[string]func(a, b *Torrent) int{
 	"auto_tmm": compareAutoManaged,
 	"availability": compareAvailability,
 	"category": compareCategory,
+	"comment": compareComment,
 	"completed": compareCompleted,
 	"completion_on": compareCompletionOn,
+	"created_by": compareCreatedBy,
 	"content_path": compareContentPath,
 	"dl_limit": compareDlLimit,
 	"dlspeed": compareDlSpeed,

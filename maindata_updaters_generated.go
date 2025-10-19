@@ -38,6 +38,13 @@ func updateTorrentCategory(val interface{}, obj *Torrent) {
 	}
 }
 
+// updateTorrentComment updates the Comment field of Torrent
+func updateTorrentComment(val interface{}, obj *Torrent) {
+	if c, ok := val.(string); ok {
+		obj.Comment = c
+	}
+}
+
 // updateTorrentCompleted updates the Completed field of Torrent
 func updateTorrentCompleted(val interface{}, obj *Torrent) {
 	if c, ok := val.(float64); ok {
@@ -49,6 +56,13 @@ func updateTorrentCompleted(val interface{}, obj *Torrent) {
 func updateTorrentCompletionOn(val interface{}, obj *Torrent) {
 	if c, ok := val.(float64); ok {
 		obj.CompletionOn = int64(c)
+	}
+}
+
+// updateTorrentCreatedBy updates the CreatedBy field of Torrent
+func updateTorrentCreatedBy(val interface{}, obj *Torrent) {
+	if c, ok := val.(string); ok {
+		obj.CreatedBy = c
 	}
 }
 
@@ -404,8 +418,10 @@ var torrentFieldUpdaters = map[string]func(val interface{}, obj *Torrent){
 	"auto_tmm": updateTorrentAutoManaged,
 	"availability": updateTorrentAvailability,
 	"category": updateTorrentCategory,
+	"comment": updateTorrentComment,
 	"completed": updateTorrentCompleted,
 	"completion_on": updateTorrentCompletionOn,
+	"created_by": updateTorrentCreatedBy,
 	"content_path": updateTorrentContentPath,
 	"dl_limit": updateTorrentDlLimit,
 	"dlspeed": updateTorrentDlSpeed,
