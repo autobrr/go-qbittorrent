@@ -14,15 +14,15 @@ import (
 // SyncManager manages synchronization of MainData updates and provides
 // a consistent view of the qBittorrent state across partial updates.
 type SyncManager struct {
-	client           *Client
-	trackerManager   *TrackerManager
 	mu               sync.RWMutex
-	syncGroup        singleflight.Group
 	data             *MainData
 	rid              int64
 	lastSync         time.Time
 	lastSyncDuration time.Duration
 	lastError        error
+	client           *Client
+	trackerManager   *TrackerManager
+	syncGroup        singleflight.Group
 	options          SyncOptions
 }
 
