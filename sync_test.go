@@ -140,7 +140,6 @@ func createMockSyncManager() (*SyncManager, *MockClient) {
 		client:  mockClient.Client,
 		options: DefaultSyncOptions(),
 	}
-	sm.syncCond = sync.NewCond(&sm.syncMu)
 
 	return sm, mockClient
 }

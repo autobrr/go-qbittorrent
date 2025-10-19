@@ -2,9 +2,13 @@ package qbittorrent
 
 import (
 	"context"
+	"maps"
 	"math/rand"
+	"slices"
 	"sync"
 	"time"
+
+	"golang.org/x/sync/singleflight"
 )
 
 // SyncManager manages synchronization of MainData updates and provides
@@ -13,9 +17,7 @@ type SyncManager struct {
 	client           *Client
 	trackerManager   *TrackerManager
 	mu               sync.RWMutex
-	syncMu           sync.Mutex
-	syncCond         *sync.Cond
-	syncing          bool
+	syncGroup        singleflight.Group
 	data             *MainData
 	rid              int64
 	lastSync         time.Time
@@ -75,7 +77,6 @@ func NewSyncManager(client *Client, options ...SyncOptions) *SyncManager {
 		options:        opts,
 		trackerManager: NewTrackerManager(client),
 	}
-	sm.syncCond = sync.NewCond(&sm.syncMu)
 
 	return sm
 }
@@ -105,43 +106,24 @@ func (sm *SyncManager) Start(ctx context.Context) error {
 
 // Sync performs a synchronization with the qBittorrent server
 // If another sync is already in progress, this method will wait for it to complete
-// and return immediately without performing another sync
+// and all callers will receive the same result (using singleflight pattern).
+// Note: Uses context.Background() for all syncs to avoid context confusion in batched calls.
 func (sm *SyncManager) Sync(ctx context.Context) error {
-	// First, check if a sync is already in progress
-	sm.syncMu.Lock()
-	if sm.syncing {
-		// Another sync is in progress, wait for it to complete
-		sm.syncCond.Wait()
-		sm.syncMu.Unlock()
+	_, err, _ := sm.syncGroup.Do("sync", func() (interface{}, error) {
+		return sm.doSync(ctx)
+	})
+	return err
+}
 
-		// Now safely read the cached error from the completed sync
-		sm.mu.RLock()
-		cachedError := sm.lastError
-		sm.mu.RUnlock()
-		return cachedError
-	}
-
-	// Mark that we're starting a sync
-	sm.syncing = true
-	sm.syncMu.Unlock()
-
-	// Ensure we clean up the syncing flag and notify waiting goroutines
-	defer func() {
-		sm.syncMu.Lock()
-		sm.syncing = false
-		sm.syncCond.Broadcast() // Wake up all waiting goroutines
-		sm.syncMu.Unlock()
-	}()
-
-	// Perform the actual sync with timing
+// doSync performs the actual sync operation (singleflight-compatible signature)
+func (sm *SyncManager) doSync(ctx context.Context) (interface{}, error) {
 	startTime := time.Now()
-	var syncError error
+	var err error = nil
 
-	sm.mu.Lock()
 	defer func() {
 		sm.lastSyncDuration = time.Since(startTime)
 		sm.lastSync = time.Now()
-		sm.lastError = syncError // Store the error for future cached calls
+		sm.lastError = err
 		sm.mu.Unlock()
 	}()
 
@@ -150,32 +132,37 @@ func (sm *SyncManager) Sync(ctx context.Context) error {
 		sm.data = &MainData{}
 	}
 
-	// Use MainData.Update to handle all the sync logic
-	if err := sm.data.Update(ctx, sm.client); err != nil {
-		syncError = err
+	sm.mu.Lock()
+	if err = sm.data.Update(ctx, sm.client); err != nil {
 		if sm.options.OnError != nil {
 			sm.options.OnError(err)
 		}
-		return err
+		return nil, err
 	}
 
 	sm.rid = sm.data.Rid
-
 	// Call update callback if set
 	if sm.options.OnUpdate != nil {
 		sm.options.OnUpdate(sm.copyMainData(sm.data))
 	}
 
-	// Success - clear any previous error
-	syncError = nil
-	return nil
+	return nil, nil
 }
 
-// ensureFreshData checks if data is stale or missing and syncs if needed
+// ensureFreshData checks if data is stale or missing and triggers a non-blocking sync if needed
 func (sm *SyncManager) ensureFreshData() {
+	// Fast path: check if we just checked freshness very recently (< 100ms)
+	// This prevents redundant checks when multiple Get* methods are called in quick succession
 	sm.mu.RLock()
+	t := time.Now()
 
-	// Check if data is stale or nil and we should sync
+	if t.Before(sm.lastSync.Add(5 * time.Millisecond)) {
+		// We just checked freshness, no need to check again
+		sm.mu.RUnlock()
+		return
+	}
+
+	// Now check if we actually need to sync
 	shouldSync := false
 	if sm.data == nil {
 		// If data is nil, only sync if DynamicSync is enabled
@@ -183,15 +170,16 @@ func (sm *SyncManager) ensureFreshData() {
 	} else if sm.options.DynamicSync {
 		// Only check staleness if DynamicSync is enabled
 		staleThreshold := sm.calculateStaleThreshold()
-		if time.Since(sm.lastSync) > staleThreshold {
+		if t.After(sm.lastSync.Add(staleThreshold)) {
 			shouldSync = true
 		}
 	}
-	sm.mu.RUnlock()
 
-	// Perform sync if data is stale or nil
+	sm.mu.RUnlock()
+	// Trigger async sync if needed - don't block the reader
+	// singleflight will automatically deduplicate concurrent syncs
 	if shouldSync {
-		_ = sm.Sync(context.Background()) // Use background context, ignore error
+		sm.Sync(context.Background())
 	}
 }
 
@@ -227,7 +215,13 @@ func (sm *SyncManager) calculateStaleThreshold() time.Duration {
 // GetData returns a deep copy of the current synchronized data
 func (sm *SyncManager) GetData() *MainData {
 	sm.ensureFreshData()
+	return sm.GetDataUnchecked()
+}
 
+// GetDataUnchecked returns a deep copy of the current synchronized data without checking freshness.
+// This is faster but may return stale data. Use this when you've just called Sync() or when
+// AutoSync is enabled and you don't need the absolute latest data.
+func (sm *SyncManager) GetDataUnchecked() *MainData {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 
@@ -242,7 +236,13 @@ func (sm *SyncManager) GetData() *MainData {
 // GetTorrents returns a filtered list of torrents
 func (sm *SyncManager) GetTorrents(options TorrentFilterOptions) []Torrent {
 	sm.ensureFreshData()
+	return sm.GetTorrentsUnchecked(options)
+}
 
+// GetTorrentsUnchecked returns a filtered list of torrents without checking freshness.
+// This is faster but may return stale data. Use this when you've just called Sync() or when
+// AutoSync is enabled and you don't need the absolute latest data.
+func (sm *SyncManager) GetTorrentsUnchecked(options TorrentFilterOptions) []Torrent {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 
@@ -276,7 +276,13 @@ func (sm *SyncManager) GetTorrentMap(options TorrentFilterOptions) map[string]To
 // GetTorrent returns a specific torrent by hash
 func (sm *SyncManager) GetTorrent(hash string) (Torrent, bool) {
 	sm.ensureFreshData()
+	return sm.GetTorrentUnchecked(hash)
+}
 
+// GetTorrentUnchecked returns a specific torrent by hash without checking freshness.
+// This is faster but may return stale data. Use this when you've just called Sync() or when
+// AutoSync is enabled and you don't need the absolute latest data.
+func (sm *SyncManager) GetTorrentUnchecked(hash string) (Torrent, bool) {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 
@@ -289,10 +295,14 @@ func (sm *SyncManager) GetTorrent(hash string) (Torrent, bool) {
 }
 
 // GetServerState returns the current server state
-// GetServerState returns the current server state
 func (sm *SyncManager) GetServerState() ServerState {
 	sm.ensureFreshData()
+	return sm.GetServerStateUnchecked()
+}
 
+// GetServerStateUnchecked returns the current server state without checking freshness.
+// This is faster but may return stale data.
+func (sm *SyncManager) GetServerStateUnchecked() ServerState {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 
@@ -304,10 +314,14 @@ func (sm *SyncManager) GetServerState() ServerState {
 }
 
 // GetCategories returns a copy of all categories
-// GetCategories returns a copy of all categories
 func (sm *SyncManager) GetCategories() map[string]Category {
 	sm.ensureFreshData()
+	return sm.GetCategoriesUnchecked()
+}
 
+// GetCategoriesUnchecked returns a copy of all categories without checking freshness.
+// This is faster but may return stale data.
+func (sm *SyncManager) GetCategoriesUnchecked() map[string]Category {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 
@@ -315,18 +329,18 @@ func (sm *SyncManager) GetCategories() map[string]Category {
 		return nil
 	}
 
-	result := make(map[string]Category, len(sm.data.Categories))
-	for k, v := range sm.data.Categories {
-		result[k] = v
-	}
-	return result
+	return maps.Clone(sm.data.Categories)
 }
 
 // GetTags returns a copy of all tags
-// GetTags returns a copy of all tags
 func (sm *SyncManager) GetTags() []string {
 	sm.ensureFreshData()
+	return sm.GetTagsUnchecked()
+}
 
+// GetTagsUnchecked returns a copy of all tags without checking freshness.
+// This is faster but may return stale data.
+func (sm *SyncManager) GetTagsUnchecked() []string {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 
@@ -334,9 +348,7 @@ func (sm *SyncManager) GetTags() []string {
 		return nil
 	}
 
-	result := make([]string, len(sm.data.Tags))
-	copy(result, sm.data.Tags)
-	return result
+	return slices.Clone(sm.data.Tags)
 }
 
 // LastSyncTime returns the time of the last successful sync
@@ -404,9 +416,11 @@ func (sm *SyncManager) calculateNextInterval() time.Duration {
 	// Add jitter to prevent thundering herd
 	if sm.options.JitterPercent > 0 && sm.options.JitterPercent <= 100 {
 		jitterRange := float64(baseInterval) * float64(sm.options.JitterPercent) / 100.0
-		jitter := time.Duration(rand.Float64() * jitterRange)
-		// Apply jitter in both directions (±)
-		if rand.Float64() < 0.5 {
+		// Use a single random value for both magnitude and direction
+		randVal := rand.Float64()
+		jitter := time.Duration(randVal * jitterRange)
+		// Use the fractional part to determine direction (< 0.5 = add, >= 0.5 = subtract)
+		if randVal < 0.5 {
 			baseInterval += jitter
 		} else {
 			baseInterval -= jitter
@@ -427,28 +441,10 @@ func (sm *SyncManager) copyMainData(src *MainData) *MainData {
 		Rid:         src.Rid,
 		FullUpdate:  src.FullUpdate,
 		ServerState: src.ServerState,
-		Torrents:    make(map[string]Torrent, len(src.Torrents)),
-		Categories:  make(map[string]Category, len(src.Categories)),
-		Trackers:    make(map[string][]string, len(src.Trackers)),
-	}
-
-	for k, v := range src.Torrents {
-		dst.Torrents[k] = v
-	}
-
-	for k, v := range src.Categories {
-		dst.Categories[k] = v
-	}
-
-	for k, v := range src.Trackers {
-		trackers := make([]string, len(v))
-		copy(trackers, v)
-		dst.Trackers[k] = trackers
-	}
-
-	if len(src.Tags) > 0 {
-		dst.Tags = make([]string, len(src.Tags))
-		copy(dst.Tags, src.Tags)
+		Torrents:    maps.Clone(src.Torrents),
+		Categories:  maps.Clone(src.Categories),
+		Trackers:    maps.Clone(src.Trackers),
+		Tags:        slices.Clone(src.Tags),
 	}
 
 	return dst
