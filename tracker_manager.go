@@ -75,10 +75,6 @@ func (tm *TrackerManager) HydrateTorrents(ctx context.Context, torrents []Torren
 		hashesToFetch = append(hashesToFetch, hash)
 	}
 
-	if len(hashesToFetch) == 0 {
-		return torrents, trackerMap
-	}
-
 	// Fast path: fetch all trackers at once if supported
 	if tm.SupportsIncludeTrackers() {
 		hashList := hashesToFetch
