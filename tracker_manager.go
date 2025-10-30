@@ -12,7 +12,8 @@ import (
 )
 
 const (
-	trackerCacheTTL = 30 * time.Minute
+	trackerCacheTTL         = 5 * time.Minute
+	trackerIncludeChunkSize = 100
 )
 
 // trackerAPI describes the subset of Client functionality required by TrackerManager.
@@ -79,31 +80,9 @@ func (tm *TrackerManager) HydrateTorrents(ctx context.Context, torrents []Torren
 		return torrents, trackerMap
 	}
 
-	// Fast path: fetch all trackers at once if supported
+	// Fast path: fetch trackers with includeTrackers support when available
 	if tm.SupportsIncludeTrackers() {
-		hashList := hashesToFetch
-
-		if fetchedTorrents, err := tm.api.GetTorrentsCtx(ctx, TorrentFilterOptions{
-			Hashes:          hashList,
-			IncludeTrackers: true,
-		}); err == nil {
-			// Update torrents and cache
-			for _, fetched := range fetchedTorrents {
-				hash := strings.TrimSpace(fetched.Hash)
-				if len(hash) == 0 {
-					continue
-				}
-
-				i, ok := hashToTorrentIndex[hash]
-				if !ok {
-					continue
-				}
-
-				torrents[i].Trackers = fetched.Trackers
-				trackerMap[hash] = fetched.Trackers
-				tm.cache.Set(hash, fetched.Trackers, calculateTrackerTTL(fetched.Reannounce))
-			}
-		}
+		tm.hydrateWithIncludeTrackers(ctx, torrents, trackerMap, hashesToFetch, hashToTorrentIndex)
 	} else {
 		// Fetch hashes individually (fallback when fast path not supported)
 		// Use pipelining to fetch in parallel for better performance
@@ -148,12 +127,108 @@ func (tm *TrackerManager) HydrateTorrents(ctx context.Context, torrents []Torren
 				i := hashToTorrentIndex[res.hash]
 				torrents[i].Trackers = res.trackers
 				trackerMap[res.hash] = res.trackers
-				tm.cache.Set(res.hash, res.trackers, calculateTrackerTTL(torrents[i].Reannounce))
+				tm.cache.Set(res.hash, res.trackers, trackerCacheTTL)
 			}
 		}
 	}
 
 	return torrents, trackerMap
+}
+
+func (tm *TrackerManager) hydrateWithIncludeTrackers(ctx context.Context, torrents []Torrent, trackerMap map[string][]TorrentTracker, hashes []string, hashToTorrentIndex map[string]int) {
+	pending := make(map[string]struct{}, len(hashes))
+	ordered := make([]string, 0, len(hashes))
+	for _, hash := range hashes {
+		hash = strings.TrimSpace(hash)
+		if hash == "" {
+			continue
+		}
+		if _, exists := pending[hash]; exists {
+			continue
+		}
+		pending[hash] = struct{}{}
+		ordered = append(ordered, hash)
+	}
+
+	if len(pending) == 0 {
+		return
+	}
+
+	// applyFetched records tracker responses on the relevant torrent entries and returns
+	// how many of the outstanding hashes were satisfied by this batch.
+	applyFetched := func(fetched []Torrent) int {
+		progress := 0
+		for _, fetched := range fetched {
+			hash := strings.TrimSpace(fetched.Hash)
+			if hash == "" {
+				continue
+			}
+
+			if idx, ok := hashToTorrentIndex[hash]; ok {
+				torrents[idx].Trackers = fetched.Trackers
+				trackerMap[hash] = fetched.Trackers
+				tm.cache.Set(hash, fetched.Trackers, trackerCacheTTL)
+			}
+
+			if _, ok := pending[hash]; ok {
+				delete(pending, hash)
+				progress++
+			}
+		}
+		return progress
+	}
+
+	// Try fetching all hashes in one request first for environments without proxy limits. If that
+	// works we skip the chunking overhead entirely.
+	if fetchedTorrents, err := tm.api.GetTorrentsCtx(ctx, TorrentFilterOptions{
+		Hashes:          ordered,
+		IncludeTrackers: true,
+	}); err == nil {
+		applyFetched(fetchedTorrents)
+		if len(pending) == 0 {
+			return
+		}
+	}
+
+	// Fallback that relies on qBittorrent returning all torrents when no hash filter is provided.
+	fetchAll := func() {
+		fetchedTorrents, err := tm.api.GetTorrentsCtx(ctx, TorrentFilterOptions{IncludeTrackers: true})
+		if err != nil {
+			return
+		}
+		applyFetched(fetchedTorrents)
+	}
+
+	for len(pending) > 0 {
+		chunk := make([]string, 0, minInt(len(pending), trackerIncludeChunkSize))
+		for hash := range pending {
+			chunk = append(chunk, hash)
+			if len(chunk) >= trackerIncludeChunkSize {
+				break
+			}
+		}
+
+		fetchedTorrents, err := tm.api.GetTorrentsCtx(ctx, TorrentFilterOptions{
+			Hashes:          chunk,
+			IncludeTrackers: true,
+		})
+		if err != nil {
+			fetchAll()
+			return
+		}
+
+		if progress := applyFetched(fetchedTorrents); progress == 0 {
+			fetchAll()
+			return
+		}
+	}
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // calculateTrackerTTL calculates the appropriate TTL for tracker cache based on reannounce time
