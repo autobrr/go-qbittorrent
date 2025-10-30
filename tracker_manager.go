@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	trackerCacheTTL         = 30 * time.Minute
+	trackerCacheTTL         = 5 * time.Minute
 	trackerIncludeChunkSize = 100
 )
 
@@ -127,7 +127,7 @@ func (tm *TrackerManager) HydrateTorrents(ctx context.Context, torrents []Torren
 				i := hashToTorrentIndex[res.hash]
 				torrents[i].Trackers = res.trackers
 				trackerMap[res.hash] = res.trackers
-				tm.cache.Set(res.hash, res.trackers, calculateTrackerTTL(torrents[i].Reannounce))
+				tm.cache.Set(res.hash, res.trackers, trackerCacheTTL)
 			}
 		}
 	}
@@ -167,7 +167,7 @@ func (tm *TrackerManager) hydrateWithIncludeTrackers(ctx context.Context, torren
 			if idx, ok := hashToTorrentIndex[hash]; ok {
 				torrents[idx].Trackers = fetched.Trackers
 				trackerMap[hash] = fetched.Trackers
-				tm.cache.Set(hash, fetched.Trackers, calculateTrackerTTL(fetched.Reannounce))
+				tm.cache.Set(hash, fetched.Trackers, trackerCacheTTL)
 			}
 
 			if _, ok := pending[hash]; ok {
