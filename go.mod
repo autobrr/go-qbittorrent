@@ -1,6 +1,6 @@
 module github.com/autobrr/go-qbittorrent
 
-go 1.24
+go 1.24.0
 
 toolchain go1.24.1
 
@@ -8,9 +8,9 @@ require (
 	github.com/Masterminds/semver v1.5.0
 	github.com/avast/retry-go v3.0.0+incompatible
 	github.com/pkg/errors v0.9.1
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.1
 	golang.org/x/exp v0.0.0-20241108190413-2d47ceb2692f
-	golang.org/x/net v0.43.0
+	golang.org/x/net v0.46.0
 )
 
 require (
