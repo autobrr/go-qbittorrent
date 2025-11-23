@@ -242,6 +242,30 @@ func (c *Client) SetPreferencesCtx(ctx context.Context, prefs map[string]interfa
 	return nil
 }
 
+// GetDirectoryContentCtx lists folders inside a directory (for autocomplete).
+func (c *Client) GetDirectoryContentCtx(ctx context.Context, dirPath string) ([]string, error) {
+	opts := map[string]string{
+		"dirPath": dirPath,
+		"mode":    "dirs",
+	}
+	resp, err := c.getCtx(ctx, "app/getDirectoryContent", opts)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get directory content")
+	}
+	defer drainAndClose(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get directory content; status code: %d", resp.StatusCode)
+	}
+
+	var paths []string
+	if err := json.NewDecoder(resp.Body).Decode(&paths); err != nil {
+		return nil, errors.Wrap(err, "could not unmarshal body")
+	}
+
+	return paths, nil
+}
+
 // GetDefaultSavePath get default save path.
 // e.g. C:/Users/Dayman/Downloads
 func (c *Client) GetDefaultSavePath() (string, error) {
