@@ -148,10 +148,7 @@ func (sm *SyncManager) doSync(ctx context.Context) (interface{}, error) {
 
 	sm.rid = sm.data.Rid
 	// Update cached torrent slice
-	sm.allTorrents = sm.allTorrents[:0]
-	for _, torrent := range sm.data.Torrents {
-		sm.allTorrents = append(sm.allTorrents, torrent)
-	}
+	sm.updateAllTorrents()
 
 	// Call update callback if set
 	if sm.options.OnUpdate != nil {
@@ -159,6 +156,13 @@ func (sm *SyncManager) doSync(ctx context.Context) (interface{}, error) {
 	}
 
 	return nil, nil
+}
+
+func (sm *SyncManager) updateAllTorrents() {
+	sm.allTorrents = sm.allTorrents[:0]
+	for _, torrent := range sm.data.Torrents {
+		sm.allTorrents = append(sm.allTorrents, torrent)
+	}
 }
 
 // ensureFreshData checks if data is stale or missing and triggers a non-blocking sync if needed

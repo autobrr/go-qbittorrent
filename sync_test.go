@@ -241,6 +241,8 @@ func TestSyncManager_InitializeData(t *testing.T) {
 		},
 	}
 
+	syncManager.updateAllTorrents()
+
 	// Test GetData returns a copy
 	data := syncManager.GetData()
 	if data == nil {
