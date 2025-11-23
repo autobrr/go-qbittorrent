@@ -2204,6 +2204,13 @@ func (c *Client) GetWebAPIVersionCtx(ctx context.Context) (string, error) {
 
 	defer drainAndClose(resp)
 
+	// HTTP Status Code 	Scenario
+	// 200 	All scenarios
+	// Non-200 response codes are expected when a reverse proxy is used in front of qBittorrent API.
+	if resp.StatusCode != http.StatusOK {
+		return "", errors.Wrap(ErrUnexpectedStatus, "could not get webapi version; status code: %d", resp.StatusCode)
+	}
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", errors.Wrap(err, "could not read body")
