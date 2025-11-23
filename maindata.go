@@ -28,6 +28,22 @@ func normalizeHashesRaw(rawData map[string]interface{}) {
 	}
 }
 
+// ensureInitialized prepares MainData maps/slices so merge helpers can write safely.
+func (dest *MainData) ensureInitialized() {
+	if dest.Torrents == nil {
+		dest.Torrents = make(map[string]Torrent)
+	}
+	if dest.Categories == nil {
+		dest.Categories = make(map[string]Category)
+	}
+	if dest.Trackers == nil {
+		dest.Trackers = make(map[string][]string)
+	}
+	if dest.Tags == nil {
+		dest.Tags = make([]string, 0)
+	}
+}
+
 func (dest *MainData) Update(ctx context.Context, c *Client) error {
 	source, rawData, err := c.SyncMainDataCtxWithRaw(ctx, int64(dest.Rid))
 	if err != nil {
@@ -42,12 +58,15 @@ func (dest *MainData) Update(ctx context.Context, c *Client) error {
 
 	// For full updates, replace everything
 	*dest = *source
+	dest.ensureInitialized()
 	return nil
 }
 
 // UpdateWithRawData efficiently merges partial updates using raw JSON data
 // This provides field-level merging similar to the SyncManager's logic
 func (dest *MainData) UpdateWithRawData(rawData map[string]interface{}, source *MainData) {
+	dest.ensureInitialized()
+
 	// Update RID
 	dest.Rid = source.Rid
 

@@ -6,6 +6,7 @@ import (
 	"io"
 	"math/rand"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -250,6 +251,37 @@ func drainAndClose(resp *http.Response) {
 	}
 }
 
+func isClosedConnectionError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// Check for unexpected EOF during request (not response body read)
+	// http.Do can return this if connection dies during headers
+	if err == io.ErrUnexpectedEOF {
+		return true
+	}
+
+	// Check for common connection error strings
+	errStr := err.Error()
+	connectionErrors := []string{
+		"use of closed network connection",
+		"broken pipe",
+		"connection reset by peer",
+		"connection refused",
+	}
+
+	for _, connErr := range connectionErrors {
+		if strings.Contains(errStr, connErr) {
+			return true
+		}
+	}
+
+	// Check for net.OpError with connection issues
+	var opErr *net.OpError
+	return errors.As(err, &opErr)
+}
+
 func (c *Client) retryDo(ctx context.Context, req *http.Request) (*http.Response, error) {
 	var (
 		originalBody []byte
@@ -278,6 +310,15 @@ func (c *Client) retryDo(ctx context.Context, req *http.Request) (*http.Response
 			if err == context.DeadlineExceeded || err == context.Canceled {
 				return retry.Unrecoverable(err)
 			}
+
+			// Handle closed/dead connections immediately without delay
+			// These are internal connection pool issues that should be retried fast
+			if isClosedConnectionError(err) {
+				// Clean up stale connections in the pool
+				c.http.CloseIdleConnections()
+				return err
+			}
+
 			retry.Delay(c.retryDelay)
 			return err
 		}
