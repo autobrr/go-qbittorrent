@@ -24,6 +24,7 @@ type SyncManager struct {
 	trackerManager   *TrackerManager
 	syncGroup        singleflight.Group
 	options          SyncOptions
+	allTorrents      []Torrent
 }
 
 // SyncOptions configures the behavior of the sync manager
@@ -141,6 +142,9 @@ func (sm *SyncManager) doSync(ctx context.Context) (interface{}, error) {
 	}
 
 	sm.rid = sm.data.Rid
+	// Update cached torrent slice
+	sm.allTorrents = sm.allTorrents[:0]
+
 	// Call update callback if set
 	if sm.options.OnUpdate != nil {
 		sm.options.OnUpdate(sm.copyMainData(sm.data))
@@ -250,8 +254,27 @@ func (sm *SyncManager) GetTorrentsUnchecked(options TorrentFilterOptions) []Torr
 		return nil
 	}
 
-	result := make([]Torrent, 0, len(sm.data.Torrents))
-	for _, torrent := range sm.data.Torrents {
+	// Lazy populate allTorrents if not already done
+	if len(sm.allTorrents) == 0 {
+		if cap(sm.allTorrents) < len(sm.data.Torrents) {
+			sm.allTorrents = make([]Torrent, 0, len(sm.data.Torrents))
+		} else {
+			sm.allTorrents = sm.allTorrents[:len(sm.data.Torrents)]
+		}
+
+		for _, torrent := range sm.data.Torrents {
+			sm.allTorrents = append(sm.allTorrents, torrent)
+		}
+	}
+
+	var result []Torrent
+	if len(options.Hashes) > 0 {
+		result = make([]Torrent, 0, len(options.Hashes))
+	} else {
+		result = make([]Torrent, 0, len(sm.allTorrents))
+	}
+
+	for _, torrent := range sm.allTorrents {
 		if matchesTorrentFilter(torrent, options) {
 			result = append(result, torrent)
 		}
