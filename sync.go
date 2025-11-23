@@ -25,6 +25,7 @@ type SyncManager struct {
 	syncGroup        singleflight.Group
 	options          SyncOptions
 	allTorrents      []Torrent
+	resultPool       sync.Pool
 }
 
 // SyncOptions configures the behavior of the sync manager
@@ -77,6 +78,10 @@ func NewSyncManager(client *Client, options ...SyncOptions) *SyncManager {
 		client:         client,
 		options:        opts,
 		trackerManager: NewTrackerManager(client),
+	}
+	sm.resultPool.New = func() interface{} {
+		leak := make([]Torrent, 0, 100)
+		return &leak // initial capacity
 	}
 
 	return sm
@@ -144,6 +149,9 @@ func (sm *SyncManager) doSync(ctx context.Context) (interface{}, error) {
 	sm.rid = sm.data.Rid
 	// Update cached torrent slice
 	sm.allTorrents = sm.allTorrents[:0]
+	for _, torrent := range sm.data.Torrents {
+		sm.allTorrents = append(sm.allTorrents, torrent)
+	}
 
 	// Call update callback if set
 	if sm.options.OnUpdate != nil {
@@ -254,33 +262,38 @@ func (sm *SyncManager) GetTorrentsUnchecked(options TorrentFilterOptions) []Torr
 		return nil
 	}
 
-	// Lazy populate allTorrents if not already done
-	if len(sm.allTorrents) == 0 {
-		if cap(sm.allTorrents) < len(sm.data.Torrents) {
-			sm.allTorrents = make([]Torrent, 0, len(sm.data.Torrents))
-		} else {
-			sm.allTorrents = sm.allTorrents[:len(sm.data.Torrents)]
-		}
-
-		for _, torrent := range sm.data.Torrents {
-			sm.allTorrents = append(sm.allTorrents, torrent)
-		}
-	}
-
-	var result []Torrent
-	if len(options.Hashes) > 0 {
-		result = make([]Torrent, 0, len(options.Hashes))
+	// Get a buffer from the pool
+	var resultBuffer []Torrent
+	if pooled := sm.resultPool.Get(); pooled != nil {
+		resultBuffer = (*pooled.(*[]Torrent))[:0]
 	} else {
-		result = make([]Torrent, 0, len(sm.allTorrents))
+		var length int
+		if len(options.Hashes) > 0 {
+			length = len(options.Hashes)
+		} else {
+			length = len(sm.allTorrents) - options.Offset
+			if options.Limit != 0 && length > options.Limit {
+				length = options.Limit
+			}
+
+			if length <= 0 {
+				length = 100
+			}
+		}
+
+		resultBuffer = make([]Torrent, 0, length)
 	}
 
 	for _, torrent := range sm.allTorrents {
 		if matchesTorrentFilter(torrent, options) {
-			result = append(result, torrent)
+			resultBuffer = append(resultBuffer, torrent)
 		}
 	}
 
-	return applyTorrentFilterOptions(result, options)
+	filtered := applyTorrentFilterOptions(resultBuffer, options)
+	result := slices.Clone(filtered)
+	sm.resultPool.Put(&resultBuffer)
+	return result
 }
 
 // GetTorrentMap returns a filtered map of torrents keyed by hash
