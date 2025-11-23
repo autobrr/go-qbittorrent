@@ -907,3 +907,13 @@ type TorrentCreationTask struct {
 type TorrentCreationTaskResponse struct {
 	TaskID string `json:"taskID"`
 }
+
+// PathMetadata represents the response of the getDirectoryContent method with withMetadata set to true
+type PathMetadata struct {
+	Name                 string `json:"name"`
+	Type                 string `json:"type"` // "dir" or "file"
+	Size                 int64  `json:"size,omitempty"`
+	CreationDate         int64  `json:"creation_date"`
+	LastAccessDate       int64  `json:"last_access_date"`
+	LastModificationDate int64  `json:"last_modification_date"`
+}

@@ -243,10 +243,11 @@ func (c *Client) SetPreferencesCtx(ctx context.Context, prefs map[string]interfa
 }
 
 // GetDirectoryContentCtx lists folders inside a directory (for autocomplete).
-func (c *Client) GetDirectoryContentCtx(ctx context.Context, dirPath string) ([]string, error) {
+func (c *Client) GetDirectoryContentCtx(ctx context.Context, dirPath string, withMetadata bool) (any, error) {
 	opts := map[string]string{
-		"dirPath": dirPath,
-		"mode":    "dirs",
+		"dirPath":      dirPath,
+		"withMetadata": strconv.FormatBool(withMetadata),
+		"mode":         "dirs",
 	}
 	resp, err := c.getCtx(ctx, "app/getDirectoryContent", opts)
 	if err != nil {
@@ -258,11 +259,20 @@ func (c *Client) GetDirectoryContentCtx(ctx context.Context, dirPath string) ([]
 		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get directory content; status code: %d", resp.StatusCode)
 	}
 
-	var paths []string
-	if err := json.NewDecoder(resp.Body).Decode(&paths); err != nil {
-		return nil, errors.Wrap(err, "could not unmarshal body")
+	decoder := json.NewDecoder(resp.Body)
+
+	if withMetadata {
+		var result []PathMetadata
+		if err := decoder.Decode(&result); err != nil {
+			return nil, errors.Wrap(err, "could not unmarshal body")
+		}
+		return result, nil
 	}
 
+	var paths []string
+	if err := decoder.Decode(&paths); err != nil {
+		return nil, errors.Wrap(err, "could not unmarshal body")
+	}
 	return paths, nil
 }
 
