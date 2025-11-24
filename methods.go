@@ -85,6 +85,10 @@ func (c *Client) GetBuildInfoCtx(ctx context.Context) (BuildInfo, error) {
 
 	defer drainAndClose(resp)
 
+	if resp.StatusCode != http.StatusOK {
+		return bi, errors.Wrap(ErrUnexpectedStatus, "could not get app build info; status code: %d", resp.StatusCode)
+	}
+
 	if err = json.NewDecoder(resp.Body).Decode(&bi); err != nil {
 		return bi, errors.Wrap(err, "could not unmarshal body")
 	}
@@ -207,6 +211,10 @@ func (c *Client) GetAppPreferencesCtx(ctx context.Context) (AppPreferences, erro
 
 	defer drainAndClose(resp)
 
+	if resp.StatusCode != http.StatusOK {
+		return app, errors.Wrap(ErrUnexpectedStatus, "could not get app preferences; status code: %d", resp.StatusCode)
+	}
+
 	if err := json.NewDecoder(resp.Body).Decode(&app); err != nil {
 		return app, errors.Wrap(err, "could not unmarshal body")
 	}
@@ -321,6 +329,10 @@ func (c *Client) GetTorrentsCtx(ctx context.Context, o TorrentFilterOptions) ([]
 
 	defer drainAndClose(resp)
 
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get torrents; status code: %d", resp.StatusCode)
+	}
+
 	var torrents []Torrent
 	if err := json.NewDecoder(resp.Body).Decode(&torrents); err != nil {
 		return nil, errors.Wrap(err, "could not unmarshal body")
@@ -363,10 +375,22 @@ func (c *Client) GetTorrentPropertiesCtx(ctx context.Context, hash string) (Torr
 	var prop TorrentProperties
 	resp, err := c.getCtx(ctx, "torrents/properties", opts)
 	if err != nil {
-		return prop, errors.Wrap(err, "could not get app preferences")
+		return prop, errors.Wrap(err, "could not get torrent properties")
 	}
 
 	defer drainAndClose(resp)
+
+	// HTTP Status Code	Scenario
+	// 404	Torrent hash was not found
+	// 200	All other scenarios
+	switch resp.StatusCode {
+	case http.StatusOK:
+		break
+	case http.StatusNotFound:
+		return prop, errors.Wrap(ErrTorrentNotFound, "could not get torrent properties; torrent hash '%s' was not found", hash)
+	default:
+		return prop, errors.Wrap(ErrUnexpectedStatus, "could not get torrent properties; status code: %d", resp.StatusCode)
+	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&prop); err != nil {
 		return prop, errors.Wrap(err, "could not unmarshal body")
@@ -386,6 +410,10 @@ func (c *Client) GetTorrentsRawCtx(ctx context.Context) (string, error) {
 	}
 
 	defer drainAndClose(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return "", errors.Wrap(ErrUnexpectedStatus, "could not get torrents raw; status code: %d", resp.StatusCode)
+	}
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -412,10 +440,14 @@ func (c *Client) GetTorrentTrackersCtx(ctx context.Context, hash string) ([]Torr
 	defer drainAndClose(resp)
 
 	switch resp.StatusCode {
+	case http.StatusOK:
+		break
 	case http.StatusNotFound:
 		return nil, nil
 	case http.StatusForbidden:
 		return nil, nil
+	default:
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get torrent trackers; status code: %d", resp.StatusCode)
 	}
 
 	var trackers []TorrentTracker
@@ -557,6 +589,10 @@ func (c *Client) GetTransferInfoCtx(ctx context.Context) (*TransferInfo, error) 
 
 	defer drainAndClose(resp)
 
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get transfer info; status code: %d", resp.StatusCode)
+	}
+
 	var info TransferInfo
 	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
 		return nil, errors.Wrap(err, "could not unmarshal body")
@@ -607,6 +643,10 @@ func (c *Client) SyncMainDataCtxWithRaw(ctx context.Context, rid int64) (*MainDa
 	resp, err := c.getCtx(ctx, "/sync/maindata", opts)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "could not get main data")
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, nil, errors.Wrap(ErrUnexpectedStatus, "could not get main data; status code: %d", resp.StatusCode)
 	}
 
 	defer drainAndClose(resp)
@@ -986,6 +1026,10 @@ func (c *Client) GetCategoriesCtx(ctx context.Context) (map[string]Category, err
 
 	defer drainAndClose(resp)
 
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get categories; status code: %d", resp.StatusCode)
+	}
+
 	m := make(map[string]Category)
 	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
 		return nil, errors.Wrap(err, "could not unmarshal body")
@@ -1008,6 +1052,15 @@ func (c *Client) GetFilesInformationCtx(ctx context.Context, hash string) (*Torr
 	}
 
 	defer drainAndClose(resp)
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+		break
+	case http.StatusNotFound:
+		return nil, errors.Wrap(ErrTorrentNotFound, "could not get files info; torrent hash not found: %s", hash)
+	default:
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get files info; torrent hash: %s, status code: %d", hash, resp.StatusCode)
+	}
 
 	var info TorrentFiles
 	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
@@ -1074,6 +1127,15 @@ func (c *Client) ExportTorrentCtx(ctx context.Context, hash string) ([]byte, err
 	}
 
 	defer drainAndClose(resp)
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+		break
+	case http.StatusNotFound:
+		return nil, errors.Wrap(ErrTorrentNotFound, "could not get export; torrent hash not found: %v", hash)
+	default:
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get export; torrent hash: %v | status code: %d", hash, resp.StatusCode)
+	}
 
 	return io.ReadAll(resp.Body)
 }
@@ -1188,6 +1250,10 @@ func (c *Client) GetTagsCtx(ctx context.Context) ([]string, error) {
 	}
 
 	defer drainAndClose(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get tags; status code: %d", resp.StatusCode)
+	}
 
 	var m []string
 	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
@@ -1654,6 +1720,10 @@ func (c *Client) GetAlternativeSpeedLimitsModeCtx(ctx context.Context) (bool, er
 
 	defer drainAndClose(resp)
 
+	if resp.StatusCode != http.StatusOK {
+		return m, errors.Wrap(ErrUnexpectedStatus, "could not get alternative speed limits mode; status code: %d", resp.StatusCode)
+	}
+
 	var d int64
 	if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
 		return m, errors.Wrap(err, "could not unmarshal body")
@@ -1702,6 +1772,10 @@ func (c *Client) GetGlobalDownloadLimitCtx(ctx context.Context) (int64, error) {
 
 	defer drainAndClose(resp)
 
+	if resp.StatusCode != http.StatusOK {
+		return m, errors.Wrap(ErrUnexpectedStatus, "could not get global download limit; status code: %d", resp.StatusCode)
+	}
+
 	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
 		return m, errors.Wrap(err, "could not unmarshal body")
 	}
@@ -1747,6 +1821,10 @@ func (c *Client) GetGlobalUploadLimitCtx(ctx context.Context) (int64, error) {
 	}
 
 	defer drainAndClose(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return m, errors.Wrap(ErrUnexpectedStatus, "could not get global upload limit; status code: %d", resp.StatusCode)
+	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
 		return m, errors.Wrap(err, "could not unmarshal body")
@@ -1983,10 +2061,8 @@ func (c *Client) SetTorrentShareLimitCtx(ctx context.Context, hashes []string, r
 	case http.StatusBadRequest:
 		return ErrInvalidShareLimit
 	default:
-		errors.Wrap(ErrUnexpectedStatus, "could not set share limits; hashes: %v | ratioLimit: %v | seedingTimeLimit: %v | inactiveSeedingTimeLimit %v | status code: %d", hashes, ratioLimit, seedingTimeLimit, inactiveSeedingTimeLimit, resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not set share limits; hashes: %v | ratioLimit: %v | seedingTimeLimit: %v | inactiveSeedingTimeLimit %v | status code: %d", hashes, ratioLimit, seedingTimeLimit, inactiveSeedingTimeLimit, resp.StatusCode)
 	}
-
-	return nil
 }
 
 // SetTorrentUploadLimit set upload limit for torrent specified by hashes
@@ -2026,6 +2102,10 @@ func (c *Client) GetAppVersionCtx(ctx context.Context) (string, error) {
 	}
 
 	defer drainAndClose(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return "", errors.Wrap(ErrUnexpectedStatus, "could not get app version; status code: %d", resp.StatusCode)
+	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -2233,6 +2313,10 @@ func (c *Client) GetLogsCtx(ctx context.Context) ([]Log, error) {
 
 	defer drainAndClose(resp)
 
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get main client logs; status code: %d", resp.StatusCode)
+	}
+
 	var m []Log
 	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
 		return nil, errors.Wrap(err, "could not unmarshal body")
@@ -2253,6 +2337,10 @@ func (c *Client) GetPeerLogsCtx(ctx context.Context) ([]PeerLog, error) {
 	}
 
 	defer drainAndClose(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get peer logs; status code: %d", resp.StatusCode)
+	}
 
 	var m []PeerLog
 	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
