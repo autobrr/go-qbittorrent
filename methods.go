@@ -645,11 +645,11 @@ func (c *Client) SyncMainDataCtxWithRaw(ctx context.Context, rid int64) (*MainDa
 		return nil, nil, errors.Wrap(err, "could not get main data")
 	}
 
+	defer drainAndClose(resp)
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, nil, errors.Wrap(ErrUnexpectedStatus, "could not get main data; status code: %d", resp.StatusCode)
 	}
-
-	defer drainAndClose(resp)
 
 	rp, wp := io.Pipe()
 	var rawData map[string]interface{}
