@@ -247,7 +247,13 @@ func (c *Client) GetDirectoryContent(dirPath string, withMetadata bool) (any, er
 }
 
 // GetDirectoryContentCtx lists folders inside a directory (for autocomplete).
+// Requires qBittorrent 5.0 and WebAPI >= 2.11.2.
 func (c *Client) GetDirectoryContentCtx(ctx context.Context, dirPath string, withMetadata bool) (any, error) {
+	minVersion, _ := semver.NewVersion("2.11.2")
+	if _, err := c.RequiresMinVersion(minVersion); err != nil {
+		return nil, err
+	}
+
 	opts := map[string]string{
 		"dirPath":      dirPath,
 		"withMetadata": strconv.FormatBool(withMetadata),
