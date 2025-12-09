@@ -241,6 +241,11 @@ func (c *Client) SetPreferencesCtx(ctx context.Context, prefs map[string]interfa
 	return nil
 }
 
+// GetDirectoryContent lists folders inside a directory (for autocomplete).
+func (c *Client) GetDirectoryContent(dirPath string, withMetadata bool) (any, error) {
+	return c.GetDirectoryContentCtx(context.Background(), dirPath, withMetadata)
+}
+
 // GetDirectoryContentCtx lists folders inside a directory (for autocomplete).
 func (c *Client) GetDirectoryContentCtx(ctx context.Context, dirPath string, withMetadata bool) (any, error) {
 	opts := map[string]string{
