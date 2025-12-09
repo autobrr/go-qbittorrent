@@ -241,6 +241,53 @@ func (c *Client) SetPreferencesCtx(ctx context.Context, prefs map[string]interfa
 	return nil
 }
 
+// GetDirectoryContent lists folders inside a directory (for autocomplete).
+func (c *Client) GetDirectoryContent(dirPath string, withMetadata bool) (any, error) {
+	return c.GetDirectoryContentCtx(context.Background(), dirPath, withMetadata)
+}
+
+// GetDirectoryContentCtx lists folders inside a directory (for autocomplete).
+// Requires qBittorrent 5.0 and WebAPI >= 2.11.2.
+// Note: withMetadata parameter is not yet released in qBittorrent (as of Dec 2025),
+// expected in the next version. When false, returns []string; when true, returns []PathMetadata.
+func (c *Client) GetDirectoryContentCtx(ctx context.Context, dirPath string, withMetadata bool) (any, error) {
+	minVersion, _ := semver.NewVersion("2.11.2")
+	if _, err := c.RequiresMinVersion(minVersion); err != nil {
+		return nil, err
+	}
+
+	opts := map[string]string{
+		"dirPath":      dirPath,
+		"withMetadata": strconv.FormatBool(withMetadata),
+		"mode":         "dirs",
+	}
+	resp, err := c.getCtx(ctx, "app/getDirectoryContent", opts)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get directory content")
+	}
+	defer drainAndClose(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get directory content; status code: %d", resp.StatusCode)
+	}
+
+	decoder := json.NewDecoder(resp.Body)
+
+	if withMetadata {
+		var result []PathMetadata
+		if err := decoder.Decode(&result); err != nil {
+			return nil, errors.Wrap(err, "could not unmarshal body")
+		}
+		return result, nil
+	}
+
+	var paths []string
+	if err := decoder.Decode(&paths); err != nil {
+		return nil, errors.Wrap(err, "could not unmarshal body")
+	}
+	return paths, nil
+}
+
 // GetDefaultSavePath get default save path.
 // e.g. C:/Users/Dayman/Downloads
 func (c *Client) GetDefaultSavePath() (string, error) {
