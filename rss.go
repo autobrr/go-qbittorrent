@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"strconv"
 
+	"github.com/Masterminds/semver"
 	"github.com/autobrr/go-qbittorrent/errors"
 )
 
@@ -185,19 +185,15 @@ func (c *Client) AddRSSFolderCtx(ctx context.Context, path string) error {
 }
 
 // AddRSSFeed adds a new RSS feed.
-// refreshInterval is in seconds; 0 means use global default.
-func (c *Client) AddRSSFeed(url, path string, refreshInterval int64) error {
-	return c.AddRSSFeedCtx(context.Background(), url, path, refreshInterval)
+func (c *Client) AddRSSFeed(url, path string) error {
+	return c.AddRSSFeedCtx(context.Background(), url, path)
 }
 
 // AddRSSFeedCtx adds a new RSS feed with context.
-func (c *Client) AddRSSFeedCtx(ctx context.Context, url, path string, refreshInterval int64) error {
+func (c *Client) AddRSSFeedCtx(ctx context.Context, url, path string) error {
 	opts := map[string]string{
 		"url":  url,
 		"path": path,
-	}
-	if refreshInterval > 0 {
-		opts["refreshInterval"] = strconv.FormatInt(refreshInterval, 10)
 	}
 
 	resp, err := c.postCtx(ctx, "rss/addFeed", opts)
@@ -219,12 +215,18 @@ func (c *Client) AddRSSFeedCtx(ctx context.Context, url, path string, refreshInt
 }
 
 // SetRSSFeedURL changes the URL of an existing feed.
+// Requires qBittorrent 4.6.0+ (WebAPI 2.9.1+).
 func (c *Client) SetRSSFeedURL(path, url string) error {
 	return c.SetRSSFeedURLCtx(context.Background(), path, url)
 }
 
 // SetRSSFeedURLCtx changes the URL of an existing feed with context.
+// Requires qBittorrent 4.6.0+ (WebAPI 2.9.1+).
 func (c *Client) SetRSSFeedURLCtx(ctx context.Context, path, url string) error {
+	if ok, err := c.RequiresMinVersion(semver.MustParse("2.9.1")); !ok {
+		return errors.Wrap(err, "SetRSSFeedURL requires qBittorrent 4.6.0+ (WebAPI >= 2.9.1)")
+	}
+
 	opts := map[string]string{
 		"path": path,
 		"url":  url,
@@ -243,37 +245,6 @@ func (c *Client) SetRSSFeedURLCtx(ctx context.Context, path, url string) error {
 
 	if resp.StatusCode != http.StatusOK {
 		return errors.Wrap(ErrUnexpectedStatus, "could not set RSS feed URL; path: %s | status code: %d", path, resp.StatusCode)
-	}
-
-	return nil
-}
-
-// SetRSSFeedRefreshInterval sets the refresh interval for a feed.
-// refreshInterval is in seconds.
-func (c *Client) SetRSSFeedRefreshInterval(path string, refreshInterval int64) error {
-	return c.SetRSSFeedRefreshIntervalCtx(context.Background(), path, refreshInterval)
-}
-
-// SetRSSFeedRefreshIntervalCtx sets the refresh interval for a feed with context.
-func (c *Client) SetRSSFeedRefreshIntervalCtx(ctx context.Context, path string, refreshInterval int64) error {
-	opts := map[string]string{
-		"path":            path,
-		"refreshInterval": strconv.FormatInt(refreshInterval, 10),
-	}
-
-	resp, err := c.postCtx(ctx, "rss/setFeedRefreshInterval", opts)
-	if err != nil {
-		return errors.Wrap(err, "could not set RSS feed refresh interval; path: %s", path)
-	}
-
-	defer drainAndClose(resp)
-
-	if resp.StatusCode == http.StatusConflict {
-		return errors.Wrap(ErrRSSItemNotFound, "path: %s", path)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return errors.Wrap(ErrUnexpectedStatus, "could not set RSS feed refresh interval; path: %s | status code: %d", path, resp.StatusCode)
 	}
 
 	return nil
