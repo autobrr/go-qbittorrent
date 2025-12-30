@@ -236,9 +236,15 @@ func TestRSSAutoDownloadRule_Marshal(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, rule.Enabled, decoded.Enabled)
+	assert.Equal(t, rule.Priority, decoded.Priority)
+	assert.Equal(t, rule.UseRegex, decoded.UseRegex)
 	assert.Equal(t, rule.MustContain, decoded.MustContain)
 	assert.Equal(t, rule.AffectedFeeds, decoded.AffectedFeeds)
+	assert.Equal(t, rule.SmartFilter, decoded.SmartFilter)
+
+	require.NotNil(t, decoded.TorrentParams)
 	assert.Equal(t, rule.TorrentParams.Category, decoded.TorrentParams.Category)
+	assert.Equal(t, rule.TorrentParams.SavePath, decoded.TorrentParams.SavePath)
 }
 
 func TestRSSRules_Unmarshal(t *testing.T) {
