@@ -43,6 +43,10 @@ var (
 	ErrTorrentCreationTaskNotFound       = errors.New("torrent creation task not found")
 	ErrTorrentCreationUnfinished         = errors.New("torrent creation is still unfinished")
 	ErrTorrentCreationFailed             = errors.New("torrent creation failed")
+
+	ErrRSSItemNotFound  = errors.New("RSS item not found")
+	ErrRSSPathConflict  = errors.New("RSS path already exists or is invalid")
+	ErrRSSRuleNotFound  = errors.New("RSS rule not found")
 )
 
 type Torrent struct {
@@ -908,4 +912,14 @@ type TorrentCreationTask struct {
 // TorrentCreationTaskResponse represents the response when adding a torrent creation task
 type TorrentCreationTaskResponse struct {
 	TaskID string `json:"taskID"`
+}
+
+// PathMetadata represents the response of the getDirectoryContent method with withMetadata set to true
+type PathMetadata struct {
+	Name                 string `json:"name"`
+	Type                 string `json:"type"` // "dir" or "file"
+	Size                 int64  `json:"size,omitempty"`
+	CreationDate         int64  `json:"creation_date"`
+	LastAccessDate       int64  `json:"last_access_date"`
+	LastModificationDate int64  `json:"last_modification_date"`
 }
