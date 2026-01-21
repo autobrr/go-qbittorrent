@@ -5,6 +5,7 @@ package qbittorrent_test
 
 import (
 	"os"
+	"regexp"
 	"testing"
 	"time"
 
@@ -334,4 +335,28 @@ func TestClient_GetTorrentsWebSeeds(t *testing.T) {
 	hash := data[0].Hash
 	_, err = client.GetTorrentsWebSeeds(hash)
 	assert.NoError(t, err)
+}
+
+func TestClient_GetWebAPIVersion(t *testing.T) {
+	client := qbittorrent.NewClient(qbittorrent.Config{
+		Host:     qBittorrentBaseURL,
+		Username: qBittorrentUsername,
+		Password: qBittorrentPassword,
+	})
+
+	version, err := client.GetWebAPIVersion()
+	assert.NoError(t, err)
+	assert.Regexp(t, regexp.MustCompile("\\d+\\.\\d+\\.\\d+"), version)
+}
+
+func TestClient_GetWebAPIVersion_IncorrectPath(t *testing.T) {
+	client := qbittorrent.NewClient(qbittorrent.Config{
+		Host: qBittorrentBaseURL + "/incorrect_path/",
+		// No username and password to bypass login, which would fail due to the incorrect path.
+		Username: "",
+		Password: "",
+	})
+
+	_, err := client.GetWebAPIVersion()
+	assert.ErrorContains(t, err, "could not get webapi version; status code: 404")
 }
