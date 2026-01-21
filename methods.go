@@ -1584,6 +1584,26 @@ func (c *Client) SetPreferencesSubcategoriesEnabled(enabled bool) error {
 	return c.SetPreferences(map[string]interface{}{"use_subcategories": enabled})
 }
 
+// SetRSSAutoDownloadingEnabled enable/disable RSS auto-downloading
+func (c *Client) SetRSSAutoDownloadingEnabled(enabled bool) error {
+	return c.SetRSSAutoDownloadingEnabledCtx(context.Background(), enabled)
+}
+
+// SetRSSAutoDownloadingEnabledCtx enable/disable RSS auto-downloading
+func (c *Client) SetRSSAutoDownloadingEnabledCtx(ctx context.Context, enabled bool) error {
+	return c.SetPreferencesCtx(ctx, map[string]interface{}{"rss_auto_downloading_enabled": enabled})
+}
+
+// SetRSSProcessingEnabled enable/disable RSS processing
+func (c *Client) SetRSSProcessingEnabled(enabled bool) error {
+	return c.SetRSSProcessingEnabledCtx(context.Background(), enabled)
+}
+
+// SetRSSProcessingEnabledCtx enable/disable RSS processing
+func (c *Client) SetRSSProcessingEnabledCtx(ctx context.Context, enabled bool) error {
+	return c.SetPreferencesCtx(ctx, map[string]interface{}{"rss_processing_enabled": enabled})
+}
+
 // SetMaxPriority set torrents to max priority specified by hashes
 func (c *Client) SetMaxPriority(hashes []string) error {
 	return c.SetMaxPriorityCtx(context.Background(), hashes)

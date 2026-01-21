@@ -43,6 +43,10 @@ var (
 	ErrTorrentCreationTaskNotFound       = errors.New("torrent creation task not found")
 	ErrTorrentCreationUnfinished         = errors.New("torrent creation is still unfinished")
 	ErrTorrentCreationFailed             = errors.New("torrent creation failed")
+
+	ErrRSSItemNotFound  = errors.New("RSS item not found")
+	ErrRSSPathConflict  = errors.New("RSS path already exists or is invalid")
+	ErrRSSRuleNotFound  = errors.New("RSS rule not found")
 )
 
 type Torrent struct {
