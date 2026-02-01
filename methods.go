@@ -510,7 +510,6 @@ func (c *Client) AddTorrentFromMemory(buf []byte, options map[string]string) err
 }
 
 func (c *Client) AddTorrentFromMemoryCtx(ctx context.Context, buf []byte, options map[string]string) error {
-
 	resp, err := c.postMemoryCtx(ctx, "torrents/add", buf, options)
 	if err != nil {
 		return errors.Wrap(err, "could not add torrent")
@@ -520,6 +519,33 @@ func (c *Client) AddTorrentFromMemoryCtx(ctx context.Context, buf []byte, option
 
 	if resp.StatusCode != http.StatusOK {
 		return errors.Wrap(ErrUnexpectedStatus, "could not add torrent; status code: %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
+// AddTorrentsFromMemory adds multiple torrents from memory in a single request.
+// This is more efficient than calling AddTorrentFromMemory multiple times.
+func (c *Client) AddTorrentsFromMemory(files [][]byte, options map[string]string) error {
+	return c.AddTorrentsFromMemoryCtx(context.Background(), files, options)
+}
+
+// AddTorrentsFromMemoryCtx adds multiple torrents from memory in a single request.
+// qBittorrent's API accepts multiple "torrents" form fields, allowing batch uploads.
+func (c *Client) AddTorrentsFromMemoryCtx(ctx context.Context, files [][]byte, options map[string]string) error {
+	if len(files) == 0 {
+		return nil
+	}
+
+	resp, err := c.postMultiMemoryCtx(ctx, "torrents/add", files, options)
+	if err != nil {
+		return errors.Wrap(err, "could not add torrents")
+	}
+
+	defer drainAndClose(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return errors.Wrap(ErrUnexpectedStatus, "could not add torrents; status code: %d", resp.StatusCode)
 	}
 
 	return nil
