@@ -5,18 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"testing"
-
-	"github.com/Masterminds/semver"
 )
 
 type mockTrackerAPI struct{}
 
 func (m *mockTrackerAPI) GetTorrentsCtx(ctx context.Context, o TorrentFilterOptions) ([]Torrent, error) {
 	return nil, nil
-}
-
-func (m *mockTrackerAPI) getApiVersion() (*semver.Version, error) {
-	return semver.MustParse("2.11.4"), nil
 }
 
 func (m *mockTrackerAPI) GetTorrentTrackersCtx(ctx context.Context, hash string) ([]TorrentTracker, error) {
@@ -81,10 +75,6 @@ func (a *recordingTrackerAPI) GetTorrentsCtx(ctx context.Context, o TorrentFilte
 	return result, nil
 }
 
-func (a *recordingTrackerAPI) getApiVersion() (*semver.Version, error) {
-	return semver.MustParse("2.11.4"), nil
-}
-
 func (a *recordingTrackerAPI) GetTorrentTrackersCtx(ctx context.Context, hash string) ([]TorrentTracker, error) {
 	return a.data[hash], nil
 }
@@ -101,6 +91,7 @@ func TestTrackerManagerHydrateWithIncludeTrackersSingleRequest(t *testing.T) {
 
 	api := &recordingTrackerAPI{data: data}
 	manager := NewTrackerManager(api)
+	manager.SetUseIncludeTrackers(true)
 
 	enriched, trackerMap := manager.HydrateTorrents(context.Background(), torrents)
 	if len(enriched) != total {
@@ -138,6 +129,7 @@ func TestTrackerManagerHydrateWithIncludeTrackersChunks(t *testing.T) {
 
 	api := &recordingTrackerAPI{data: data, failAbove: trackerIncludeChunkSize}
 	manager := NewTrackerManager(api)
+	manager.SetUseIncludeTrackers(true)
 
 	enriched, trackerMap := manager.HydrateTorrents(context.Background(), torrents)
 	if len(enriched) != total {
@@ -197,10 +189,6 @@ func (a *fallbackTrackerAPI) GetTorrentsCtx(ctx context.Context, o TorrentFilter
 	return []Torrent{}, nil
 }
 
-func (a *fallbackTrackerAPI) getApiVersion() (*semver.Version, error) {
-	return semver.MustParse("2.11.4"), nil
-}
-
 func (a *fallbackTrackerAPI) GetTorrentTrackersCtx(ctx context.Context, hash string) ([]TorrentTracker, error) {
 	return a.data[hash], nil
 }
@@ -213,6 +201,7 @@ func TestTrackerManagerHydrateWithIncludeTrackersFallback(t *testing.T) {
 
 	api := &fallbackTrackerAPI{data: data}
 	manager := NewTrackerManager(api)
+	manager.SetUseIncludeTrackers(true)
 
 	torrents := []Torrent{{Hash: "HASHA"}, {Hash: "HASHB"}}
 
