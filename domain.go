@@ -44,9 +44,9 @@ var (
 	ErrTorrentCreationUnfinished         = errors.New("torrent creation is still unfinished")
 	ErrTorrentCreationFailed             = errors.New("torrent creation failed")
 
-	ErrRSSItemNotFound  = errors.New("RSS item not found")
-	ErrRSSPathConflict  = errors.New("RSS path already exists or is invalid")
-	ErrRSSRuleNotFound  = errors.New("RSS rule not found")
+	ErrRSSItemNotFound = errors.New("RSS item not found")
+	ErrRSSPathConflict = errors.New("RSS path already exists or is invalid")
+	ErrRSSRuleNotFound = errors.New("RSS rule not found")
 )
 
 type Torrent struct {
@@ -107,6 +107,20 @@ type Torrent struct {
 	UploadedSession          int64            `json:"uploaded_session"`
 	UpSpeed                  int64            `json:"upspeed"`
 	Trackers                 []TorrentTracker `json:"trackers"`
+}
+
+// IsCompleted reports whether the torrent has finished downloading
+func (t Torrent) IsCompleted() bool {
+	if t.Progress >= 1 {
+		return true
+	}
+	switch t.State {
+	case TorrentStateUploading, TorrentStatePausedUp, TorrentStateStoppedUp,
+		TorrentStateQueuedUp, TorrentStateStalledUp, TorrentStateCheckingUp, TorrentStateForcedUp:
+		return true
+	default:
+		return false
+	}
 }
 
 type TorrentTrackersResponse struct {
