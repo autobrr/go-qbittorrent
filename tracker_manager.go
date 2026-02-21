@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
-	"github.com/Masterminds/semver"
 	"github.com/autobrr/autobrr/pkg/ttlcache"
 )
 
@@ -19,14 +19,14 @@ const (
 // trackerAPI describes the subset of Client functionality required by TrackerManager.
 type trackerAPI interface {
 	GetTorrentsCtx(ctx context.Context, o TorrentFilterOptions) ([]Torrent, error)
-	getApiVersion() (*semver.Version, error)
 	GetTorrentTrackersCtx(ctx context.Context, hash string) ([]TorrentTracker, error)
 }
 
 // TrackerManager coordinates tracker metadata hydration with caching.
 type TrackerManager struct {
-	api   trackerAPI
-	cache *ttlcache.Cache[string, []TorrentTracker]
+	api                trackerAPI
+	cache              *ttlcache.Cache[string, []TorrentTracker]
+	useIncludeTrackers atomic.Bool
 }
 
 // NewTrackerManager constructs a manager for tracker metadata caching.
@@ -271,18 +271,21 @@ func (tm *TrackerManager) Invalidate(hashes ...string) {
 	}
 }
 
+// SetUseIncludeTrackers configures whether the manager should use the bulk
+// IncludeTrackers API (available in qBittorrent 5.1+/WebAPI 2.11.4+).
+func (tm *TrackerManager) SetUseIncludeTrackers(use bool) {
+	if tm == nil {
+		return
+	}
+	tm.useIncludeTrackers.Store(use)
+}
+
+// SupportsIncludeTrackers reports whether bulk tracker fetching is enabled.
 func (tm *TrackerManager) SupportsIncludeTrackers() bool {
-	if tm == nil || tm.api == nil {
+	if tm == nil {
 		return false
 	}
-
-	ver, err := tm.api.getApiVersion()
-	if err != nil || ver == nil {
-		return false
-	}
-
-	required := semver.MustParse("2.11.4")
-	return !ver.LessThan(required)
+	return tm.useIncludeTrackers.Load()
 }
 
 func (tm *TrackerManager) fetchTrackersForHash(ctx context.Context, hash string) ([]TorrentTracker, error) {
