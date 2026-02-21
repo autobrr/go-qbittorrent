@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/autobrr/autobrr/pkg/ttlcache"
@@ -25,7 +26,7 @@ type trackerAPI interface {
 type TrackerManager struct {
 	api                trackerAPI
 	cache              *ttlcache.Cache[string, []TorrentTracker]
-	useIncludeTrackers bool
+	useIncludeTrackers atomic.Bool
 }
 
 // NewTrackerManager constructs a manager for tracker metadata caching.
@@ -276,7 +277,7 @@ func (tm *TrackerManager) SetUseIncludeTrackers(use bool) {
 	if tm == nil {
 		return
 	}
-	tm.useIncludeTrackers = use
+	tm.useIncludeTrackers.Store(use)
 }
 
 // SupportsIncludeTrackers reports whether bulk tracker fetching is enabled.
@@ -284,7 +285,7 @@ func (tm *TrackerManager) SupportsIncludeTrackers() bool {
 	if tm == nil {
 		return false
 	}
-	return tm.useIncludeTrackers
+	return tm.useIncludeTrackers.Load()
 }
 
 func (tm *TrackerManager) fetchTrackersForHash(ctx context.Context, hash string) ([]TorrentTracker, error) {
