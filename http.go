@@ -128,6 +128,68 @@ func (c *Client) postMemoryCtx(ctx context.Context, endpoint string, buf []byte,
 	return c.postReaderCtx(ctx, endpoint, bytes.NewReader(buf), opts)
 }
 
+// buildMultiFileForm creates a multipart form with multiple torrent files and options.
+func buildMultiFileForm(files [][]byte, opts map[string]string) (*bytes.Buffer, string, error) {
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+
+	for _, fileContent := range files {
+		fw, err := writer.CreateFormFile("torrents", generateTorrentName())
+		if err != nil {
+			return nil, "", errors.Wrap(err, "error initializing file field")
+		}
+		if _, err := fw.Write(fileContent); err != nil {
+			return nil, "", errors.Wrap(err, "error writing file contents")
+		}
+	}
+
+	for key, val := range opts {
+		if err := writer.WriteField(key, val); err != nil {
+			return nil, "", errors.Wrap(err, "error writing field %v", key)
+		}
+	}
+
+	contentType := writer.FormDataContentType()
+	writer.Close()
+
+	return &body, contentType, nil
+}
+
+// postMultiMemoryCtx sends multiple torrent files in a single multipart request.
+// qBittorrent supports multiple "torrents" form fields in one request.
+func (c *Client) postMultiMemoryCtx(ctx context.Context, endpoint string, files [][]byte, opts map[string]string) (*http.Response, error) {
+	body, contentType, err := buildMultiFileForm(files, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	reqUrl := c.buildUrl(endpoint, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqUrl, body)
+	if err != nil {
+		return nil, errors.Wrap(err, "error creating request")
+	}
+
+	if c.cfg.BasicUser != "" && c.cfg.BasicPass != "" {
+		req.SetBasicAuth(c.cfg.BasicUser, c.cfg.BasicPass)
+	}
+
+	req.Header.Set("Content-Type", contentType)
+
+	cookieURL, _ := url.Parse(c.buildUrl("/", nil)) //nolint:errcheck // buildUrl returns valid URL
+	if len(c.http.Jar.Cookies(cookieURL)) == 0 {
+		if loginErr := c.LoginCtx(ctx); loginErr != nil {
+			return nil, errors.Wrap(loginErr, "qbit re-login failed")
+		}
+	}
+
+	resp, err := c.retryDo(ctx, req)
+	if err != nil {
+		return nil, errors.Wrap(err, "error making post multi-file request")
+	}
+
+	return resp, nil
+}
+
 func (c *Client) postReaderCtx(ctx context.Context, endpoint string, reader io.Reader, opts map[string]string) (*http.Response, error) {
 	// Buffer to store our request body as bytes
 	var requestBody bytes.Buffer
