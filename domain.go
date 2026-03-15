@@ -35,6 +35,8 @@ var (
 	ErrInvalidCookies                 = errors.New("request was not a valid json array of cookie objects")
 	ErrCannotGetTorrentPieceStates    = errors.New("could not get torrent piece states")
 	ErrInvalidPeers                   = errors.New("none of the supplied peers are valid")
+	ErrTorrentExists                  = errors.New("torrent already exists")
+	ErrTorrentAddFailed               = errors.New("could not add torrents")
 
 	ErrReannounceTookTooLong = errors.New("reannounce took too long, deleted torrent")
 	ErrUnsupportedVersion    = errors.New("qBittorrent version too old, please upgrade to use this feature")
@@ -44,9 +46,9 @@ var (
 	ErrTorrentCreationUnfinished         = errors.New("torrent creation is still unfinished")
 	ErrTorrentCreationFailed             = errors.New("torrent creation failed")
 
-	ErrRSSItemNotFound  = errors.New("RSS item not found")
-	ErrRSSPathConflict  = errors.New("RSS path already exists or is invalid")
-	ErrRSSRuleNotFound  = errors.New("RSS rule not found")
+	ErrRSSItemNotFound = errors.New("RSS item not found")
+	ErrRSSPathConflict = errors.New("RSS path already exists or is invalid")
+	ErrRSSRuleNotFound = errors.New("RSS rule not found")
 )
 
 type Torrent struct {
@@ -924,4 +926,11 @@ type PathMetadata struct {
 	CreationDate         int64  `json:"creation_date"`
 	LastAccessDate       int64  `json:"last_access_date"`
 	LastModificationDate int64  `json:"last_modification_date"`
+}
+
+type AddTorrentsResponse struct {
+	SuccessCount    int64    `json:"success_count"`
+	PendingCount    int64    `json:"pending_count"`
+	FailureCount    int64    `json:"failure_count"`
+	AddedTorrentIDs []string `json:"added_torrent_ids"`
 }
