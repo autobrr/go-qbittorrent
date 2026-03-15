@@ -505,50 +505,73 @@ func (c *Client) GetTorrentTrackersCtx(ctx context.Context, hash string) ([]Torr
 	return trackers, nil
 }
 
-func (c *Client) AddTorrentFromMemory(buf []byte, options map[string]string) error {
+func (c *Client) AddTorrentFromMemory(buf []byte, options map[string]string) (*AddTorrentsResponse, error) {
 	return c.AddTorrentFromMemoryCtx(context.Background(), buf, options)
 }
 
-func (c *Client) AddTorrentFromMemoryCtx(ctx context.Context, buf []byte, options map[string]string) error {
+func (c *Client) AddTorrentFromMemoryCtx(ctx context.Context, buf []byte, options map[string]string) (*AddTorrentsResponse, error) {
 	resp, err := c.postMemoryCtx(ctx, "torrents/add", buf, options)
 	if err != nil {
-		return errors.Wrap(err, "could not add torrent")
+		return nil, errors.Wrap(err, "could not add torrent")
 	}
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
-		return errors.Wrap(ErrUnexpectedStatus, "could not add torrent; status code: %d", resp.StatusCode)
+	// qbit api version 2.14.0 changes the handling a bit
+	// https://github.com/qbittorrent/qBittorrent/pull/23202/changes#diff-bf142379437a24702a03ed37f3d43f41ea9c46fdfbaddf32afb806c9a50c120d
+
+	var data *AddTorrentsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return nil, errors.Wrap(err, "could not unmarshal body")
 	}
 
-	return nil
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusCreated:
+		break
+	case http.StatusConflict:
+		return data, errors.Wrap(ErrTorrentExists, "torrent already exists")
+	default:
+		return data, errors.Wrap(ErrUnexpectedStatus, "could not add torrent; status code: %d", resp.StatusCode)
+	}
+
+	return data, nil
 }
 
 // AddTorrentsFromMemory adds multiple torrents from memory in a single request.
 // This is more efficient than calling AddTorrentFromMemory multiple times.
-func (c *Client) AddTorrentsFromMemory(files [][]byte, options map[string]string) error {
+func (c *Client) AddTorrentsFromMemory(files [][]byte, options map[string]string) (*AddTorrentsResponse, error) {
 	return c.AddTorrentsFromMemoryCtx(context.Background(), files, options)
 }
 
 // AddTorrentsFromMemoryCtx adds multiple torrents from memory in a single request.
 // qBittorrent's API accepts multiple "torrents" form fields, allowing batch uploads.
-func (c *Client) AddTorrentsFromMemoryCtx(ctx context.Context, files [][]byte, options map[string]string) error {
+func (c *Client) AddTorrentsFromMemoryCtx(ctx context.Context, files [][]byte, options map[string]string) (*AddTorrentsResponse, error) {
 	if len(files) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	resp, err := c.postMultiMemoryCtx(ctx, "torrents/add", files, options)
 	if err != nil {
-		return errors.Wrap(err, "could not add torrents")
+		return nil, errors.Wrap(err, "could not add torrents")
 	}
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
-		return errors.Wrap(ErrUnexpectedStatus, "could not add torrents; status code: %d", resp.StatusCode)
+	var data *AddTorrentsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return nil, errors.Wrap(err, "could not unmarshal body")
 	}
 
-	return nil
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusCreated:
+		break
+	case http.StatusConflict:
+		return data, errors.Wrap(ErrTorrentAddFailed, "could not add torrent(s)")
+	default:
+		return data, errors.Wrap(ErrUnexpectedStatus, "could not add torrent; status code: %d", resp.StatusCode)
+	}
+
+	return data, nil
 }
 
 // AddTorrentFromFile add new torrent from torrent file
@@ -557,7 +580,6 @@ func (c *Client) AddTorrentFromFile(filePath string, options map[string]string) 
 }
 
 func (c *Client) AddTorrentFromFileCtx(ctx context.Context, filePath string, options map[string]string) error {
-
 	resp, err := c.postFileCtx(ctx, "torrents/add", filePath, options)
 	if err != nil {
 		return errors.Wrap(err, "could not add torrent; filePath: %v", filePath)
@@ -565,7 +587,12 @@ func (c *Client) AddTorrentFromFileCtx(ctx context.Context, filePath string, opt
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusCreated:
+		break
+	case http.StatusConflict:
+		return errors.Wrap(ErrTorrentExists, "torrent already exists")
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not add torrent; filePath: %v | status code: %d", filePath, resp.StatusCode)
 	}
 
@@ -591,7 +618,12 @@ func (c *Client) AddTorrentFromUrlCtx(ctx context.Context, url string, options m
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusCreated:
+		break
+	case http.StatusConflict:
+		return errors.Wrap(ErrTorrentExists, "torrent already exists")
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not add torrent: url: %v | status code: %d", url, resp.StatusCode)
 	}
 
