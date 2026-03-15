@@ -124,7 +124,9 @@ type TorrentTracker struct {
 	Message       string        `json:"msg"`
 }
 
-type TorrentFiles []struct {
+type TorrentFiles []TorrentFile
+
+type TorrentFile struct {
 	Availability float32 `json:"availability"`
 	Index        int     `json:"index"`
 	IsSeed       bool    `json:"is_seed,omitempty"`
