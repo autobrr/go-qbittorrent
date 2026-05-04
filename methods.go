@@ -39,7 +39,7 @@ func (c *Client) LoginCtx(ctx context.Context) error {
 	switch resp.StatusCode {
 	case http.StatusForbidden:
 		return ErrIPBanned
-	case http.StatusOK:
+	case http.StatusOK, http.StatusNoContent:
 		break
 	default:
 		return errors.Wrap(ErrUnexpectedStatus, "login error; status code: %d", resp.StatusCode)
@@ -85,7 +85,10 @@ func (c *Client) GetBuildInfoCtx(ctx context.Context) (BuildInfo, error) {
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK:
+		break
+	default:
 		return bi, errors.Wrap(ErrUnexpectedStatus, "could not get app build info; status code: %d", resp.StatusCode)
 	}
 
@@ -108,7 +111,10 @@ func (c *Client) ShutdownCtx(ctx context.Context) error {
 	}
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not trigger shutdown; status code: %d", resp.StatusCode)
 	}
 
@@ -211,7 +217,10 @@ func (c *Client) GetAppPreferencesCtx(ctx context.Context) (AppPreferences, erro
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK:
+		break
+	default:
 		return app, errors.Wrap(ErrUnexpectedStatus, "could not get app preferences; status code: %d", resp.StatusCode)
 	}
 
@@ -242,7 +251,10 @@ func (c *Client) SetPreferencesCtx(ctx context.Context, prefs map[string]interfa
 	}
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not set preferences; status code: %d", resp.StatusCode)
 	}
 
@@ -275,7 +287,10 @@ func (c *Client) GetDirectoryContentCtx(ctx context.Context, dirPath string, wit
 	}
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK:
+		break
+	default:
 		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get directory content; status code: %d", resp.StatusCode)
 	}
 
@@ -311,7 +326,10 @@ func (c *Client) GetDefaultSavePathCtx(ctx context.Context) (string, error) {
 	}
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK:
+		break
+	default:
 		return "", errors.Wrap(ErrUnexpectedStatus, "could not get default save path; status code: %d", resp.StatusCode)
 	}
 
@@ -376,7 +394,10 @@ func (c *Client) GetTorrentsCtx(ctx context.Context, o TorrentFilterOptions) ([]
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK:
+		break
+	default:
 		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get torrents; status code: %d", resp.StatusCode)
 	}
 
@@ -517,7 +538,10 @@ func (c *Client) AddTorrentFromMemoryCtx(ctx context.Context, buf []byte, option
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not add torrent; status code: %d", resp.StatusCode)
 	}
 
@@ -544,7 +568,10 @@ func (c *Client) AddTorrentsFromMemoryCtx(ctx context.Context, files [][]byte, o
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not add torrents; status code: %d", resp.StatusCode)
 	}
 
@@ -565,7 +592,10 @@ func (c *Client) AddTorrentFromFileCtx(ctx context.Context, filePath string, opt
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not add torrent; filePath: %v | status code: %d", filePath, resp.StatusCode)
 	}
 
@@ -591,7 +621,10 @@ func (c *Client) AddTorrentFromUrlCtx(ctx context.Context, url string, options m
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not add torrent: url: %v | status code: %d", url, resp.StatusCode)
 	}
 
@@ -618,7 +651,10 @@ func (c *Client) DeleteTorrentsCtx(ctx context.Context, hashes []string, deleteF
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not delete torrents; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
@@ -643,7 +679,10 @@ func (c *Client) ReAnnounceTorrentsCtx(ctx context.Context, hashes []string) err
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not re-announce torrents; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
@@ -693,7 +732,10 @@ func (c *Client) BanPeersCtx(ctx context.Context, peers []string) error {
 	}
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not ban peers; peers: %v | status code: %d", peers, resp.StatusCode)
 	}
 
@@ -720,7 +762,10 @@ func (c *Client) SyncMainDataCtxWithRaw(ctx context.Context, rid int64) (*MainDa
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return nil, nil, errors.Wrap(ErrUnexpectedStatus, "could not get main data; status code: %d", resp.StatusCode)
 	}
 
@@ -790,7 +835,10 @@ func (c *Client) PauseCtx(ctx context.Context, hashes []string) error {
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not pause torrents; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
@@ -836,7 +884,10 @@ func (c *Client) ResumeCtx(ctx context.Context, hashes []string) error {
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not resume torrents; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
@@ -862,7 +913,10 @@ func (c *Client) SetForceStartCtx(ctx context.Context, hashes []string, value bo
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not set force start torrents; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
@@ -887,7 +941,10 @@ func (c *Client) RecheckCtx(ctx context.Context, hashes []string) error {
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not recheck torrents; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
@@ -913,7 +970,10 @@ func (c *Client) SetAutoManagementCtx(ctx context.Context, hashes []string, enab
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not set auto management; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
@@ -947,7 +1007,7 @@ func (c *Client) SetLocationCtx(ctx context.Context, hashes []string, location s
 		200 	All other scenarios
 	*/
 	switch sc := resp.StatusCode; sc {
-	case http.StatusOK:
+	case http.StatusOK, http.StatusNoContent:
 		return nil
 	case http.StatusBadRequest:
 		return errors.Wrap(ErrEmptySavePath, "save path: %s", location)
@@ -984,7 +1044,7 @@ func (c *Client) CreateCategoryCtx(ctx context.Context, category string, path st
 		200 	All other scenarios
 	*/
 	switch resp.StatusCode {
-	case http.StatusOK:
+	case http.StatusOK, http.StatusNoContent:
 		return nil
 	case http.StatusBadRequest:
 		return errors.Wrap(ErrEmptyCategoryName, "category name: %s", category)
@@ -1019,7 +1079,7 @@ func (c *Client) EditCategoryCtx(ctx context.Context, category string, path stri
 		200 	All other scenarios
 	*/
 	switch resp.StatusCode {
-	case http.StatusOK:
+	case http.StatusOK, http.StatusNoContent:
 		return nil
 	case http.StatusBadRequest:
 		return errors.Wrap(ErrEmptyCategoryName, "category name: %s", category)
@@ -1046,7 +1106,10 @@ func (c *Client) RemoveCategoriesCtx(ctx context.Context, categories []string) e
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not remove categories; categories: %v | status code: %d", opts["categories"], resp.StatusCode)
 	}
 
@@ -1078,7 +1141,7 @@ func (c *Client) SetCategoryCtx(ctx context.Context, hashes []string, category s
 		200 	All other scenarios
 	*/
 	switch resp.StatusCode {
-	case http.StatusOK:
+	case http.StatusOK, http.StatusNoContent:
 		return nil
 	case http.StatusConflict:
 		return errors.Wrap(ErrCategoryDoesNotExist, "category name: %s", category)
@@ -1178,7 +1241,7 @@ func (c *Client) SetFilePriorityCtx(ctx context.Context, hash string, IDs string
 		return errors.Wrap(ErrTorrentNotFound, "hash: %s", hash)
 	case http.StatusConflict:
 		return ErrTorrentMetdataNotDownloadedYet
-	case http.StatusOK:
+	case http.StatusOK, http.StatusNoContent:
 		return nil
 	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not set file priority; hash: %v | priority: %d | status code: %d", hash, priority, resp.StatusCode)
@@ -1202,7 +1265,7 @@ func (c *Client) ExportTorrentCtx(ctx context.Context, hash string) ([]byte, err
 	defer drainAndClose(resp)
 
 	switch resp.StatusCode {
-	case http.StatusOK:
+	case http.StatusOK, http.StatusNoContent:
 		break
 	case http.StatusNotFound:
 		return nil, errors.Wrap(ErrTorrentNotFound, "could not get export; torrent hash not found: %v", hash)
@@ -1242,7 +1305,7 @@ func (c *Client) RenameFileCtx(ctx context.Context, hash, oldPath, newPath strin
 		return errors.Wrap(ErrMissingNewPathParameter, "newPath: %v", newPath)
 	case http.StatusConflict:
 		return errors.Wrap(ErrInvalidPathParameter, "oldPath: %v | newPath: %v", oldPath, newPath)
-	case http.StatusOK:
+	case http.StatusOK, http.StatusNoContent:
 		return nil
 	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not rename file; hash %v | oldPath: %v | newPath: %v | status code: %d", hash, oldPath, newPath, resp.StatusCode)
@@ -1274,7 +1337,7 @@ func (c *Client) RenameFolderCtx(ctx context.Context, hash, oldPath, newPath str
 		return errors.Wrap(ErrMissingNewPathParameter, "newPath: %v", newPath)
 	case http.StatusConflict:
 		return errors.Wrap(ErrInvalidPathParameter, "oldPath: %v | newPath: %v", oldPath, newPath)
-	case http.StatusOK:
+	case http.StatusOK, http.StatusNoContent:
 		return nil
 	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not rename folder; hash %v | oldPath: %v | newPath: %v | status code: %d", hash, oldPath, newPath, resp.StatusCode)
@@ -1301,7 +1364,7 @@ func (c *Client) SetTorrentNameCtx(ctx context.Context, hash string, name string
 	defer drainAndClose(resp)
 
 	switch sc := resp.StatusCode; sc {
-	case http.StatusOK:
+	case http.StatusOK, http.StatusNoContent:
 		return nil
 	case http.StatusNotFound:
 		return errors.Wrap(ErrInvalidTorrentHash, "torrent hash: %v", hash)
@@ -1351,7 +1414,10 @@ func (c *Client) CreateTagsCtx(ctx context.Context, tags []string) error {
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not create tags; tags: %v | status code: %d", strings.Join(tags, ","), resp.StatusCode)
 	}
 
@@ -1377,7 +1443,10 @@ func (c *Client) AddTagsCtx(ctx context.Context, hashes []string, tags string) e
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not add tags; hashes: %v | tags: %v | status code: %d", hashes, tags, resp.StatusCode)
 	}
 
@@ -1406,7 +1475,10 @@ func (c *Client) SetTags(ctx context.Context, hashes []string, tags string) erro
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not set tags; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
@@ -1433,7 +1505,10 @@ func (c *Client) DeleteTagsCtx(ctx context.Context, tags []string) error {
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not delete tags; tags: %s | status code: %d", t, resp.StatusCode)
 	}
 
@@ -1465,7 +1540,10 @@ func (c *Client) RemoveTagsCtx(ctx context.Context, hashes []string, tags string
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not remove tags; hashes: %v | tags: %s | status code: %d", hashes, tags, resp.StatusCode)
 	}
 
@@ -1502,7 +1580,7 @@ func (c *Client) RemoveTrackersCtx(ctx context.Context, hash string, urls string
 		return errors.Wrap(ErrTorrentNotFound, "torrent hash: %v", hash)
 	case http.StatusConflict:
 		return errors.Wrap(ErrAllURLsNotFound, "urls: %v", urls)
-	case http.StatusOK:
+	case http.StatusOK, http.StatusNoContent:
 		return nil
 	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not remove trackers; hash: %s | urls: %s | status code: %d", hash, urls, resp.StatusCode)
@@ -1544,7 +1622,7 @@ func (c *Client) EditTrackerCtx(ctx context.Context, hash string, old, new strin
 		return errors.Wrap(ErrTorrentNotFound, "torrent hash: %v", hash)
 	case http.StatusConflict:
 		return nil
-	case http.StatusOK:
+	case http.StatusOK, http.StatusNoContent:
 		return nil
 	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not edit tracker; hash: %s | old: %s | new: %s | status code: %d", hash, old, new, resp.StatusCode)
@@ -1578,7 +1656,7 @@ func (c *Client) AddTrackersCtx(ctx context.Context, hash string, urls string) e
 	switch resp.StatusCode {
 	case http.StatusNotFound:
 		return errors.Wrap(ErrTorrentNotFound, "torrent hash: %v", hash)
-	case http.StatusOK:
+	case http.StatusOK, http.StatusNoContent:
 		return nil
 	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not add trackers; hash: %s | urls: %s | status code: %d", hash, urls, resp.StatusCode)
@@ -1651,9 +1729,12 @@ func (c *Client) SetMaxPriorityCtx(ctx context.Context, hashes []string) error {
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode == http.StatusConflict {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	case http.StatusConflict:
 		return errors.Wrap(ErrTorrentQueueingNotEnabled, "hashes: %v", hashes)
-	} else if resp.StatusCode != http.StatusOK {
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not set maximum priority; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
@@ -1681,9 +1762,12 @@ func (c *Client) SetMinPriorityCtx(ctx context.Context, hashes []string) error {
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode == http.StatusConflict {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	case http.StatusConflict:
 		return errors.Wrap(ErrTorrentQueueingNotEnabled, "hashes: %v", hashes)
-	} else if resp.StatusCode != http.StatusOK {
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not set minimum priority; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
@@ -1711,9 +1795,12 @@ func (c *Client) DecreasePriorityCtx(ctx context.Context, hashes []string) error
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode == http.StatusConflict {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	case http.StatusConflict:
 		return errors.Wrap(ErrTorrentQueueingNotEnabled, "hashes: %v", hashes)
-	} else if resp.StatusCode != http.StatusOK {
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not decrease priority; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
@@ -1741,9 +1828,12 @@ func (c *Client) IncreasePriorityCtx(ctx context.Context, hashes []string) error
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode == http.StatusConflict {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	case http.StatusConflict:
 		return errors.Wrap(ErrTorrentQueueingNotEnabled, "hashes: %v", hashes)
-	} else if resp.StatusCode != http.StatusOK {
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not increase priority; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
@@ -1770,7 +1860,10 @@ func (c *Client) ToggleFirstLastPiecePrioCtx(ctx context.Context, hashes []strin
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not toggle first/last piece priority; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
@@ -1791,7 +1884,10 @@ func (c *Client) ToggleAlternativeSpeedLimitsCtx(ctx context.Context) error {
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not stoggle alternative speed limits; status code: %d", resp.StatusCode)
 	}
 
@@ -1843,7 +1939,10 @@ func (c *Client) SetGlobalDownloadLimitCtx(ctx context.Context, limit int64) err
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not set global download limit; limit: %d | status code: %d", limit, resp.StatusCode)
 	}
 
@@ -1893,7 +1992,10 @@ func (c *Client) SetGlobalUploadLimitCtx(ctx context.Context, limit int64) error
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not set global upload limit; limit %d | status code: %d", limit, resp.StatusCode)
 	}
 
@@ -2048,7 +2150,10 @@ func (c *Client) SetTorrentDownloadLimitCtx(ctx context.Context, hashes []string
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not set download limit; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
@@ -2079,7 +2184,10 @@ func (c *Client) ToggleTorrentSequentialDownloadCtx(ctx context.Context, hashes 
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not toggle sequential download mode; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
@@ -2115,7 +2223,10 @@ func (c *Client) SetTorrentSuperSeedingCtx(ctx context.Context, hashes []string,
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not set super seeding mode; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
@@ -2149,7 +2260,7 @@ func (c *Client) SetTorrentShareLimitCtx(ctx context.Context, hashes []string, r
 		200 	All other scenarios
 	*/
 	switch sc := resp.StatusCode; sc {
-	case http.StatusOK:
+	case http.StatusOK, http.StatusNoContent:
 		return nil
 	case http.StatusBadRequest:
 		return ErrInvalidShareLimit
@@ -2177,7 +2288,10 @@ func (c *Client) SetTorrentUploadLimitCtx(ctx context.Context, hashes []string, 
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not set upload limit; hahses: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
@@ -2196,7 +2310,10 @@ func (c *Client) GetAppVersionCtx(ctx context.Context) (string, error) {
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return "", errors.Wrap(ErrUnexpectedStatus, "could not get app version; status code: %d", resp.StatusCode)
 	}
 
@@ -2263,7 +2380,7 @@ func (c *Client) SetAppCookiesCtx(ctx context.Context, cookies []Cookie) error {
 	switch resp.StatusCode {
 	case http.StatusBadRequest:
 		return ErrInvalidCookies
-	case http.StatusOK:
+	case http.StatusOK, http.StatusNoContent:
 		return nil
 	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not set app cookies; status code: %d", resp.StatusCode)
@@ -2358,7 +2475,7 @@ func (c *Client) AddPeersForTorrentsCtx(ctx context.Context, hashes, peers []str
 	switch resp.StatusCode {
 	case http.StatusBadRequest:
 		return errors.Wrap(ErrInvalidPeers, "hashes: %v, peers: %v", hashes, peers)
-	case http.StatusOK:
+	case http.StatusOK, http.StatusNoContent:
 		return nil
 	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not add peers; hashes %v | peers: %v | status code: %d", hashes, peers, resp.StatusCode)
@@ -2701,7 +2818,7 @@ func (c *Client) CreateTorrentCtx(ctx context.Context, params TorrentCreationPar
 	defer drainAndClose(resp)
 
 	switch resp.StatusCode {
-	case http.StatusOK:
+	case http.StatusOK, http.StatusNoContent:
 		break
 	case http.StatusConflict:
 		return nil, ErrTorrentCreationTooManyActiveTasks
@@ -2841,7 +2958,7 @@ func (c *Client) DeleteTorrentCreationTaskCtx(ctx context.Context, taskID string
 	defer drainAndClose(resp)
 
 	switch resp.StatusCode {
-	case http.StatusOK:
+	case http.StatusOK, http.StatusNoContent:
 		return nil
 	case http.StatusNotFound:
 		return ErrTorrentCreationTaskNotFound

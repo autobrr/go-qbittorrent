@@ -173,11 +173,12 @@ func (c *Client) AddRSSFolderCtx(ctx context.Context, path string) error {
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode == http.StatusConflict {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	case http.StatusConflict:
 		return errors.Wrap(ErrRSSPathConflict, "path: %s", path)
-	}
-
-	if resp.StatusCode != http.StatusOK {
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not add RSS folder; path: %s | status code: %d", path, resp.StatusCode)
 	}
 
@@ -203,11 +204,12 @@ func (c *Client) AddRSSFeedCtx(ctx context.Context, url, path string) error {
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode == http.StatusConflict {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	case http.StatusConflict:
 		return errors.Wrap(ErrRSSPathConflict, "path: %s", path)
-	}
-
-	if resp.StatusCode != http.StatusOK {
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not add RSS feed; url: %s | status code: %d", url, resp.StatusCode)
 	}
 
@@ -239,11 +241,12 @@ func (c *Client) SetRSSFeedURLCtx(ctx context.Context, path, url string) error {
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode == http.StatusConflict {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	case http.StatusConflict:
 		return errors.Wrap(ErrRSSItemNotFound, "path: %s", path)
-	}
-
-	if resp.StatusCode != http.StatusOK {
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not set RSS feed URL; path: %s | status code: %d", path, resp.StatusCode)
 	}
 
@@ -268,11 +271,12 @@ func (c *Client) RemoveRSSItemCtx(ctx context.Context, path string) error {
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode == http.StatusConflict {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	case http.StatusConflict:
 		return errors.Wrap(ErrRSSItemNotFound, "path: %s", path)
-	}
-
-	if resp.StatusCode != http.StatusOK {
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not remove RSS item; path: %s | status code: %d", path, resp.StatusCode)
 	}
 
@@ -298,12 +302,13 @@ func (c *Client) MoveRSSItemCtx(ctx context.Context, itemPath, destPath string) 
 
 	defer drainAndClose(resp)
 
-	// qBittorrent returns 409 Conflict for both "item not found" and "dest already exists"
-	if resp.StatusCode == http.StatusConflict {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	case http.StatusConflict:
+		// qBittorrent returns 409 Conflict for both "item not found" and "dest already exists"
 		return errors.Wrap(ErrRSSPathConflict, "itemPath: %s, destPath: %s", itemPath, destPath)
-	}
-
-	if resp.StatusCode != http.StatusOK {
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not move RSS item; itemPath: %s | status code: %d", itemPath, resp.StatusCode)
 	}
 
@@ -329,7 +334,10 @@ func (c *Client) RefreshRSSItemCtx(ctx context.Context, itemPath string) error {
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not refresh RSS item; itemPath: %s | status code: %d", itemPath, resp.StatusCode)
 	}
 
@@ -359,7 +367,10 @@ func (c *Client) MarkRSSItemAsReadCtx(ctx context.Context, itemPath string, arti
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not mark RSS item as read; itemPath: %s | status code: %d", itemPath, resp.StatusCode)
 	}
 
@@ -416,7 +427,10 @@ func (c *Client) SetRSSRuleCtx(ctx context.Context, ruleName string, rule RSSAut
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not set RSS rule; ruleName: %s | status code: %d", ruleName, resp.StatusCode)
 	}
 
@@ -443,7 +457,10 @@ func (c *Client) RenameRSSRuleCtx(ctx context.Context, ruleName, newRuleName str
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not rename RSS rule; ruleName: %s | status code: %d", ruleName, resp.StatusCode)
 	}
 
@@ -469,7 +486,10 @@ func (c *Client) RemoveRSSRuleCtx(ctx context.Context, ruleName string) error {
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not remove RSS rule; ruleName: %s | status code: %d", ruleName, resp.StatusCode)
 	}
 
