@@ -30,7 +30,7 @@ var (
 	ErrEmptyTorrentName               = errors.New("torrent name is empty")
 	ErrAllURLsNotFound                = errors.New("all urls were not found")
 	ErrInvalidURL                     = errors.New("new url is not a valid URL")
-	ErrTorrentQueueingNotEnabled      = errors.New("torrent queueing is not enabled, could not set hashes to max priority")
+	ErrTorrentQueueingNotEnabled      = errors.New("torrent queueing is not enabled, could not change priority")
 	ErrInvalidShareLimit              = errors.New("a share limit or at least one id is invalid")
 	ErrInvalidCookies                 = errors.New("request was not a valid json array of cookie objects")
 	ErrCannotGetTorrentPieceStates    = errors.New("could not get torrent piece states")
@@ -44,9 +44,9 @@ var (
 	ErrTorrentCreationUnfinished         = errors.New("torrent creation is still unfinished")
 	ErrTorrentCreationFailed             = errors.New("torrent creation failed")
 
-	ErrRSSItemNotFound  = errors.New("RSS item not found")
-	ErrRSSPathConflict  = errors.New("RSS path already exists or is invalid")
-	ErrRSSRuleNotFound  = errors.New("RSS rule not found")
+	ErrRSSItemNotFound = errors.New("RSS item not found")
+	ErrRSSPathConflict = errors.New("RSS path already exists or is invalid")
+	ErrRSSRuleNotFound = errors.New("RSS rule not found")
 )
 
 type Torrent struct {
