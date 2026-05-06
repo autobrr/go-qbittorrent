@@ -17,8 +17,6 @@ import (
 	"github.com/avast/retry-go"
 )
 
-const authorizationHeader = "Authorization"
-
 func (c *Client) getCtx(ctx context.Context, endpoint string, opts map[string]string) (*http.Response, error) {
 	reqUrl := c.buildUrl(endpoint, opts)
 
@@ -284,7 +282,7 @@ func (c *Client) usingAPIKeyAuth() bool {
 
 func (c *Client) setAPIKeyAuthHeader(req *http.Request) {
 	if c.cfg.APIKey != "" {
-		req.Header.Set(authorizationHeader, "Bearer "+c.cfg.APIKey)
+		req.Header.Set("Authorization", "Bearer "+c.cfg.APIKey)
 	}
 }
 
