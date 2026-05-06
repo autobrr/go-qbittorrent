@@ -35,6 +35,7 @@ var (
 	ErrInvalidCookies                 = errors.New("request was not a valid json array of cookie objects")
 	ErrCannotGetTorrentPieceStates    = errors.New("could not get torrent piece states")
 	ErrInvalidPeers                   = errors.New("none of the supplied peers are valid")
+	ErrInvalidMonitoredFolderTarget = errors.New("invalid monitored folder target")
 
 	ErrReannounceTookTooLong = errors.New("reannounce took too long, deleted torrent")
 	ErrUnsupportedVersion    = errors.New("qBittorrent version too old, please upgrade to use this feature")
@@ -640,7 +641,7 @@ type AppPreferences struct {
 	SavePath                           string      `json:"save_path"`
 	SavePathChangedTmmEnabled          bool        `json:"save_path_changed_tmm_enabled"`
 	SaveResumeDataInterval             int         `json:"save_resume_data_interval"`
-	ScanDirs                           struct{}    `json:"scan_dirs"`
+	ScanDirs                           MonitoredFolders `json:"scan_dirs"`
 	ScheduleFromHour                   int         `json:"schedule_from_hour"`
 	ScheduleFromMin                    int         `json:"schedule_from_min"`
 	ScheduleToHour                     int         `json:"schedule_to_hour"`
