@@ -20,6 +20,10 @@ func (c *Client) Login() error {
 }
 
 func (c *Client) LoginCtx(ctx context.Context) error {
+	if c.usingAPIKeyAuth() {
+		return nil
+	}
+
 	if c.cfg.Username == "" && c.cfg.Password == "" {
 		return nil
 	}
