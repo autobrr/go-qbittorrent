@@ -2573,6 +2573,32 @@ func (c *Client) GetFreeSpaceOnDiskCtx(ctx context.Context) (int64, error) {
 	return info.ServerState.FreeSpaceOnDisk, nil
 }
 
+func (c *Client) GetFreeSpaceAtPath(path string) (int64, error) {
+	return c.GetFreeSpaceAtPathCtx(context.Background(), path)
+}
+
+// GetFreeSpaceAtPathCtx get free space on disk for a specific path. qBittorrent 5.3 webapi 2.15.2
+func (c *Client) GetFreeSpaceAtPathCtx(ctx context.Context, path string) (int64, error) {
+	opts := map[string]string{"path": path}
+	resp, err := c.getCtx(ctx, "app/getFreeSpaceAtPath", opts)
+	if err != nil {
+		return 0, errors.Wrap(err, "could not get free space at path")
+	}
+
+	defer drainAndClose(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, errors.Wrap(ErrUnexpectedStatus, "could not get free space at path; status code: %d", resp.StatusCode)
+	}
+
+	var m int64
+	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
+		return 0, errors.Wrap(err, "could not unmarshal body")
+	}
+
+	return 0, nil
+}
+
 // RequiresMinVersion checks the current version against version X and errors if the current version is older than X
 func (c *Client) RequiresMinVersion(minVersion *semver.Version) (bool, error) {
 	version, err := c.getApiVersion()
