@@ -400,10 +400,10 @@ func (c *Client) retryDo(ctx context.Context, req *http.Request) (*http.Response
 		}
 
 		if resp.StatusCode == http.StatusForbidden {
+			drainAndClose(resp)
 			if c.usingAPIKeyAuth() {
 				return nil
 			}
-			drainAndClose(resp)
 			if err := c.LoginCtx(ctx); err != nil {
 				return errors.Wrap(err, "qbit re-login failed")
 			}
