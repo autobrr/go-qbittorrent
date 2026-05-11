@@ -8,10 +8,6 @@ import (
 
 func TestClient_GetProcessInfo(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/v2/auth/login", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("Ok."))
-	})
 	mux.HandleFunc("/api/v2/app/processInfo", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"launch_time":1769331513}`))
@@ -21,9 +17,7 @@ func TestClient_GetProcessInfo(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(Config{
-		Host:     server.URL,
-		Username: "admin",
-		Password: "password",
+		Host: server.URL,
 	})
 
 	info, err := client.GetProcessInfo()
