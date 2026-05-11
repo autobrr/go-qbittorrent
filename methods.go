@@ -106,25 +106,22 @@ func (c *Client) GetProcessInfo() (ProcessInfo, error) {
 
 // GetProcessInfoCtx get qBittorrent process information.
 func (c *Client) GetProcessInfoCtx(ctx context.Context) (ProcessInfo, error) {
+	var info ProcessInfo
 	resp, err := c.getCtx(ctx, "app/processInfo", nil)
 	if err != nil {
-		return ProcessInfo{}, errors.Wrap(err, "could not get app process info")
+		return info, errors.Wrap(err, "could not get app process info")
 	}
 
 	defer drainAndClose(resp)
 
 	if resp.StatusCode != http.StatusOK {
-		return ProcessInfo{}, errors.Wrap(ErrUnexpectedStatus, "could not get app process info; status code: %d", resp.StatusCode)
+		return info, errors.Wrap(ErrUnexpectedStatus, "could not get app process info; status code: %d", resp.StatusCode)
 	}
 
-	return decodeProcessInfo(resp)
-}
-
-func decodeProcessInfo(resp *http.Response) (ProcessInfo, error) {
-	var info ProcessInfo
-	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
-		return ProcessInfo{}, errors.Wrap(err, "could not unmarshal body")
+	if err = json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		return info, errors.Wrap(err, "could not unmarshal body")
 	}
+
 	return info, nil
 }
 
