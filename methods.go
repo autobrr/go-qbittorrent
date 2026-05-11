@@ -2233,23 +2233,27 @@ func (c *Client) SetTorrentSuperSeedingCtx(ctx context.Context, hashes []string,
 	return nil
 }
 
-// SetTorrentShareLimit set share limits for torrents specified by hashes
-func (c *Client) SetTorrentShareLimit(hashes []string, ratioLimit float64, seedingTimeLimit int64, inactiveSeedingTimeLimit int64) error {
-	return c.SetTorrentShareLimitCtx(context.Background(), hashes, ratioLimit, seedingTimeLimit, inactiveSeedingTimeLimit)
+// SetTorrentShareLimit set share limits for torrents specified by hashes.
+// shareLimitAction and shareLimitsMode were added in webapi 2.12.
+func (c *Client) SetTorrentShareLimit(hashes []string, ratioLimit float64, seedingTimeLimit int64, inactiveSeedingTimeLimit int64, shareLimitAction string, shareLimitsMode string) error {
+	return c.SetTorrentShareLimitCtx(context.Background(), hashes, ratioLimit, seedingTimeLimit, inactiveSeedingTimeLimit, shareLimitAction, shareLimitsMode)
 }
 
-// SetTorrentShareLimitCtx set share limits for torrents specified by hashes
-func (c *Client) SetTorrentShareLimitCtx(ctx context.Context, hashes []string, ratioLimit float64, seedingTimeLimit int64, inactiveSeedingTimeLimit int64) error {
+// SetTorrentShareLimitCtx set share limits for torrents specified by hashes.
+// shareLimitAction and shareLimitsMode were added in webapi 2.12.
+func (c *Client) SetTorrentShareLimitCtx(ctx context.Context, hashes []string, ratioLimit float64, seedingTimeLimit int64, inactiveSeedingTimeLimit int64, shareLimitAction string, shareLimitsMode string) error {
 	opts := map[string]string{
 		"hashes":                   strings.Join(hashes, "|"),
 		"ratioLimit":               strconv.FormatFloat(ratioLimit, 'f', 2, 64),
 		"seedingTimeLimit":         strconv.FormatInt(seedingTimeLimit, 10),
 		"inactiveSeedingTimeLimit": strconv.FormatInt(inactiveSeedingTimeLimit, 10),
+		"shareLimitAction":         shareLimitAction,
+		"shareLimitsMode":          shareLimitsMode,
 	}
 
 	resp, err := c.postCtx(ctx, "torrents/setShareLimits", opts)
 	if err != nil {
-		return errors.Wrap(err, "could not set share limits; hashes: %v | ratioLimit: %v | seedingTimeLimit: %v | inactiveSeedingTimeLimit %v", hashes, ratioLimit, seedingTimeLimit, inactiveSeedingTimeLimit)
+		return errors.Wrap(err, "could not set share limits; hashes: %v | ratioLimit: %v | seedingTimeLimit: %v | inactiveSeedingTimeLimit %v | shareLimitAction: %v | shareLimitsMode: %v", hashes, ratioLimit, seedingTimeLimit, inactiveSeedingTimeLimit, shareLimitAction, shareLimitsMode)
 	}
 
 	defer drainAndClose(resp)
@@ -2265,7 +2269,7 @@ func (c *Client) SetTorrentShareLimitCtx(ctx context.Context, hashes []string, r
 	case http.StatusBadRequest:
 		return ErrInvalidShareLimit
 	default:
-		return errors.Wrap(ErrUnexpectedStatus, "could not set share limits; hashes: %v | ratioLimit: %v | seedingTimeLimit: %v | inactiveSeedingTimeLimit %v | status code: %d", hashes, ratioLimit, seedingTimeLimit, inactiveSeedingTimeLimit, resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not set share limits; hashes: %v | ratioLimit: %v | seedingTimeLimit: %v | inactiveSeedingTimeLimit %v | shareLimitAction: %v | shareLimitsMode: %v | status code: %d", hashes, ratioLimit, seedingTimeLimit, inactiveSeedingTimeLimit, shareLimitAction, shareLimitsMode, resp.StatusCode)
 	}
 }
 
