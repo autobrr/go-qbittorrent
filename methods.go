@@ -20,6 +20,10 @@ func (c *Client) Login() error {
 }
 
 func (c *Client) LoginCtx(ctx context.Context) error {
+	if c.usingAPIKeyAuth() {
+		return nil
+	}
+
 	if c.cfg.Username == "" && c.cfg.Password == "" {
 		return nil
 	}
@@ -97,6 +101,32 @@ func (c *Client) GetBuildInfoCtx(ctx context.Context) (BuildInfo, error) {
 	}
 
 	return bi, nil
+}
+
+// GetProcessInfo get qBittorrent process information.
+func (c *Client) GetProcessInfo() (ProcessInfo, error) {
+	return c.GetProcessInfoCtx(context.Background())
+}
+
+// GetProcessInfoCtx get qBittorrent process information.
+func (c *Client) GetProcessInfoCtx(ctx context.Context) (ProcessInfo, error) {
+	var info ProcessInfo
+	resp, err := c.getCtx(ctx, "app/processInfo", nil)
+	if err != nil {
+		return info, errors.Wrap(err, "could not get app process info")
+	}
+
+	defer drainAndClose(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return info, errors.Wrap(ErrUnexpectedStatus, "could not get app process info; status code: %d", resp.StatusCode)
+	}
+
+	if err = json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		return info, errors.Wrap(err, "could not unmarshal body")
+	}
+
+	return info, nil
 }
 
 // Shutdown  Shuts down the qBittorrent client
@@ -260,6 +290,86 @@ func (c *Client) SetPreferencesCtx(ctx context.Context, prefs map[string]interfa
 
 	return nil
 }
+
+// MonitoredFolderMode describes where torrents discovered in a monitored folder should be downloaded.
+type MonitoredFolderMode int
+
+const (
+	// MonitoredFolderModeMonitoredFolder means download to the monitored folder itself.
+	MonitoredFolderModeMonitoredFolder MonitoredFolderMode = 0
+	// MonitoredFolderModeDefaultSavePath means download to qBittorrent's default save path.
+	MonitoredFolderModeDefaultSavePath MonitoredFolderMode = 1
+	// MonitoredFolderModeCustomPath means download to a custom path.
+	MonitoredFolderModeCustomPath MonitoredFolderMode = 2
+)
+
+// MonitoredFolderTarget represents one qBittorrent scan_dirs target value.
+// The Web API accepts either integer values (0, 1) or a custom path string.
+type MonitoredFolderTarget struct {
+	mode       MonitoredFolderMode
+	customPath string
+}
+
+// NewMonitoredFolderTarget creates an int-based monitored folder target (0 or 1).
+func NewMonitoredFolderTarget(mode MonitoredFolderMode) MonitoredFolderTarget {
+	return MonitoredFolderTarget{mode: mode}
+}
+
+// NewMonitoredFolderCustomPath creates a custom-path monitored folder target.
+func NewMonitoredFolderCustomPath(path string) MonitoredFolderTarget {
+	return MonitoredFolderTarget{
+		mode:       MonitoredFolderModeCustomPath,
+		customPath: path,
+	}
+}
+
+// Mode returns the target mode.
+func (d MonitoredFolderTarget) Mode() MonitoredFolderMode {
+	return d.mode
+}
+
+// CustomPath returns the custom path, if Mode() is MonitoredFolderModeCustomPath.
+func (d MonitoredFolderTarget) CustomPath() string {
+	return d.customPath
+}
+
+func (d MonitoredFolderTarget) MarshalJSON() ([]byte, error) {
+	switch d.mode {
+	case MonitoredFolderModeMonitoredFolder, MonitoredFolderModeDefaultSavePath:
+		return json.Marshal(int(d.mode))
+	case MonitoredFolderModeCustomPath:
+		return json.Marshal(d.customPath)
+	default:
+		return nil, errors.Wrap(ErrInvalidMonitoredFolderTarget, "invalid target mode: %d", d.mode)
+	}
+}
+
+func (d *MonitoredFolderTarget) UnmarshalJSON(data []byte) error {
+	var intValue int
+	if err := json.Unmarshal(data, &intValue); err == nil {
+		switch MonitoredFolderMode(intValue) {
+		case MonitoredFolderModeMonitoredFolder, MonitoredFolderModeDefaultSavePath:
+			d.mode = MonitoredFolderMode(intValue)
+			d.customPath = ""
+			return nil
+		default:
+			return errors.Wrap(ErrInvalidMonitoredFolderTarget, "invalid target integer value: %d", intValue)
+		}
+	}
+
+	var stringValue string
+	if err := json.Unmarshal(data, &stringValue); err == nil {
+		d.mode = MonitoredFolderModeCustomPath
+		d.customPath = stringValue
+		return nil
+	}
+
+	return errors.Wrap(ErrInvalidMonitoredFolderTarget, "invalid target value: %s", string(data))
+}
+
+// MonitoredFolders is the typed representation of qBittorrent's scan_dirs setting.
+// Key: monitored folder path, Value: target where discovered torrents should be saved.
+type MonitoredFolders map[string]MonitoredFolderTarget
 
 // GetDirectoryContent lists folders inside a directory (for autocomplete).
 func (c *Client) GetDirectoryContent(dirPath string, withMetadata bool) (any, error) {
@@ -1686,6 +1796,35 @@ func (c *Client) SetPreferencesMaxActiveUploads(max int) error {
 // SetPreferencesSubcategoriesEnabled enable/disable subcategories
 func (c *Client) SetPreferencesSubcategoriesEnabled(enabled bool) error {
 	return c.SetPreferences(map[string]interface{}{"use_subcategories": enabled})
+}
+
+// GetMonitoredFolders returns configured folders watched for torrent files.
+func (c *Client) GetMonitoredFolders() (MonitoredFolders, error) {
+	return c.GetMonitoredFoldersCtx(context.Background())
+}
+
+// GetMonitoredFoldersCtx returns configured folders watched for torrent files.
+func (c *Client) GetMonitoredFoldersCtx(ctx context.Context) (MonitoredFolders, error) {
+	prefs, err := c.GetAppPreferencesCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if prefs.ScanDirs == nil {
+		return MonitoredFolders{}, nil
+	}
+
+	return prefs.ScanDirs, nil
+}
+
+// SetMonitoredFolders updates folders watched for torrent files via app/setPreferences scan_dirs.
+func (c *Client) SetMonitoredFolders(scanDirs MonitoredFolders) error {
+	return c.SetMonitoredFoldersCtx(context.Background(), scanDirs)
+}
+
+// SetMonitoredFoldersCtx updates folders watched for torrent files via app/setPreferences scan_dirs.
+func (c *Client) SetMonitoredFoldersCtx(ctx context.Context, scanDirs MonitoredFolders) error {
+	return c.SetPreferencesCtx(ctx, map[string]interface{}{"scan_dirs": scanDirs})
 }
 
 // SetRSSAutoDownloadingEnabled enable/disable RSS auto-downloading

@@ -28,12 +28,14 @@ func (c *Client) getCtx(ctx context.Context, endpoint string, opts map[string]st
 	if c.cfg.BasicUser != "" && c.cfg.BasicPass != "" {
 		req.SetBasicAuth(c.cfg.BasicUser, c.cfg.BasicPass)
 	}
-
-	cookieURL, _ := url.Parse(c.buildUrl("/", nil))
-
-	if len(c.http.Jar.Cookies(cookieURL)) == 0 {
-		if err := c.LoginCtx(ctx); err != nil {
-			return nil, errors.Wrap(err, "qbit re-login failed")
+	if c.usingAPIKeyAuth() {
+		c.setAPIKeyAuthHeader(req)
+	} else {
+		cookieURL, _ := url.Parse(c.buildUrl("/", nil))
+		if len(c.http.Jar.Cookies(cookieURL)) == 0 {
+			if err := c.LoginCtx(ctx); err != nil {
+				return nil, errors.Wrap(err, "qbit re-login failed")
+			}
 		}
 	}
 
@@ -63,16 +65,19 @@ func (c *Client) postCtx(ctx context.Context, endpoint string, opts map[string]s
 	if c.cfg.BasicUser != "" && c.cfg.BasicPass != "" {
 		req.SetBasicAuth(c.cfg.BasicUser, c.cfg.BasicPass)
 	}
+	if c.usingAPIKeyAuth() {
+		c.setAPIKeyAuthHeader(req)
+	} else {
+		cookieURL, _ := url.Parse(c.buildUrl("/", nil))
+		if len(c.http.Jar.Cookies(cookieURL)) == 0 {
+			if err := c.LoginCtx(ctx); err != nil {
+				return nil, errors.Wrap(err, "qbit re-login failed")
+			}
+		}
+	}
 
 	// add the content-type so qbittorrent knows what to expect
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-
-	cookieURL, _ := url.Parse(c.buildUrl("/", nil))
-	if len(c.http.Jar.Cookies(cookieURL)) == 0 {
-		if err := c.LoginCtx(ctx); err != nil {
-			return nil, errors.Wrap(err, "qbit re-login failed")
-		}
-	}
 
 	// try request and if fail run 10 retries
 	resp, err := c.retryDo(ctx, req)
@@ -101,6 +106,16 @@ func (c *Client) postBasicCtx(ctx context.Context, endpoint string, opts map[str
 
 	if c.cfg.BasicUser != "" && c.cfg.BasicPass != "" {
 		req.SetBasicAuth(c.cfg.BasicUser, c.cfg.BasicPass)
+	}
+	if c.usingAPIKeyAuth() {
+		c.setAPIKeyAuthHeader(req)
+	} else {
+		cookieURL, _ := url.Parse(c.buildUrl("/", nil))
+		if len(c.http.Jar.Cookies(cookieURL)) == 0 {
+			if err := c.LoginCtx(ctx); err != nil {
+				return nil, errors.Wrap(err, "qbit re-login failed")
+			}
+		}
 	}
 
 	// add the content-type so qbittorrent knows what to expect
@@ -172,15 +187,18 @@ func (c *Client) postMultiMemoryCtx(ctx context.Context, endpoint string, files 
 	if c.cfg.BasicUser != "" && c.cfg.BasicPass != "" {
 		req.SetBasicAuth(c.cfg.BasicUser, c.cfg.BasicPass)
 	}
-
-	req.Header.Set("Content-Type", contentType)
-
-	cookieURL, _ := url.Parse(c.buildUrl("/", nil)) //nolint:errcheck // buildUrl returns valid URL
-	if len(c.http.Jar.Cookies(cookieURL)) == 0 {
-		if loginErr := c.LoginCtx(ctx); loginErr != nil {
-			return nil, errors.Wrap(loginErr, "qbit re-login failed")
+	if c.usingAPIKeyAuth() {
+		c.setAPIKeyAuthHeader(req)
+	} else {
+		cookieURL, _ := url.Parse(c.buildUrl("/", nil)) //nolint:errcheck // buildUrl returns valid URL
+		if len(c.http.Jar.Cookies(cookieURL)) == 0 {
+			if loginErr := c.LoginCtx(ctx); loginErr != nil {
+				return nil, errors.Wrap(loginErr, "qbit re-login failed")
+			}
 		}
 	}
+
+	req.Header.Set("Content-Type", contentType)
 
 	resp, err := c.retryDo(ctx, req)
 	if err != nil {
@@ -234,16 +252,19 @@ func (c *Client) postReaderCtx(ctx context.Context, endpoint string, reader io.R
 	if c.cfg.BasicUser != "" && c.cfg.BasicPass != "" {
 		req.SetBasicAuth(c.cfg.BasicUser, c.cfg.BasicPass)
 	}
+	if c.usingAPIKeyAuth() {
+		c.setAPIKeyAuthHeader(req)
+	} else {
+		cookieURL, _ := url.Parse(c.buildUrl("/", nil))
+		if len(c.http.Jar.Cookies(cookieURL)) == 0 {
+			if err := c.LoginCtx(ctx); err != nil {
+				return nil, errors.Wrap(err, "qbit re-login failed")
+			}
+		}
+	}
 
 	// Set correct content type
 	req.Header.Set("Content-Type", contentType)
-
-	cookieURL, _ := url.Parse(c.buildUrl("/", nil))
-	if len(c.http.Jar.Cookies(cookieURL)) == 0 {
-		if err := c.LoginCtx(ctx); err != nil {
-			return nil, errors.Wrap(err, "qbit re-login failed")
-		}
-	}
 
 	resp, err := c.retryDo(ctx, req)
 	if err != nil {
@@ -270,6 +291,16 @@ func (c *Client) setCookies(cookies []*http.Cookie) {
 	cookieURL, _ := url.Parse(c.buildUrl("/", nil))
 
 	c.http.Jar.SetCookies(cookieURL, cookies)
+}
+
+func (c *Client) usingAPIKeyAuth() bool {
+	return c.cfg.APIKey != ""
+}
+
+func (c *Client) setAPIKeyAuthHeader(req *http.Request) {
+	if c.cfg.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.cfg.APIKey)
+	}
 }
 
 func (c *Client) buildUrl(endpoint string, params map[string]string) string {
@@ -387,6 +418,9 @@ func (c *Client) retryDo(ctx context.Context, req *http.Request) (*http.Response
 
 		if resp.StatusCode == http.StatusForbidden {
 			drainAndClose(resp)
+			if c.usingAPIKeyAuth() {
+				return nil
+			}
 			if err := c.LoginCtx(ctx); err != nil {
 				return errors.Wrap(err, "qbit re-login failed")
 			}
