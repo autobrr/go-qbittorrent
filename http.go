@@ -109,7 +109,7 @@ func (c *Client) postBasicCtx(ctx context.Context, endpoint string, opts map[str
 	}
 	if c.usingAPIKeyAuth() {
 		c.setAPIKeyAuthHeader(req)
-	} else {
+	} else if endpoint != "auth/login" {
 		cookieURL, _ := url.Parse(c.buildUrl("/", nil))
 		if len(c.http.Jar.Cookies(cookieURL)) == 0 {
 			if err := c.LoginCtx(ctx); err != nil {
