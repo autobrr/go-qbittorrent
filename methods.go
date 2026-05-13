@@ -103,6 +103,32 @@ func (c *Client) GetBuildInfoCtx(ctx context.Context) (BuildInfo, error) {
 	return bi, nil
 }
 
+// GetProcessInfo get qBittorrent process information.
+func (c *Client) GetProcessInfo() (ProcessInfo, error) {
+	return c.GetProcessInfoCtx(context.Background())
+}
+
+// GetProcessInfoCtx get qBittorrent process information.
+func (c *Client) GetProcessInfoCtx(ctx context.Context) (ProcessInfo, error) {
+	var info ProcessInfo
+	resp, err := c.getCtx(ctx, "app/processInfo", nil)
+	if err != nil {
+		return info, errors.Wrap(err, "could not get app process info")
+	}
+
+	defer drainAndClose(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return info, errors.Wrap(ErrUnexpectedStatus, "could not get app process info; status code: %d", resp.StatusCode)
+	}
+
+	if err = json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		return info, errors.Wrap(err, "could not unmarshal body")
+	}
+
+	return info, nil
+}
+
 // Shutdown  Shuts down the qBittorrent client
 func (c *Client) Shutdown() error {
 	return c.ShutdownCtx(context.Background())
