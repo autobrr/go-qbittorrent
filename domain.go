@@ -266,7 +266,10 @@ const (
 
 	// Torrent is moving
 	TorrentFilterMoving TorrentFilter = "moving"
-) // TrackerStatus https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-4.1)#get-torrent-trackers
+)
+
+// TrackerStatus is the numeric status from torrents/trackers and sync payloads; see
+// https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-4.1)#get-torrent-trackers
 type TrackerStatus int
 
 const (
@@ -282,8 +285,14 @@ const (
 	// 3 Tracker is updating
 	TrackerStatusUpdating TrackerStatus = 3
 
-	// 4 Tracker has been contacted, but it is not working (or doesn't send proper replies)
+	// 4 Not working: generic announce failure; Web API 2.13+ adds 5 and 6 for finer-grained failures
 	TrackerStatusNotWorking TrackerStatus = 4
+
+	// 5 Tracker error: explicit tracker-side error (not unreachable; not generic 4)
+	TrackerStatusTrackerError TrackerStatus = 5
+
+	// 6 Unreachable: cannot connect to the tracker (vs 5: tracker returned an error instead)
+	TrackerStatusUnreachable TrackerStatus = 6
 )
 
 type ConnectionStatus string

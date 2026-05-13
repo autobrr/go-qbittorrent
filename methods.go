@@ -3080,14 +3080,10 @@ func (c *Client) DeleteTorrentCreationTaskCtx(ctx context.Context, taskID string
 	}
 }
 
-// Check if status not working or something else
-// https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-4.1)#get-torrent-trackers
+// Check if at least one non-disabled tracker reports status OK (2). Status values are
+// TrackerStatus* in domain.go (inline comments on 4-6 describe how they differ).
 //
-//	0 Tracker is disabled (used for DHT, PeX, and LSD)
-//	1 Tracker has not been contacted yet
-//	2 Tracker has been contacted and is working
-//	3 Tracker is updating
-//	4 Tracker has been contacted, but it is not working (or doesn't send proper replies)
+// https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-4.1)#get-torrent-trackers
 func isTrackerStatusOK(trackers []TorrentTracker) bool {
 	for _, tracker := range trackers {
 		if tracker.Status == TrackerStatusDisabled {
