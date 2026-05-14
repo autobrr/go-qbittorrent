@@ -110,6 +110,20 @@ type Torrent struct {
 	Trackers                 []TorrentTracker `json:"trackers"`
 }
 
+// IsCompleted reports whether the torrent has finished downloading
+func (t Torrent) IsCompleted() bool {
+	if t.Progress >= 1 {
+		return true
+	}
+	switch t.State {
+	case TorrentStateUploading, TorrentStatePausedUp, TorrentStateStoppedUp,
+		TorrentStateQueuedUp, TorrentStateStalledUp, TorrentStateCheckingUp, TorrentStateForcedUp:
+		return true
+	default:
+		return false
+	}
+}
+
 type TorrentTrackersResponse struct {
 	Trackers []TorrentTracker `json:"trackers"`
 }

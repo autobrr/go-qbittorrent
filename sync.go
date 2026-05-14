@@ -26,6 +26,7 @@ type SyncManager struct {
 	options          SyncOptions
 	allTorrents      []Torrent
 	resultPool       sync.Pool
+	completedHashes  map[string]struct{} // hashes already seen as completed (for OnTorrentCompleted)
 }
 
 // SyncOptions configures the behavior of the sync manager
@@ -46,6 +47,9 @@ type SyncOptions struct {
 	OnUpdate func(*MainData)
 	// OnError is called when sync encounters an error
 	OnError func(error)
+	// OnTorrentCompleted is called when a torrent transitions to completed (download finished).
+	// Only newly completed torrents are reported (not those already completed at first sync).
+	OnTorrentCompleted func(Torrent)
 	// RetainRemovedData keeps removed items for one sync cycle for comparison
 	RetainRemovedData bool
 }
@@ -150,12 +154,49 @@ func (sm *SyncManager) doSync(ctx context.Context) (interface{}, error) {
 	// Update cached torrent slice
 	sm.updateAllTorrents()
 
+	// Detect newly completed torrents and invoke OnTorrentCompleted
+	if sm.options.OnTorrentCompleted != nil {
+		sm.torrentCompletedLocked()
+	}
+
 	// Call update callback if set
 	if sm.options.OnUpdate != nil {
 		sm.options.OnUpdate(sm.copyMainData(sm.data))
 	}
 
 	return nil, nil
+}
+
+// It finds torrents that became completed since the last sync,
+// calls OnTorrentCompleted for each, and updates completedHashes.
+// Torrents already completed at first sync are not reported.
+func (sm *SyncManager) torrentCompletedLocked() {
+	if sm.options.OnTorrentCompleted == nil {
+		return
+	}
+	currentCompleted := make(map[string]struct{}, len(sm.data.Torrents))
+	for hash, t := range sm.data.Torrents {
+		if t.IsCompleted() {
+			currentCompleted[hash] = struct{}{}
+		}
+	}
+	if sm.completedHashes == nil {
+		// First sync: only seed completedHashes, do not fire for already-completed torrents
+		sm.completedHashes = currentCompleted
+		return
+	}
+	for hash := range currentCompleted {
+		if _, seen := sm.completedHashes[hash]; seen {
+			continue
+		}
+		t, ok := sm.data.Torrents[hash]
+		if !ok {
+			continue
+		}
+		tCopy := t
+		sm.options.OnTorrentCompleted(tCopy)
+	}
+	sm.completedHashes = currentCompleted
 }
 
 func (sm *SyncManager) updateAllTorrents() {
