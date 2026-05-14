@@ -2374,6 +2374,10 @@ func (c *Client) SetTorrentSuperSeedingCtx(ctx context.Context, hashes []string,
 
 // ShareLimitOptions defines share limit settings for torrents.
 // ShareLimitAction and ShareLimitsMode were added in webapi 2.12.
+//
+// ShareLimitAction and ShareLimitsMode must be Qt meta enum key names as used
+// by the WebUI (see Utils::String::toEnum in qBittorrent). Numeric strings such
+// as "0" are not recognized and are treated as Default by the server.
 type ShareLimitOptions struct {
 	RatioLimit               float64
 	SeedingTimeLimit         int64
@@ -2382,10 +2386,25 @@ type ShareLimitOptions struct {
 	ShareLimitsMode          string
 }
 
+// Share limit action names for SetTorrentShareLimit (BitTorrent::ShareLimitAction).
 const (
-	// qBittorrent default values from src/base/bittorrent/sharelimits.h.
-	shareLimitActionDefault = "-1"
-	shareLimitsModeDefault  = "-1"
+	ShareLimitActionDefault             = "Default"
+	ShareLimitActionStop                = "Stop"
+	ShareLimitActionRemove              = "Remove"
+	ShareLimitActionEnableSuperSeeding  = "EnableSuperSeeding"
+	ShareLimitActionRemoveWithContent   = "RemoveWithContent"
+)
+
+// Share limits mode names for SetTorrentShareLimit (BitTorrent::ShareLimitsMode).
+const (
+	ShareLimitsModeDefault  = "Default"
+	ShareLimitsModeMatchAny = "MatchAny"
+	ShareLimitsModeMatchAll = "MatchAll"
+)
+
+const (
+	shareLimitActionDefault = ShareLimitActionDefault
+	shareLimitsModeDefault  = ShareLimitsModeDefault
 )
 
 // SetTorrentShareLimit set share limits for torrents specified by hashes.

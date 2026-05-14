@@ -93,6 +93,8 @@ type Torrent struct {
 	SeedingTime              int64            `json:"seeding_time"`
 	SeedingTimeLimit         int64            `json:"seeding_time_limit"`
 	InactiveSeedingTimeLimit int64            `json:"inactive_seeding_time_limit"`
+	ShareLimitAction         string           `json:"share_limit_action"`
+	ShareLimitsMode          string           `json:"share_limits_mode"`
 	SeenComplete             int64            `json:"seen_complete"`
 	SequentialDownload       bool             `json:"seq_dl"`
 	Size                     int64            `json:"size"`
