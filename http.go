@@ -106,9 +106,8 @@ func (c *Client) postBasicCtx(ctx context.Context, endpoint string, opts map[str
 	if c.cfg.BasicUser != "" && c.cfg.BasicPass != "" {
 		req.SetBasicAuth(c.cfg.BasicUser, c.cfg.BasicPass)
 	}
-	if c.usingAPIKeyAuth() {
-		c.setAPIKeyAuthHeader(req)
-	}
+
+	c.setAPIKeyAuthHeader(req)
 
 	// add the content-type so qbittorrent knows what to expect
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
