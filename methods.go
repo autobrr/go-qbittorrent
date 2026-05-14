@@ -2372,23 +2372,51 @@ func (c *Client) SetTorrentSuperSeedingCtx(ctx context.Context, hashes []string,
 	return nil
 }
 
-// SetTorrentShareLimit set share limits for torrents specified by hashes
-func (c *Client) SetTorrentShareLimit(hashes []string, ratioLimit float64, seedingTimeLimit int64, inactiveSeedingTimeLimit int64) error {
-	return c.SetTorrentShareLimitCtx(context.Background(), hashes, ratioLimit, seedingTimeLimit, inactiveSeedingTimeLimit)
+// ShareLimitOptions defines share limit settings for torrents.
+// ShareLimitAction and ShareLimitsMode were added in webapi 2.12.
+type ShareLimitOptions struct {
+	RatioLimit               float64
+	SeedingTimeLimit         int64
+	InactiveSeedingTimeLimit int64
+	ShareLimitAction         string
+	ShareLimitsMode          string
 }
 
-// SetTorrentShareLimitCtx set share limits for torrents specified by hashes
-func (c *Client) SetTorrentShareLimitCtx(ctx context.Context, hashes []string, ratioLimit float64, seedingTimeLimit int64, inactiveSeedingTimeLimit int64) error {
-	opts := map[string]string{
-		"hashes":                   strings.Join(hashes, "|"),
-		"ratioLimit":               strconv.FormatFloat(ratioLimit, 'f', 2, 64),
-		"seedingTimeLimit":         strconv.FormatInt(seedingTimeLimit, 10),
-		"inactiveSeedingTimeLimit": strconv.FormatInt(inactiveSeedingTimeLimit, 10),
+const (
+	// qBittorrent default values from src/base/bittorrent/sharelimits.h.
+	shareLimitActionDefault = "-1"
+	shareLimitsModeDefault  = "-1"
+)
+
+// SetTorrentShareLimit set share limits for torrents specified by hashes.
+func (c *Client) SetTorrentShareLimit(hashes []string, opts ShareLimitOptions) error {
+	return c.SetTorrentShareLimitCtx(context.Background(), hashes, opts)
+}
+
+// SetTorrentShareLimitCtx set share limits for torrents specified by hashes.
+func (c *Client) SetTorrentShareLimitCtx(ctx context.Context, hashes []string, opts ShareLimitOptions) error {
+	shareLimitAction := opts.ShareLimitAction
+	if shareLimitAction == "" {
+		shareLimitAction = shareLimitActionDefault
 	}
 
-	resp, err := c.postCtx(ctx, "torrents/setShareLimits", opts)
+	shareLimitsMode := opts.ShareLimitsMode
+	if shareLimitsMode == "" {
+		shareLimitsMode = shareLimitsModeDefault
+	}
+
+	form := map[string]string{
+		"hashes":                   strings.Join(hashes, "|"),
+		"ratioLimit":               strconv.FormatFloat(opts.RatioLimit, 'f', 2, 64),
+		"seedingTimeLimit":         strconv.FormatInt(opts.SeedingTimeLimit, 10),
+		"inactiveSeedingTimeLimit": strconv.FormatInt(opts.InactiveSeedingTimeLimit, 10),
+		"shareLimitAction":         shareLimitAction,
+		"shareLimitsMode":          shareLimitsMode,
+	}
+
+	resp, err := c.postCtx(ctx, "torrents/setShareLimits", form)
 	if err != nil {
-		return errors.Wrap(err, "could not set share limits; hashes: %v | ratioLimit: %v | seedingTimeLimit: %v | inactiveSeedingTimeLimit %v", hashes, ratioLimit, seedingTimeLimit, inactiveSeedingTimeLimit)
+		return errors.Wrap(err, "could not set share limits; hashes: %v | ratioLimit: %v | seedingTimeLimit: %v | inactiveSeedingTimeLimit %v | shareLimitAction: %v | shareLimitsMode: %v", hashes, opts.RatioLimit, opts.SeedingTimeLimit, opts.InactiveSeedingTimeLimit, shareLimitAction, shareLimitsMode)
 	}
 
 	defer drainAndClose(resp)
@@ -2404,7 +2432,7 @@ func (c *Client) SetTorrentShareLimitCtx(ctx context.Context, hashes []string, r
 	case http.StatusBadRequest:
 		return ErrInvalidShareLimit
 	default:
-		return errors.Wrap(ErrUnexpectedStatus, "could not set share limits; hashes: %v | ratioLimit: %v | seedingTimeLimit: %v | inactiveSeedingTimeLimit %v | status code: %d", hashes, ratioLimit, seedingTimeLimit, inactiveSeedingTimeLimit, resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not set share limits; hashes: %v | ratioLimit: %v | seedingTimeLimit: %v | inactiveSeedingTimeLimit %v | shareLimitAction: %v | shareLimitsMode: %v | status code: %d", hashes, opts.RatioLimit, opts.SeedingTimeLimit, opts.InactiveSeedingTimeLimit, shareLimitAction, shareLimitsMode, resp.StatusCode)
 	}
 }
 
