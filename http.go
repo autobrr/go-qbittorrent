@@ -88,14 +88,13 @@ func (c *Client) postCtx(ctx context.Context, endpoint string, opts map[string]s
 	return resp, nil
 }
 
+// postBasicCtx should only be used for auth/login because it skips session cookie checks.
 func (c *Client) postBasicCtx(ctx context.Context, endpoint string, opts map[string]string) (*http.Response, error) {
 	// add optional parameters that the user wants
 	form := url.Values{}
 	for k, v := range opts {
 		form.Add(k, v)
 	}
-
-	var resp *http.Response
 
 	reqUrl := c.buildUrl(endpoint, nil)
 
@@ -109,19 +108,12 @@ func (c *Client) postBasicCtx(ctx context.Context, endpoint string, opts map[str
 	}
 	if c.usingAPIKeyAuth() {
 		c.setAPIKeyAuthHeader(req)
-	} else if endpoint != "auth/login" {
-		cookieURL, _ := url.Parse(c.buildUrl("/", nil))
-		if len(c.http.Jar.Cookies(cookieURL)) == 0 {
-			if err := c.LoginCtx(ctx); err != nil {
-				return nil, errors.Wrap(err, "qbit re-login failed")
-			}
-		}
 	}
 
 	// add the content-type so qbittorrent knows what to expect
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 
-	resp, err = c.http.Do(req)
+	resp, err := c.http.Do(req)
 	if err != nil {
 		return nil, errors.Wrap(err, "error making post request: %v", reqUrl)
 	}
