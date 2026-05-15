@@ -437,6 +437,13 @@ func (o *TorrentAddOptions) Prepare() map[string]string {
 	return options
 }
 
+type TorrentAddResponse struct {
+	SuccessCount    int64    `json:"success_count"`
+	PendingCount    int64    `json:"pending_count"`
+	FailureCount    int64    `json:"failure_count"`
+	AddedTorrentIds []string `json:"added_torrent_ids"`
+}
+
 func ParseTorrentFilter(filter string) TorrentFilter {
 	switch filter {
 	case "downloading":
