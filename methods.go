@@ -660,7 +660,7 @@ func (c *Client) AddTorrentFromMemoryCtx(ctx context.Context, buf []byte, option
 
 		break
 	case http.StatusConflict:
-		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrent")
+		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrent | conflicts detected")
 	case http.StatusUnsupportedMediaType:
 		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrent | torrent file not valid")
 	default:
