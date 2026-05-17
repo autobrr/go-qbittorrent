@@ -388,6 +388,24 @@ func compareInactiveSeedingTimeLimit(a, b *Torrent) int {
 	return 0
 }
 
+func compareShareLimitAction(a, b *Torrent) int {
+	if a.ShareLimitAction == b.ShareLimitAction {
+		return 0
+	} else if a.ShareLimitAction < b.ShareLimitAction {
+		return -1
+	}
+	return 1
+}
+
+func compareShareLimitsMode(a, b *Torrent) int {
+	if a.ShareLimitsMode == b.ShareLimitsMode {
+		return 0
+	} else if a.ShareLimitsMode < b.ShareLimitsMode {
+		return -1
+	}
+	return 1
+}
+
 func compareSeenComplete(a, b *Torrent) int {
 	if a.SeenComplete < b.SeenComplete {
 		return -1
@@ -569,6 +587,8 @@ var torrentComparators = map[string]func(a, b *Torrent) int{
 	"seeding_time": compareSeedingTime,
 	"seeding_time_limit": compareSeedingTimeLimit,
 	"inactive_seeding_time_limit": compareInactiveSeedingTimeLimit,
+	"share_limit_action": compareShareLimitAction,
+	"share_limits_mode": compareShareLimitsMode,
 	"seen_complete": compareSeenComplete,
 	"seq_dl": compareSequentialDownload,
 	"size": compareSize,

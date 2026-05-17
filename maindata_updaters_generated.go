@@ -297,6 +297,20 @@ func updateTorrentInactiveSeedingTimeLimit(val interface{}, obj *Torrent) {
 	}
 }
 
+// updateTorrentShareLimitAction updates the ShareLimitAction field of Torrent
+func updateTorrentShareLimitAction(val interface{}, obj *Torrent) {
+	if s, ok := val.(string); ok {
+		obj.ShareLimitAction = s
+	}
+}
+
+// updateTorrentShareLimitsMode updates the ShareLimitsMode field of Torrent
+func updateTorrentShareLimitsMode(val interface{}, obj *Torrent) {
+	if s, ok := val.(string); ok {
+		obj.ShareLimitsMode = s
+	}
+}
+
 // updateTorrentSeenComplete updates the SeenComplete field of Torrent
 func updateTorrentSeenComplete(val interface{}, obj *Torrent) {
 	if s, ok := val.(float64); ok {
@@ -455,6 +469,8 @@ var torrentFieldUpdaters = map[string]func(val interface{}, obj *Torrent){
 	"seeding_time": updateTorrentSeedingTime,
 	"seeding_time_limit": updateTorrentSeedingTimeLimit,
 	"inactive_seeding_time_limit": updateTorrentInactiveSeedingTimeLimit,
+	"share_limit_action": updateTorrentShareLimitAction,
+	"share_limits_mode": updateTorrentShareLimitsMode,
 	"seen_complete": updateTorrentSeenComplete,
 	"seq_dl": updateTorrentSequentialDownload,
 	"size": updateTorrentSize,
