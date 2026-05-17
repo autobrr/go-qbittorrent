@@ -11,31 +11,33 @@ var (
 	ErrBadCredentials = errors.New("bad credentials")
 	ErrIPBanned       = errors.New("User's IP is banned for too many failed login attempts")
 
-	ErrUnexpectedStatus = errors.New("unexpected status code")
+	ErrUnexpectedStatus      = errors.New("unexpected status code")
+	ErrUnexpectedContentType = errors.New("unexpected Content-Type")
 
-	ErrNoTorrentURLProvided           = errors.New("no torrent URL provided")
-	ErrEmptySavePath                  = errors.New("save path is empty")
-	ErrNoWriteAccessToPath            = errors.New("user does not have write access to directory")
-	ErrCannotCreateSavePath           = errors.New("unable to create save path directory")
-	ErrEmptyCategoryName              = errors.New("category name is empty")
-	ErrInvalidCategoryName            = errors.New("category name is invalid")
-	ErrCategoryEditingFailed          = errors.New("category editing failed")
-	ErrCategoryDoesNotExist           = errors.New("category name does not exist")
-	ErrInvalidPriority                = errors.New("priority is invalid or at least one id is not an integer")
-	ErrTorrentNotFound                = errors.New("torrent not found")
-	ErrTorrentMetdataNotDownloadedYet = errors.New("torrent metadata hasn't downloaded yet or at least one file id was not found")
-	ErrMissingNewPathParameter        = errors.New("missing newPath parameter")
-	ErrInvalidPathParameter           = errors.New("invalid newPath or oldPath, or newPath already in use")
-	ErrInvalidTorrentHash             = errors.New("torrent hash is invalid")
-	ErrEmptyTorrentName               = errors.New("torrent name is empty")
-	ErrAllURLsNotFound                = errors.New("all urls were not found")
-	ErrInvalidURL                     = errors.New("new url is not a valid URL")
-	ErrTorrentQueueingNotEnabled      = errors.New("torrent queueing is not enabled, could not change priority")
-	ErrInvalidShareLimit              = errors.New("a share limit or at least one id is invalid")
-	ErrInvalidCookies                 = errors.New("request was not a valid json array of cookie objects")
-	ErrCannotGetTorrentPieceStates    = errors.New("could not get torrent piece states")
-	ErrInvalidPeers                   = errors.New("none of the supplied peers are valid")
-	ErrInvalidMonitoredFolderTarget   = errors.New("invalid monitored folder target")
+	ErrNoTorrentURLProvided            = errors.New("no torrent URL provided")
+	ErrEmptyInput                      = errors.New("input is empty")
+	ErrEmptySavePath                   = errors.New("save path is empty")
+	ErrNoWriteAccessToPath             = errors.New("user does not have write access to directory")
+	ErrCannotCreateSavePath            = errors.New("unable to create save path directory")
+	ErrEmptyCategoryName               = errors.New("category name is empty")
+	ErrInvalidCategoryName             = errors.New("category name is invalid")
+	ErrCategoryEditingFailed           = errors.New("category editing failed")
+	ErrCategoryDoesNotExist            = errors.New("category name does not exist")
+	ErrInvalidPriority                 = errors.New("priority is invalid or at least one id is not an integer")
+	ErrTorrentNotFound                 = errors.New("torrent not found")
+	ErrTorrentMetadataNotDownloadedYet = errors.New("torrent metadata hasn't downloaded yet or at least one file id was not found")
+	ErrMissingNewPathParameter         = errors.New("missing newPath parameter")
+	ErrInvalidPathParameter            = errors.New("invalid newPath or oldPath, or newPath already in use")
+	ErrInvalidTorrentHash              = errors.New("torrent hash is invalid")
+	ErrEmptyTorrentName                = errors.New("torrent name is empty")
+	ErrAllURLsNotFound                 = errors.New("all urls were not found")
+	ErrInvalidURL                      = errors.New("new url is not a valid URL")
+	ErrTorrentQueueingNotEnabled       = errors.New("torrent queueing is not enabled, could not change priority")
+	ErrInvalidShareLimit               = errors.New("a share limit or at least one id is invalid")
+	ErrInvalidCookies                  = errors.New("request was not a valid json array of cookie objects")
+	ErrCannotGetTorrentPieceStates     = errors.New("could not get torrent piece states")
+	ErrInvalidPeers                    = errors.New("none of the supplied peers are valid")
+	ErrInvalidMonitoredFolderTarget    = errors.New("invalid monitored folder target")
 
 	ErrReannounceTookTooLong = errors.New("reannounce took too long, deleted torrent")
 	ErrUnsupportedVersion    = errors.New("qBittorrent version too old, please upgrade to use this feature")
@@ -44,6 +46,8 @@ var (
 	ErrTorrentCreationTaskNotFound       = errors.New("torrent creation task not found")
 	ErrTorrentCreationUnfinished         = errors.New("torrent creation is still unfinished")
 	ErrTorrentCreationFailed             = errors.New("torrent creation failed")
+
+	ErrTorrentAddFailed = errors.New("torrent(s) failed to be added")
 
 	ErrRSSItemNotFound = errors.New("RSS item not found")
 	ErrRSSPathConflict = errors.New("RSS path already exists or is invalid")
@@ -435,6 +439,13 @@ func (o *TorrentAddOptions) Prepare() map[string]string {
 	}
 
 	return options
+}
+
+type TorrentAddResponse struct {
+	SuccessCount    int64    `json:"success_count"`
+	PendingCount    int64    `json:"pending_count"`
+	FailureCount    int64    `json:"failure_count"`
+	AddedTorrentIds []string `json:"added_torrent_ids"`
 }
 
 func ParseTorrentFilter(filter string) TorrentFilter {

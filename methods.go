@@ -636,109 +636,223 @@ func (c *Client) GetTorrentTrackersCtx(ctx context.Context, hash string) ([]Torr
 	return trackers, nil
 }
 
-func (c *Client) AddTorrentFromMemory(buf []byte, options map[string]string) error {
+func (c *Client) AddTorrentFromMemory(buf []byte, options map[string]string) (*TorrentAddResponse, error) {
 	return c.AddTorrentFromMemoryCtx(context.Background(), buf, options)
 }
 
-func (c *Client) AddTorrentFromMemoryCtx(ctx context.Context, buf []byte, options map[string]string) error {
+func (c *Client) AddTorrentFromMemoryCtx(ctx context.Context, buf []byte, options map[string]string) (*TorrentAddResponse, error) {
 	resp, err := c.postMemoryCtx(ctx, "torrents/add", buf, options)
 	if err != nil {
-		return errors.Wrap(err, "could not add torrent")
+		return nil, errors.Wrap(err, "could not add torrent")
 	}
 
 	defer drainAndClose(resp)
 
 	switch resp.StatusCode {
-	case http.StatusOK, http.StatusNoContent:
+	case http.StatusOK, http.StatusAccepted, http.StatusNoContent:
+		if strings.HasPrefix(resp.Header.Get("Content-Type"), "application/json") {
+			var res TorrentAddResponse
+			if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+				return nil, errors.Wrap(err, "could not unmarshal body")
+			}
+			return &res, nil
+		}
+
 		break
+	case http.StatusConflict:
+		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrent | conflicts detected")
+	case http.StatusUnsupportedMediaType:
+		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrent | torrent file not valid")
 	default:
-		return errors.Wrap(ErrUnexpectedStatus, "could not add torrent; status code: %d", resp.StatusCode)
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not add torrent | unexpected status code: %d", resp.StatusCode)
 	}
 
-	return nil
+	if !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/plain") {
+		return nil, errors.Wrap(ErrUnexpectedContentType, "could not add torrent | unexpected content-type: %s", resp.Header.Get("Content-Type"))
+	}
+
+	res := TorrentAddResponse{SuccessCount: 1}
+
+	return &res, nil
 }
 
 // AddTorrentsFromMemory adds multiple torrents from memory in a single request.
 // This is more efficient than calling AddTorrentFromMemory multiple times.
-func (c *Client) AddTorrentsFromMemory(files [][]byte, options map[string]string) error {
+func (c *Client) AddTorrentsFromMemory(files [][]byte, options map[string]string) (*TorrentAddResponse, error) {
 	return c.AddTorrentsFromMemoryCtx(context.Background(), files, options)
 }
 
 // AddTorrentsFromMemoryCtx adds multiple torrents from memory in a single request.
 // qBittorrent's API accepts multiple "torrents" form fields, allowing batch uploads.
-func (c *Client) AddTorrentsFromMemoryCtx(ctx context.Context, files [][]byte, options map[string]string) error {
+func (c *Client) AddTorrentsFromMemoryCtx(ctx context.Context, files [][]byte, options map[string]string) (*TorrentAddResponse, error) {
 	if len(files) == 0 {
-		return nil
+		return nil, ErrEmptyInput
 	}
 
 	resp, err := c.postMultiMemoryCtx(ctx, "torrents/add", files, options)
 	if err != nil {
-		return errors.Wrap(err, "could not add torrents")
+		return nil, errors.Wrap(err, "could not add torrents")
 	}
 
 	defer drainAndClose(resp)
 
 	switch resp.StatusCode {
-	case http.StatusOK, http.StatusNoContent:
+	case http.StatusOK, http.StatusAccepted, http.StatusNoContent:
+		if strings.HasPrefix(resp.Header.Get("Content-Type"), "application/json") {
+			var res TorrentAddResponse
+			if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+				return nil, errors.Wrap(err, "could not unmarshal body")
+			}
+			return &res, nil
+		}
+
 		break
+	case http.StatusConflict:
+		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrents | conflicts detected")
+	case http.StatusUnsupportedMediaType:
+		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrents | torrent file not valid")
 	default:
-		return errors.Wrap(ErrUnexpectedStatus, "could not add torrents; status code: %d", resp.StatusCode)
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not add torrents | unexpected status code: %d", resp.StatusCode)
 	}
 
-	return nil
+	if !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/plain") {
+		return nil, errors.Wrap(ErrUnexpectedContentType, "could not add torrents | unexpected content-type: %s", resp.Header.Get("Content-Type"))
+	}
+
+	res := TorrentAddResponse{SuccessCount: 1}
+
+	return &res, nil
 }
 
 // AddTorrentFromFile add new torrent from torrent file
-func (c *Client) AddTorrentFromFile(filePath string, options map[string]string) error {
+func (c *Client) AddTorrentFromFile(filePath string, options map[string]string) (*TorrentAddResponse, error) {
 	return c.AddTorrentFromFileCtx(context.Background(), filePath, options)
 }
 
-func (c *Client) AddTorrentFromFileCtx(ctx context.Context, filePath string, options map[string]string) error {
-
+func (c *Client) AddTorrentFromFileCtx(ctx context.Context, filePath string, options map[string]string) (*TorrentAddResponse, error) {
 	resp, err := c.postFileCtx(ctx, "torrents/add", filePath, options)
 	if err != nil {
-		return errors.Wrap(err, "could not add torrent; filePath: %v", filePath)
+		return nil, errors.Wrap(err, "could not add torrent; filePath: %s", filePath)
 	}
 
 	defer drainAndClose(resp)
 
 	switch resp.StatusCode {
-	case http.StatusOK, http.StatusNoContent:
+	case http.StatusOK, http.StatusAccepted, http.StatusNoContent:
+		if strings.HasPrefix(resp.Header.Get("Content-Type"), "application/json") {
+			var res TorrentAddResponse
+			if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+				return nil, errors.Wrap(err, "could not unmarshal body")
+			}
+			return &res, nil
+		}
+
 		break
+	case http.StatusConflict:
+		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrent: file: %s | conflicts detected", filePath)
+	case http.StatusUnsupportedMediaType:
+		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrent: file: %s | torrent file not valid", filePath)
 	default:
-		return errors.Wrap(ErrUnexpectedStatus, "could not add torrent; filePath: %v | status code: %d", filePath, resp.StatusCode)
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not add torrent: file: %s | unexpected status code: %d", filePath, resp.StatusCode)
 	}
 
-	return nil
+	if !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/plain") {
+		return nil, errors.Wrap(ErrUnexpectedContentType, "could not add torrent: file: %s | unexpected content-type: %s", filePath, resp.Header.Get("Content-Type"))
+	}
+
+	res := TorrentAddResponse{SuccessCount: 1}
+
+	return &res, nil
 }
 
 // AddTorrentFromUrl add new torrent from torrent file
-func (c *Client) AddTorrentFromUrl(url string, options map[string]string) error {
+func (c *Client) AddTorrentFromUrl(url string, options map[string]string) (*TorrentAddResponse, error) {
 	return c.AddTorrentFromUrlCtx(context.Background(), url, options)
 }
 
-func (c *Client) AddTorrentFromUrlCtx(ctx context.Context, url string, options map[string]string) error {
+func (c *Client) AddTorrentFromUrlCtx(ctx context.Context, url string, options map[string]string) (*TorrentAddResponse, error) {
 	if url == "" {
-		return ErrNoTorrentURLProvided
+		return nil, ErrNoTorrentURLProvided
 	}
 
 	options["urls"] = url
 
 	resp, err := c.postCtx(ctx, "torrents/add", options)
 	if err != nil {
-		return errors.Wrap(err, "could not add torrent; url: %v", url)
+		return nil, errors.Wrap(err, "could not add torrent; url: %v", url)
 	}
 
 	defer drainAndClose(resp)
 
 	switch resp.StatusCode {
-	case http.StatusOK, http.StatusNoContent:
+	case http.StatusOK, http.StatusAccepted, http.StatusNoContent:
+		if strings.HasPrefix(resp.Header.Get("Content-Type"), "application/json") {
+			var res TorrentAddResponse
+			if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+				return nil, errors.Wrap(err, "could not unmarshal body")
+			}
+			return &res, nil
+		}
+
 		break
+	case http.StatusConflict:
+		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrent: url: %s | conflicts detected", url)
+	case http.StatusUnsupportedMediaType:
+		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrent: url: %s | torrent file not valid", url)
 	default:
-		return errors.Wrap(ErrUnexpectedStatus, "could not add torrent: url: %v | status code: %d", url, resp.StatusCode)
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not add torrent: url: %s | unexpected status code: %d", url, resp.StatusCode)
 	}
 
-	return nil
+	if !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/plain") {
+		return nil, errors.Wrap(ErrUnexpectedContentType, "could not add torrent: url: %s | unexpected content-type: %s", url, resp.Header.Get("Content-Type"))
+	}
+
+	res := TorrentAddResponse{SuccessCount: 1}
+
+	return &res, nil
+}
+
+// AddTorrentsFromUrlsCtx add multiple new torrents from urls
+func (c *Client) AddTorrentsFromUrlsCtx(ctx context.Context, urls []string, options map[string]string) (*TorrentAddResponse, error) {
+	if len(urls) == 0 {
+		return nil, ErrNoTorrentURLProvided
+	}
+
+	options["urls"] = strings.Join(urls, "\n")
+
+	resp, err := c.postCtx(ctx, "torrents/add", options)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not add torrents; urls: %v", urls)
+	}
+
+	defer drainAndClose(resp)
+
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusAccepted, http.StatusNoContent:
+		if strings.HasPrefix(resp.Header.Get("Content-Type"), "application/json") {
+			var res TorrentAddResponse
+			if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+				return nil, errors.Wrap(err, "could not unmarshal body")
+			}
+			return &res, nil
+		}
+
+		break
+	case http.StatusConflict:
+		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrents: urls: %v | conflicts detected", urls)
+	case http.StatusUnsupportedMediaType:
+		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrents: urls: %v | torrent file not valid", urls)
+	default:
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not add torrents: urls: %v | unexpected status code: %d", urls, resp.StatusCode)
+	}
+
+	if !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/plain") {
+		return nil, errors.Wrap(ErrUnexpectedContentType, "could not add torrents: urls: %v | unexpected content-type: %s", urls, resp.Header.Get("Content-Type"))
+	}
+
+	res := TorrentAddResponse{SuccessCount: 1}
+
+	return &res, nil
 }
 
 func (c *Client) DeleteTorrents(hashes []string, deleteFiles bool) error {
@@ -1350,7 +1464,7 @@ func (c *Client) SetFilePriorityCtx(ctx context.Context, hash string, IDs string
 	case http.StatusNotFound:
 		return errors.Wrap(ErrTorrentNotFound, "hash: %s", hash)
 	case http.StatusConflict:
-		return ErrTorrentMetdataNotDownloadedYet
+		return ErrTorrentMetadataNotDownloadedYet
 	case http.StatusOK, http.StatusNoContent:
 		return nil
 	default:

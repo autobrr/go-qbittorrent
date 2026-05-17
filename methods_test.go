@@ -294,7 +294,7 @@ func TestClient_RenameFile(t *testing.T) {
 		Password: qBittorrentPassword,
 	})
 
-	err := client.AddTorrentFromMemory([]byte(sampleTorrent), nil)
+	_, err := client.AddTorrentFromMemory([]byte(sampleTorrent), nil)
 	assert.NoError(t, err)
 	defer func(client *qbittorrent.Client) {
 		_ = client.DeleteTorrents([]string{sampleInfoHash}, false)
@@ -311,7 +311,7 @@ func TestClient_RenameFolder(t *testing.T) {
 		Password: qBittorrentPassword,
 	})
 
-	err := client.AddTorrentFromMemory([]byte(sampleTorrent), nil)
+	_, err := client.AddTorrentFromMemory([]byte(sampleTorrent), nil)
 	assert.NoError(t, err)
 	defer func(client *qbittorrent.Client) {
 		_ = client.DeleteTorrents([]string{sampleInfoHash}, false)
