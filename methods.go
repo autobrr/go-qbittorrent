@@ -708,7 +708,7 @@ func (c *Client) AddTorrentsFromMemoryCtx(ctx context.Context, files [][]byte, o
 
 		break
 	case http.StatusConflict:
-		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrents")
+		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrents | conflicts detected")
 	case http.StatusUnsupportedMediaType:
 		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrents | torrent file not valid")
 	default:
@@ -749,7 +749,7 @@ func (c *Client) AddTorrentFromFileCtx(ctx context.Context, filePath string, opt
 
 		break
 	case http.StatusConflict:
-		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrent: file: %s", filePath)
+		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrent: file: %s | conflicts detected", filePath)
 	case http.StatusUnsupportedMediaType:
 		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrent: file: %s | torrent file not valid", filePath)
 	default:
@@ -796,7 +796,7 @@ func (c *Client) AddTorrentFromUrlCtx(ctx context.Context, url string, options m
 
 		break
 	case http.StatusConflict:
-		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrent: url: %s", url)
+		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrent: url: %s | conflicts detected", url)
 	case http.StatusUnsupportedMediaType:
 		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrent: url: %s | torrent file not valid", url)
 	default:
@@ -839,7 +839,7 @@ func (c *Client) AddTorrentsFromUrlsCtx(ctx context.Context, urls []string, opti
 
 		break
 	case http.StatusConflict:
-		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrents: urls: %v", urls)
+		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrents: urls: %v | conflicts detected", urls)
 	case http.StatusUnsupportedMediaType:
 		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrents: urls: %v | torrent file not valid", urls)
 	default:
