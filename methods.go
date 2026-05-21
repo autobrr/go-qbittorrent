@@ -1374,6 +1374,37 @@ func (c *Client) SetCategoryCtx(ctx context.Context, hashes []string, category s
 	}
 }
 
+// Requires qBittorrent 5.2 and WebAPI >= 2.12.1.
+func (c *Client) SetComment(hashes []string, comment string) error {
+	return c.SetCommentCtx(context.Background(), hashes, comment)
+}
+
+func (c *Client) SetCommentCtx(ctx context.Context, hashes []string, comment string) error {
+	if ok, err := c.RequiresMinVersion(semver.MustParse("2.12.1")); !ok {
+		return errors.Wrap(err, "SetComment requires qBittorrent 5.2 and WebAPI >= 2.12.1")
+	}
+
+	hv := strings.Join(hashes, "|")
+	opts := map[string]string{
+		"hashes":  hv,
+		"comment": comment,
+	}
+
+	resp, err := c.postCtx(ctx, "torrents/setComment", opts)
+	if err != nil {
+		return errors.Wrap(err, "could not set comment; hashes: %v", hashes)
+	}
+
+	defer drainAndClose(resp)
+
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		return nil
+	default:
+		return errors.Wrap(ErrUnexpectedStatus, "could not set comment; hashes: %v | status code: %d", hashes, resp.StatusCode)
+	}
+}
+
 func (c *Client) GetCategories() (map[string]Category, error) {
 	return c.GetCategoriesCtx(context.Background())
 }
