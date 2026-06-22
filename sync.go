@@ -14,18 +14,19 @@ import (
 // SyncManager manages synchronization of MainData updates and provides
 // a consistent view of the qBittorrent state across partial updates.
 type SyncManager struct {
-	mu               sync.RWMutex
-	data             *MainData
-	rid              int64
-	lastSync         time.Time
-	lastSyncDuration time.Duration
-	lastError        error
-	client           *Client
-	trackerManager   *TrackerManager
-	syncGroup        singleflight.Group
-	options          SyncOptions
-	allTorrents      []Torrent
-	resultPool       sync.Pool
+	mu                 sync.RWMutex
+	data               *MainData
+	rid                int64
+	lastSync           time.Time
+	lastSuccessfulSync time.Time
+	lastSyncDuration   time.Duration
+	lastError          error
+	client             *Client
+	trackerManager     *TrackerManager
+	syncGroup          singleflight.Group
+	options            SyncOptions
+	allTorrents        []Torrent
+	resultPool         sync.Pool
 }
 
 // SyncOptions configures the behavior of the sync manager
@@ -129,6 +130,12 @@ func (sm *SyncManager) doSync(ctx context.Context) (interface{}, error) {
 	defer func() {
 		sm.lastSyncDuration = time.Since(startTime)
 		sm.lastSync = time.Now()
+		// lastSync records every attempt (used internally to pace syncs), but
+		// lastSuccessfulSync only advances when the data actually updated, so
+		// callers can tell how fresh the cached data really is during a failure.
+		if err == nil {
+			sm.lastSuccessfulSync = sm.lastSync
+		}
 		sm.lastError = err
 		sm.mu.Unlock()
 	}()
@@ -391,12 +398,25 @@ func (sm *SyncManager) GetTagsUnchecked() []string {
 	return slices.Clone(sm.data.Tags)
 }
 
-// LastSyncTime returns the time of the last successful sync
+// LastSyncTime returns the time of the last sync attempt, whether it succeeded
+// or failed. To know how fresh the cached data actually is, use
+// LastSuccessfulSyncTime instead.
 func (sm *SyncManager) LastSyncTime() time.Time {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 
 	return sm.lastSync
+}
+
+// LastSuccessfulSyncTime returns the time of the last sync that completed
+// without error. Unlike LastSyncTime it does not advance on failed syncs, so it
+// is the reliable signal for how stale the cached data has become while syncs
+// are timing out or failing.
+func (sm *SyncManager) LastSuccessfulSyncTime() time.Time {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+
+	return sm.lastSuccessfulSync
 }
 
 // LastSyncDuration returns the duration of the last sync operation
