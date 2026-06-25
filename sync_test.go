@@ -48,6 +48,13 @@ func (m *mockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 	}, nil
 }
 
+// roundTripFunc adapts a function into an http.RoundTripper so a test can drive
+// a real Client's request path (login skipped via API key auth) to a
+// deterministic success or failure without touching the network.
+type roundTripFunc func(req *http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
+
 func NewMockClient() *MockClient {
 	// Create a mock transport that returns mock responses
 	mockTransport := &mockRoundTripper{}
@@ -871,6 +878,72 @@ func TestSyncManager_LastError(t *testing.T) {
 	err = syncManager.LastError()
 	if err != context.DeadlineExceeded {
 		t.Errorf("Expected DeadlineExceeded, got %v", err)
+	}
+}
+
+// newSyncManagerWithTransport builds a SyncManager whose client uses API key
+// auth (so the request path skips login) and a single attempt (so a failing
+// request returns immediately instead of retrying), with its transport driven
+// by rt. This lets the tests exercise the real doSync path deterministically.
+func newSyncManagerWithTransport(rt roundTripFunc) *SyncManager {
+	client := NewClient(Config{Host: "http://qbit.test", APIKey: "test-key", RetryAttempts: 1})
+	client.http.Transport = rt
+	return NewSyncManager(client)
+}
+
+func TestSyncManager_LastSuccessfulSyncTimeAdvancesOnSuccess(t *testing.T) {
+	body := []byte(`{"rid":1,"full_update":true,"torrents":{},"categories":{},"tags":[],"server_state":{}}`)
+	sm := newSyncManagerWithTransport(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewReader(body)),
+			Header:     make(http.Header),
+		}, nil
+	})
+
+	before := time.Now()
+	if err := sm.Sync(context.Background()); err != nil {
+		t.Fatalf("expected a successful sync, got error: %v", err)
+	}
+
+	if got := sm.LastSuccessfulSyncTime(); got.Before(before) {
+		t.Errorf("LastSuccessfulSyncTime should advance on a successful sync: got %v, before %v", got, before)
+	}
+	if err := sm.LastError(); err != nil {
+		t.Errorf("expected no LastError after a successful sync, got %v", err)
+	}
+}
+
+// TestSyncManager_LastSuccessfulSyncTimeUnchangedOnFailure is the regression
+// guard for the bug this change fixes: lastSync is stamped on every attempt, so
+// a failed sync makes LastSyncTime() report "fresh" even though the cached data
+// did not update. LastSuccessfulSyncTime() must stay put across a failed sync so
+// callers can derive an honest data age.
+func TestSyncManager_LastSuccessfulSyncTimeUnchangedOnFailure(t *testing.T) {
+	sm := newSyncManagerWithTransport(func(req *http.Request) (*http.Response, error) {
+		return nil, context.DeadlineExceeded
+	})
+
+	// Seed a prior successful sync at a clearly-old time.
+	priorSuccess := time.Now().Add(-time.Hour)
+	sm.lastSync = priorSuccess
+	sm.lastSuccessfulSync = priorSuccess
+
+	if err := sm.Sync(context.Background()); err == nil {
+		t.Fatal("expected the sync to fail")
+	}
+
+	if sm.LastError() == nil {
+		t.Error("expected LastError to be set after a failed sync")
+	}
+	// The attempt clock still advances; that is existing behavior we preserve.
+	if !sm.LastSyncTime().After(priorSuccess) {
+		t.Error("LastSyncTime (last attempted sync) should advance on a failed sync")
+	}
+	// The success clock must not move: this is the actual fix.
+	if !sm.LastSuccessfulSyncTime().Equal(priorSuccess) {
+		t.Errorf("LastSuccessfulSyncTime must not advance on a failed sync: got %v, want %v",
+			sm.LastSuccessfulSyncTime(), priorSuccess)
 	}
 }
 
