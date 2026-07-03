@@ -122,47 +122,81 @@ func (sm *SyncManager) Sync(ctx context.Context) error {
 	return err
 }
 
-// doSync performs the actual sync operation (singleflight-compatible signature)
+// doSync performs the actual sync operation (singleflight-compatible signature).
+// Concurrent Sync callers are collapsed by the singleflight group, so doSync
+// never runs concurrently with itself and the network fetch needs no lock.
+// Keeping the mutex out of the fetch is load-bearing: holding it across the
+// round-trip parks every reader (including the *Unchecked getters) for the
+// full request duration whenever the server responds slowly.
 func (sm *SyncManager) doSync(ctx context.Context) (interface{}, error) {
 	startTime := time.Now()
-	var err error = nil
 
-	defer func() {
-		sm.lastSyncDuration = time.Since(startTime)
-		sm.lastSync = time.Now()
-		// lastSync records every attempt (used internally to pace syncs), but
-		// lastSuccessfulSync only advances when the data actually updated, so
-		// callers can tell how fresh the cached data really is during a failure.
-		if err == nil {
-			sm.lastSuccessfulSync = sm.lastSync
-		}
-		sm.lastError = err
-		sm.mu.Unlock()
-	}()
-
-	// Initialize data if needed
-	if sm.data == nil {
-		sm.data = &MainData{}
+	sm.mu.RLock()
+	var rid int64
+	if sm.data != nil {
+		rid = sm.data.Rid
 	}
+	sm.mu.RUnlock()
 
-	sm.mu.Lock()
-	if err = sm.data.Update(ctx, sm.client); err != nil {
+	source, rawData, err := sm.client.SyncMainDataCtxWithRaw(ctx, rid)
+
+	update := sm.applySyncResult(source, rawData, startTime, err)
+
+	// Callbacks run after the mutex is released so implementations can safely
+	// read back from the sync manager (the *Unchecked getters, LastError,
+	// LastSuccessfulSyncTime, ...): a callback invoked under the lock that
+	// re-entered any getter self-deadlocked on the non-reentrant RWMutex.
+	// Calling Sync (or a checked getter once data is stale) from a callback
+	// still deadlocks: it would join the singleflight call it is running in.
+	if err != nil {
 		if sm.options.OnError != nil {
 			sm.options.OnError(err)
 		}
 		return nil, err
 	}
-
-	sm.rid = sm.data.Rid
-	// Update cached torrent slice
-	sm.updateAllTorrents()
-
-	// Call update callback if set
-	if sm.options.OnUpdate != nil {
-		sm.options.OnUpdate(sm.copyMainData(sm.data))
+	if update != nil && sm.options.OnUpdate != nil {
+		sm.options.OnUpdate(update)
 	}
 
 	return nil, nil
+}
+
+// applySyncResult merges a fetched sync response and updates the sync clocks
+// under a brief write lock. It returns a deep copy of the merged data when an
+// OnUpdate callback needs to be invoked.
+func (sm *SyncManager) applySyncResult(source *MainData, rawData map[string]interface{}, startTime time.Time, syncErr error) *MainData {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	// Initialize even when the sync failed: a nil sm.data would make
+	// ensureFreshData treat every subsequent checked-getter call as a cold
+	// cache and fire an unpaced blocking sync per call against an instance
+	// that is already known to be down.
+	if sm.data == nil {
+		sm.data = &MainData{}
+	}
+
+	var update *MainData
+	if syncErr == nil {
+		sm.data.applySync(source, rawData)
+		sm.rid = sm.data.Rid
+		// Update cached torrent slice
+		sm.updateAllTorrents()
+		if sm.options.OnUpdate != nil {
+			update = sm.copyMainData(sm.data)
+		}
+	}
+
+	sm.lastSyncDuration = time.Since(startTime)
+	sm.lastSync = time.Now()
+	// lastSync records every attempt (used internally to pace syncs), but
+	// lastSuccessfulSync only advances when the data actually updated, so
+	// callers can tell how fresh the cached data really is during a failure.
+	if syncErr == nil {
+		sm.lastSuccessfulSync = sm.lastSync
+	}
+	sm.lastError = syncErr
+	return update
 }
 
 func (sm *SyncManager) updateAllTorrents() {
