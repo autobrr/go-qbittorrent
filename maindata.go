@@ -45,21 +45,28 @@ func (dest *MainData) ensureInitialized() {
 }
 
 func (dest *MainData) Update(ctx context.Context, c *Client) error {
-	source, rawData, err := c.SyncMainDataCtxWithRaw(ctx, int64(dest.Rid))
+	source, rawData, err := c.SyncMainDataCtxWithRaw(ctx, dest.Rid)
 	if err != nil {
 		return err
 	}
 
+	dest.applySync(source, rawData)
+	return nil
+}
+
+// applySync merges an already-fetched maindata response into dest. It is
+// Update without the network call, so callers can perform the fetch without
+// holding whatever lock guards dest.
+func (dest *MainData) applySync(source *MainData, rawData map[string]interface{}) {
 	// If this is a partial update (FullUpdate is false), use UpdateWithRawData
 	if !source.FullUpdate {
 		dest.UpdateWithRawData(rawData, source)
-		return nil
+		return
 	}
 
 	// For full updates, replace everything
 	*dest = *source
 	dest.ensureInitialized()
-	return nil
 }
 
 // UpdateWithRawData efficiently merges partial updates using raw JSON data
