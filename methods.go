@@ -1850,8 +1850,10 @@ func (c *Client) EditTracker(hash string, old, new string) error {
 // EditTrackerCtx edit tracker of torrent
 func (c *Client) EditTrackerCtx(ctx context.Context, hash string, old, new string) error {
 	opts := map[string]string{
-		"hash":    hash,
+		"hash": hash,
+		// WebAPI 2.13.0 renamed origUrl to url; send both.
 		"origUrl": old,
+		"url":     old,
 		"newUrl":  new,
 	}
 
