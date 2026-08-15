@@ -413,7 +413,8 @@ func (sm *SyncManager) GetCategoriesUnchecked() map[string]Category {
 	return maps.Clone(sm.data.Categories)
 }
 
-// GetTrackers returns a copy of the tracker URL to torrent hashes map
+// GetTrackers returns a copy of the tracker URL to torrent hashes map.
+// The hash slices alias the cached data; callers must not modify them.
 func (sm *SyncManager) GetTrackers() map[string][]string {
 	sm.ensureFreshData()
 	return sm.GetTrackersUnchecked()
