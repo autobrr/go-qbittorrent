@@ -634,6 +634,27 @@ func TestSyncManager_CopyMainData(t *testing.T) {
 	}
 }
 
+func TestSyncManager_GetTrackersUnchecked(t *testing.T) {
+	sm := &SyncManager{}
+
+	if trackers := sm.GetTrackersUnchecked(); trackers != nil {
+		t.Error("Expected nil trackers when not initialized")
+	}
+
+	sm.data = &MainData{
+		Trackers: map[string][]string{
+			"http://tracker.example.invalid/announce": {"abc123"},
+		},
+	}
+
+	// Mutating the result must not reach sm.data, which the sync loop writes.
+	trackers := sm.GetTrackersUnchecked()
+	trackers["http://other.example.invalid/announce"] = []string{"def456"}
+	if len(sm.data.Trackers) != 1 {
+		t.Error("Modifying returned map affected cached data")
+	}
+}
+
 func TestSyncManager_DynamicSync(t *testing.T) {
 	client := NewClient(Config{Host: "http://localhost:8080"})
 	options := SyncOptions{
