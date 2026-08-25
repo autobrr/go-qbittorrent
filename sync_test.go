@@ -349,13 +349,14 @@ func TestMergeTorrents(t *testing.T) {
 
 	// Add an existing torrent
 	existing := Torrent{
-		Hash:     "abc123",
-		Name:     "Test Torrent",
-		Progress: 0.5,
-		DlSpeed:  1000,
-		UpSpeed:  500,
-		State:    "downloading",
-		Category: "test",
+		Hash:        "abc123",
+		HasMetadata: ptr(true),
+		Name:        "Test Torrent",
+		Progress:    0.5,
+		DlSpeed:     1000,
+		UpSpeed:     500,
+		State:       "downloading",
+		Category:    "test",
 	}
 	sm.data.Torrents["abc123"] = existing
 
@@ -363,9 +364,10 @@ func TestMergeTorrents(t *testing.T) {
 	rawData := map[string]interface{}{
 		"torrents": map[string]interface{}{
 			"abc123": map[string]interface{}{
-				"progress": 0.75,
-				"dlspeed":  float64(1500),
-				"state":    "downloading",
+				"progress":     0.75,
+				"dlspeed":      float64(1500),
+				"state":        "downloading",
+				"has_metadata": false,
 				// Note: upspeed, category, etc. are NOT present in this update
 			},
 		},
@@ -402,6 +404,9 @@ func TestMergeTorrents(t *testing.T) {
 
 	if merged.Category != "test" {
 		t.Errorf("Expected category preserved, got %s", merged.Category)
+	}
+	if merged.HasMetadata == nil || *merged.HasMetadata {
+		t.Fatalf("Expected has_metadata false, got %v", merged.HasMetadata)
 	}
 }
 

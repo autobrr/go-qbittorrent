@@ -1,10 +1,40 @@
 package qbittorrent
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func TestTorrentHasMetadataJSON(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		json string
+		want *bool
+	}{
+		{name: "available", json: `{"has_metadata":true}`, want: ptr(true)},
+		{name: "unavailable", json: `{"has_metadata":false}`, want: ptr(false)},
+		{name: "unsupported", json: `{}`, want: nil},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var torrent Torrent
+			require.NoError(t, json.Unmarshal([]byte(tt.json), &torrent))
+			assert.Equal(t, tt.want, torrent.HasMetadata)
+		})
+	}
+}
+
+func ptr[T any](value T) *T {
+	return &value
+}
 
 func TestTorrentAddOptions_Prepare(t *testing.T) {
 	type fields struct {

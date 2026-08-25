@@ -136,6 +136,13 @@ func updateTorrentHash(val interface{}, obj *Torrent) {
 	}
 }
 
+// updateTorrentHasMetadata updates the HasMetadata field of Torrent
+func updateTorrentHasMetadata(val interface{}, obj *Torrent) {
+	if h, ok := val.(bool); ok {
+		obj.HasMetadata = &h
+	}
+}
+
 // updateTorrentInfohashV1 updates the InfohashV1 field of Torrent
 func updateTorrentInfohashV1(val interface{}, obj *Torrent) {
 	if i, ok := val.(string); ok {
@@ -446,6 +453,7 @@ var torrentFieldUpdaters = map[string]func(val interface{}, obj *Torrent){
 	"f_l_piece_prio": updateTorrentFirstLastPiecePrio,
 	"force_start": updateTorrentForceStart,
 	"hash": updateTorrentHash,
+	"has_metadata": updateTorrentHasMetadata,
 	"infohash_v1": updateTorrentInfohashV1,
 	"infohash_v2": updateTorrentInfohashV2,
 	"popularity": updateTorrentPopularity,
