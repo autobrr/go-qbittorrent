@@ -74,6 +74,7 @@ type Torrent struct {
 	FirstLastPiecePrio       bool             `json:"f_l_piece_prio"`
 	ForceStart               bool             `json:"force_start"`
 	Hash                     string           `json:"hash"`
+	HasMetadata              *bool            `json:"has_metadata"`
 	InfohashV1               string           `json:"infohash_v1"`
 	InfohashV2               string           `json:"infohash_v2"`
 	Popularity               float64          `json:"popularity"`
