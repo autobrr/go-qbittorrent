@@ -993,32 +993,37 @@ func (c *Client) SyncMainDataCtxWithRaw(ctx context.Context, rid int64) (*MainDa
 		return nil, nil, errors.Wrap(ErrUnexpectedStatus, "could not get main data; status code: %d", resp.StatusCode)
 	}
 
+	return decodeMainData(resp.Body)
+}
+
+func decodeMainData(body io.Reader) (*MainData, map[string]interface{}, error) {
 	rp, wp := io.Pipe()
+	rawDone := make(chan error, 1)
+
 	var rawData map[string]interface{}
-	var mapErr error
 	go func() {
-		defer wp.Close()
-		mapErr = json.NewDecoder(io.TeeReader(resp.Body, wp)).Decode(&rawData)
-		if mapErr == nil {
-			normalizeHashesRaw(rawData)
-		}
+		err := json.NewDecoder(io.TeeReader(body, wp)).Decode(&rawData)
+		_ = wp.CloseWithError(err)
+		rawDone <- err
 	}()
 
-	// Then decode into structured MainData
 	var info MainData
-	if err := json.NewDecoder(rp).Decode(&info); err != nil {
-		return nil, nil, errors.Wrap(err, "could not unmarshal body")
+	typedErr := json.NewDecoder(rp).Decode(&info)
+	if typedErr != nil {
+		// Unblock the raw decoder if the structured decoder stops reading.
+		_ = rp.CloseWithError(typedErr)
 	}
 
-	io.Copy(io.Discard, rp)
-
-	if mapErr != nil {
-		return nil, nil, errors.Wrap(mapErr, "could not unmarshal body to map")
+	rawErr := <-rawDone
+	if typedErr != nil {
+		return nil, nil, errors.Wrap(typedErr, "could not unmarshal body")
+	}
+	if rawErr != nil {
+		return nil, nil, errors.Wrap(rawErr, "could not unmarshal body to map")
 	}
 
 	normalizeHashes(info.Torrents)
 	return &info, rawData, nil
-
 }
 
 func (c *Client) Pause(hashes []string) error {
