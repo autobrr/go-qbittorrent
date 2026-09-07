@@ -972,6 +972,11 @@ func (t *torrentCreationTime) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return errors.Wrap(err, "invalid torrent creation date")
 	}
+	if seconds < 0 {
+		// qBittorrent sends -1 when the task has no valid date.
+		*t = ""
+		return nil
+	}
 	date := time.Unix(seconds, 0).UTC()
 	if date.Year() < 0 || date.Year() > 9999 {
 		return errors.New("torrent creation date is outside the RFC3339 range")

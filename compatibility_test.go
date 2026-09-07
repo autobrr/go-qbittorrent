@@ -183,7 +183,7 @@ func TestTorrentCreationDateCompatibility(t *testing.T) {
 	}{
 		{"legacy", `"timeAdded":"Mon Sep 7 08:00:00 2026","timeStarted":"Mon Sep 7 08:00:01 2026","timeFinished":"Mon Sep 7 08:00:02 2026"`, [3]string{"Mon Sep 7 08:00:00 2026", "Mon Sep 7 08:00:01 2026", "Mon Sep 7 08:00:02 2026"}, false},
 		{"numeric", `"timeAdded":0,"timeStarted":1,"timeFinished":2`, [3]string{"1970-01-01T00:00:00Z", "1970-01-01T00:00:01Z", "1970-01-01T00:00:02Z"}, false},
-		{"optional dates omitted", `"timeAdded":-1`, [3]string{"1969-12-31T23:59:59Z", "", ""}, false},
+		{"optional dates omitted", `"timeAdded":-1`, [3]string{"", "", ""}, false},
 		{"mixed", `"timeAdded":"Mon Sep 7 08:00:00 2026","timeStarted":2147483648`, [3]string{"Mon Sep 7 08:00:00 2026", "2038-01-19T03:14:08Z", ""}, false},
 		{"object", `"timeAdded":{}`, [3]string{}, true},
 		{"boolean", `"timeStarted":true`, [3]string{}, true},
