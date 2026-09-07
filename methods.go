@@ -2906,6 +2906,45 @@ func (c *Client) GetFreeSpaceOnDiskCtx(ctx context.Context) (int64, error) {
 	return info.ServerState.FreeSpaceOnDisk, nil
 }
 
+// GetFreeSpaceAtPath returns free bytes at path on the qBittorrent host.
+// It requires qBittorrent 5.3 and WebAPI 2.15.2 or later. A negative result means free space is unavailable.
+func (c *Client) GetFreeSpaceAtPath(path string) (int64, error) {
+	return c.GetFreeSpaceAtPathCtx(context.Background(), path)
+}
+
+// GetFreeSpaceAtPathCtx returns free bytes at path on the qBittorrent host.
+// It requires qBittorrent 5.3 and WebAPI 2.15.2 or later. A negative result means free space is unavailable.
+// If path does not exist, qBittorrent queries its parent directories.
+func (c *Client) GetFreeSpaceAtPathCtx(ctx context.Context, path string) (int64, error) {
+	if ok, err := c.RequiresMinVersion(semver.MustParse("2.15.2")); !ok {
+		return 0, errors.Wrap(err, "GetFreeSpaceAtPath requires qBittorrent 5.3 and WebAPI >= 2.15.2")
+	}
+
+	opts := map[string]string{"path": path}
+	resp, err := c.getCtx(ctx, "app/getFreeSpaceAtPath", opts)
+	if err != nil {
+		return 0, errors.Wrap(err, "could not get free space at path")
+	}
+
+	defer drainAndClose(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, errors.Wrap(ErrUnexpectedStatus, "could not get free space at path; status code: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return 0, errors.Wrap(err, "could not read body")
+	}
+
+	freeSpace, err := strconv.ParseInt(string(body), 10, 64)
+	if err != nil {
+		return 0, errors.Wrap(err, "could not parse free space at path")
+	}
+
+	return freeSpace, nil
+}
+
 // RequiresMinVersion checks the current version against version X and errors if the current version is older than X
 func (c *Client) RequiresMinVersion(minVersion *semver.Version) (bool, error) {
 	version, err := c.getApiVersion()
