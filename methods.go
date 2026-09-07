@@ -2574,15 +2574,19 @@ func (c *Client) GetFreeSpaceOnDiskCtx(ctx context.Context) (int64, error) {
 }
 
 // GetFreeSpaceAtPath returns free bytes at path on the qBittorrent host.
-// It requires WebAPI 2.15.2 or later. A negative result means free space is unavailable.
+// It requires qBittorrent 5.3 and WebAPI 2.15.2 or later. A negative result means free space is unavailable.
 func (c *Client) GetFreeSpaceAtPath(path string) (int64, error) {
 	return c.GetFreeSpaceAtPathCtx(context.Background(), path)
 }
 
 // GetFreeSpaceAtPathCtx returns free bytes at path on the qBittorrent host.
-// It requires WebAPI 2.15.2 or later. A negative result means free space is unavailable.
+// It requires qBittorrent 5.3 and WebAPI 2.15.2 or later. A negative result means free space is unavailable.
 // If path does not exist, qBittorrent queries its parent directories.
 func (c *Client) GetFreeSpaceAtPathCtx(ctx context.Context, path string) (int64, error) {
+	if ok, err := c.RequiresMinVersion(semver.MustParse("2.15.2")); !ok {
+		return 0, errors.Wrap(err, "GetFreeSpaceAtPath requires qBittorrent 5.3 and WebAPI >= 2.15.2")
+	}
+
 	opts := map[string]string{"path": path}
 	resp, err := c.getCtx(ctx, "app/getFreeSpaceAtPath", opts)
 	if err != nil {

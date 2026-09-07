@@ -1,6 +1,7 @@
 package qbittorrent
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"net/http"
@@ -14,28 +15,33 @@ func TestClient_GetFreeSpaceAtPathCtx(t *testing.T) {
 
 	for _, tt := range []struct {
 		name    string
+		apiVer  string
 		body    string
 		status  int
 		want    int64
 		wantErr error
 	}{
-		{"positive", "1099511627776", http.StatusOK, 1099511627776, nil},
-		{"zero", "0", http.StatusOK, 0, nil},
-		{"unavailable", "-1", http.StatusOK, -1, nil},
-		{"negative", "-42", http.StatusOK, -42, nil},
-		{"max int64", "9223372036854775807", http.StatusOK, 9223372036854775807, nil},
-		{"min int64", "-9223372036854775808", http.StatusOK, -9223372036854775808, nil},
-		{"empty", "", http.StatusOK, 0, strconv.ErrSyntax},
-		{"invalid", "unavailable", http.StatusOK, 0, strconv.ErrSyntax},
-		{"fraction", "1.5", http.StatusOK, 0, strconv.ErrSyntax},
-		{"trailing data", "123\n456", http.StatusOK, 0, strconv.ErrSyntax},
-		{"overflow", "9223372036854775808", http.StatusOK, 0, strconv.ErrRange},
-		{"underflow", "-9223372036854775809", http.StatusOK, 0, strconv.ErrRange},
-		{"unsupported server", "Not Found", http.StatusNotFound, 0, ErrUnexpectedStatus},
-		{"bad request", "Bad Request", http.StatusBadRequest, 0, ErrUnexpectedStatus},
+		{"positive", "", "1099511627776", http.StatusOK, 1099511627776, nil},
+		{"zero", "", "0", http.StatusOK, 0, nil},
+		{"unavailable", "", "-1", http.StatusOK, -1, nil},
+		{"negative", "", "-42", http.StatusOK, -42, nil},
+		{"max int64", "", "9223372036854775807", http.StatusOK, 9223372036854775807, nil},
+		{"min int64", "", "-9223372036854775808", http.StatusOK, -9223372036854775808, nil},
+		{"empty", "", "", http.StatusOK, 0, strconv.ErrSyntax},
+		{"invalid", "", "unavailable", http.StatusOK, 0, strconv.ErrSyntax},
+		{"fraction", "", "1.5", http.StatusOK, 0, strconv.ErrSyntax},
+		{"trailing data", "", "123\n456", http.StatusOK, 0, strconv.ErrSyntax},
+		{"overflow", "", "9223372036854775808", http.StatusOK, 0, strconv.ErrRange},
+		{"underflow", "", "-9223372036854775809", http.StatusOK, 0, strconv.ErrRange},
+		{"unsupported server", "", "Not Found", http.StatusNotFound, 0, ErrUnexpectedStatus},
+		{"bad request", "", "Bad Request", http.StatusBadRequest, 0, ErrUnexpectedStatus},
+		{"old server", "2.15.1", "", 0, 0, ErrUnsupportedVersion},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			mux := http.NewServeMux()
+			mux.HandleFunc("GET /api/v2/app/webapiVersion", func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(cmp.Or(tt.apiVer, "2.15.2")))
+			})
 			mux.HandleFunc("GET /api/v2/app/getFreeSpaceAtPath", func(w http.ResponseWriter, r *http.Request) {
 				query := r.URL.Query()
 				if len(query) != 1 || len(query["path"]) != 1 || query.Get("path") != path {
@@ -61,9 +67,14 @@ func TestClient_GetFreeSpaceAtPathCtx(t *testing.T) {
 }
 
 func TestClient_GetFreeSpaceAtPathCtx_Canceled(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v2/app/webapiVersion", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("2.15.2"))
+	})
+	mux.HandleFunc("GET /api/v2/app/getFreeSpaceAtPath", func(http.ResponseWriter, *http.Request) {
 		t.Error("canceled request reached the server")
-	}))
+	})
+	server := httptest.NewServer(mux)
 	defer server.Close()
 	client := NewClient(Config{Host: server.URL, RetryAttempts: 1})
 	ctx, cancel := context.WithCancel(t.Context())
