@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"maps"
 	"net/http"
 	"strconv"
 	"strings"
@@ -775,9 +776,11 @@ func (c *Client) AddTorrentFromUrlCtx(ctx context.Context, url string, options m
 		return nil, ErrNoTorrentURLProvided
 	}
 
-	options["urls"] = url
+	form := make(map[string]string, len(options)+1)
+	maps.Copy(form, options)
+	form["urls"] = url
 
-	resp, err := c.postCtx(ctx, "torrents/add", options)
+	resp, err := c.postCtx(ctx, "torrents/add", form)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not add torrent; url: %v", url)
 	}
@@ -818,9 +821,11 @@ func (c *Client) AddTorrentsFromUrlsCtx(ctx context.Context, urls []string, opti
 		return nil, ErrNoTorrentURLProvided
 	}
 
-	options["urls"] = strings.Join(urls, "\n")
+	form := make(map[string]string, len(options)+1)
+	maps.Copy(form, options)
+	form["urls"] = strings.Join(urls, "\n")
 
-	resp, err := c.postCtx(ctx, "torrents/add", options)
+	resp, err := c.postCtx(ctx, "torrents/add", form)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not add torrents; urls: %v", urls)
 	}
@@ -2520,7 +2525,9 @@ func (c *Client) SetTorrentSuperSeedingCtx(ctx context.Context, hashes []string,
 }
 
 // ShareLimitOptions defines share limit settings for torrents.
-// ShareLimitAction and ShareLimitsMode were added in webapi 2.12.
+// ShareLimitAction requires WebAPI 2.12. ShareLimitsMode requires WebAPI 2.15.3.
+// From WebAPI 2.15.2, time limits use signed 32-bit minutes, at most 2147483647.
+// Use -2 for the global limit and -1 for no limit.
 //
 // ShareLimitAction and ShareLimitsMode must be Qt meta enum key names as used
 // by the WebUI (see Utils::String::toEnum in qBittorrent). Numeric strings such
@@ -2535,11 +2542,11 @@ type ShareLimitOptions struct {
 
 // Share limit action names for SetTorrentShareLimit (BitTorrent::ShareLimitAction).
 const (
-	ShareLimitActionDefault             = "Default"
-	ShareLimitActionStop                = "Stop"
-	ShareLimitActionRemove              = "Remove"
-	ShareLimitActionEnableSuperSeeding  = "EnableSuperSeeding"
-	ShareLimitActionRemoveWithContent   = "RemoveWithContent"
+	ShareLimitActionDefault            = "Default"
+	ShareLimitActionStop               = "Stop"
+	ShareLimitActionRemove             = "Remove"
+	ShareLimitActionEnableSuperSeeding = "EnableSuperSeeding"
+	ShareLimitActionRemoveWithContent  = "RemoveWithContent"
 )
 
 // Share limits mode names for SetTorrentShareLimit (BitTorrent::ShareLimitsMode).

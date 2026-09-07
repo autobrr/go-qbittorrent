@@ -3,6 +3,7 @@ package qbittorrent
 import (
 	"encoding/json"
 	"strconv"
+	"time"
 
 	"github.com/autobrr/go-qbittorrent/errors"
 )
@@ -714,6 +715,14 @@ type AppPreferences struct {
 	WebUIUpnp                          bool             `json:"web_ui_upnp"`
 	WebUIUseCustomHTTPHeadersEnabled   bool             `json:"web_ui_use_custom_http_headers_enabled"`
 	WebUIUsername                      string           `json:"web_ui_username"`
+
+	// qBittorrent 5.3 preferences.
+	MailNotificationEncryptionType       string `json:"mail_notification_encryption_type"` // None, STARTTLS, or SMTPS
+	RemoveTorrentFileBackup              bool   `json:"remove_torrent_file_backup"`
+	TorrentFilesBackupEnabled            bool   `json:"torrent_files_backup_enabled"`
+	TorrentFilesBackupDir                string `json:"torrent_files_backup_dir"`
+	TorrentFilesFinishedBackupDirEnabled bool   `json:"torrent_files_finished_backup_dir_enabled"`
+	TorrentFilesFinishedBackupDir        string `json:"torrent_files_finished_backup_dir"`
 }
 
 type MainData struct {
@@ -913,7 +922,8 @@ type TorrentCreationParams struct {
 	StartSeeding        *bool         `json:"startSeeding,omitempty"` // nil = default (true), false = don't seed, true = seed
 }
 
-// TorrentCreationTask represents a torrent creation task
+// TorrentCreationTask represents a torrent creation task.
+// Dates retain legacy strings. Numeric Unix seconds become UTC RFC3339 strings.
 type TorrentCreationTask struct {
 	TaskID              string                `json:"taskID"`
 	SourcePath          string                `json:"sourcePath"`
@@ -933,6 +943,41 @@ type TorrentCreationTask struct {
 	TimeFinished        string                `json:"timeFinished,omitempty"`
 	Progress            float64               `json:"progress,omitempty"`
 	ErrorMessage        string                `json:"errorMessage,omitempty"`
+}
+
+func (t *TorrentCreationTask) UnmarshalJSON(data []byte) error {
+	type task TorrentCreationTask
+	wire := struct {
+		*task
+		TimeAdded    torrentCreationTime `json:"timeAdded"`
+		TimeStarted  torrentCreationTime `json:"timeStarted"`
+		TimeFinished torrentCreationTime `json:"timeFinished"`
+	}{task: (*task)(t)}
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+	t.TimeAdded = string(wire.TimeAdded)
+	t.TimeStarted = string(wire.TimeStarted)
+	t.TimeFinished = string(wire.TimeFinished)
+	return nil
+}
+
+type torrentCreationTime string
+
+func (t *torrentCreationTime) UnmarshalJSON(data []byte) error {
+	if len(data) > 0 && data[0] == '"' {
+		return json.Unmarshal(data, (*string)(t))
+	}
+	seconds, err := strconv.ParseInt(string(data), 10, 64)
+	if err != nil {
+		return errors.Wrap(err, "invalid torrent creation date")
+	}
+	date := time.Unix(seconds, 0).UTC()
+	if date.Year() < 0 || date.Year() > 9999 {
+		return errors.New("torrent creation date is outside the RFC3339 range")
+	}
+	*t = torrentCreationTime(date.Format(time.RFC3339))
+	return nil
 }
 
 // TorrentCreationTaskResponse represents the response when adding a torrent creation task

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"maps"
 	"math/rand"
 	"mime/multipart"
 	"net"
@@ -49,6 +50,7 @@ func (c *Client) getCtx(ctx context.Context, endpoint string, opts map[string]st
 }
 
 func (c *Client) postCtx(ctx context.Context, endpoint string, opts map[string]string) (*http.Response, error) {
+	opts = normalizeAddOptions(endpoint, opts)
 	// add optional parameters that the user wants
 	form := url.Values{}
 	for k, v := range opts {
@@ -164,6 +166,7 @@ func buildMultiFileForm(files [][]byte, opts map[string]string) (*bytes.Buffer, 
 // postMultiMemoryCtx sends multiple torrent files in a single multipart request.
 // qBittorrent supports multiple "torrents" form fields in one request.
 func (c *Client) postMultiMemoryCtx(ctx context.Context, endpoint string, files [][]byte, opts map[string]string) (*http.Response, error) {
+	opts = normalizeAddOptions(endpoint, opts)
 	body, contentType, err := buildMultiFileForm(files, opts)
 	if err != nil {
 		return nil, err
@@ -200,6 +203,7 @@ func (c *Client) postMultiMemoryCtx(ctx context.Context, endpoint string, files 
 }
 
 func (c *Client) postReaderCtx(ctx context.Context, endpoint string, reader io.Reader, opts map[string]string) (*http.Response, error) {
+	opts = normalizeAddOptions(endpoint, opts)
 	// Buffer to store our request body as bytes
 	var requestBody bytes.Buffer
 
@@ -263,6 +267,24 @@ func (c *Client) postReaderCtx(ctx context.Context, endpoint string, reader io.R
 	}
 
 	return resp, nil
+}
+
+// normalizeAddOptions sends matching seed-mode aliases for old and new servers.
+func normalizeAddOptions(endpoint string, opts map[string]string) map[string]string {
+	if endpoint != "torrents/add" {
+		return opts
+	}
+	seedMode, ok := opts["seedMode"]
+	if !ok {
+		seedMode, ok = opts["skip_checking"]
+	}
+	if !ok {
+		return opts
+	}
+	opts = maps.Clone(opts)
+	opts["seedMode"] = seedMode
+	opts["skip_checking"] = seedMode
+	return opts
 }
 
 func generateTorrentName() string {
