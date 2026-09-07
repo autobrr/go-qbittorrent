@@ -152,6 +152,8 @@ func getGoType(expr ast.Expr) string {
 		return "[]" + getGoType(t.Elt)
 	case *ast.MapType:
 		return "map[" + getGoType(t.Key) + "]" + getGoType(t.Value)
+	case *ast.StarExpr:
+		return "*" + getGoType(t.X)
 	}
 	return "interface{}"
 }
@@ -233,6 +235,10 @@ func generateFieldUpdateLogic(structName string, field FieldInfo) {
 	case "bool":
 		fmt.Printf("\tif %s, ok := val.(bool); ok {\n", strings.ToLower(field.Name[:1]))
 		fmt.Printf("\t\tobj.%s = %s\n", field.Name, strings.ToLower(field.Name[:1]))
+		fmt.Printf("\t}\n")
+	case "*bool":
+		fmt.Printf("\tif %s, ok := val.(bool); ok {\n", strings.ToLower(field.Name[:1]))
+		fmt.Printf("\t\tobj.%s = &%s\n", field.Name, strings.ToLower(field.Name[:1]))
 		fmt.Printf("\t}\n")
 	case "TorrentState":
 		fmt.Printf("\tif %s, ok := val.(string); ok {\n", strings.ToLower(field.Name[:1]))

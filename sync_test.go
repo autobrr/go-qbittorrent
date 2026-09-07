@@ -48,6 +48,13 @@ func (m *mockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 	}, nil
 }
 
+// roundTripFunc adapts a function into an http.RoundTripper so a test can drive
+// a real Client's request path (login skipped via API key auth) to a
+// deterministic success or failure without touching the network.
+type roundTripFunc func(req *http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
+
 func NewMockClient() *MockClient {
 	// Create a mock transport that returns mock responses
 	mockTransport := &mockRoundTripper{}
@@ -342,13 +349,14 @@ func TestMergeTorrents(t *testing.T) {
 
 	// Add an existing torrent
 	existing := Torrent{
-		Hash:     "abc123",
-		Name:     "Test Torrent",
-		Progress: 0.5,
-		DlSpeed:  1000,
-		UpSpeed:  500,
-		State:    "downloading",
-		Category: "test",
+		Hash:        "abc123",
+		HasMetadata: ptr(true),
+		Name:        "Test Torrent",
+		Progress:    0.5,
+		DlSpeed:     1000,
+		UpSpeed:     500,
+		State:       "downloading",
+		Category:    "test",
 	}
 	sm.data.Torrents["abc123"] = existing
 
@@ -356,9 +364,10 @@ func TestMergeTorrents(t *testing.T) {
 	rawData := map[string]interface{}{
 		"torrents": map[string]interface{}{
 			"abc123": map[string]interface{}{
-				"progress": 0.75,
-				"dlspeed":  float64(1500),
-				"state":    "downloading",
+				"progress":     0.75,
+				"dlspeed":      float64(1500),
+				"state":        "downloading",
+				"has_metadata": false,
 				// Note: upspeed, category, etc. are NOT present in this update
 			},
 		},
@@ -395,6 +404,9 @@ func TestMergeTorrents(t *testing.T) {
 
 	if merged.Category != "test" {
 		t.Errorf("Expected category preserved, got %s", merged.Category)
+	}
+	if merged.HasMetadata == nil || *merged.HasMetadata {
+		t.Fatalf("Expected has_metadata false, got %v", merged.HasMetadata)
 	}
 }
 
@@ -624,6 +636,27 @@ func TestSyncManager_CopyMainData(t *testing.T) {
 	copy.Tags = append(copy.Tags, "new_tag")
 	if len(original.Tags) != 2 {
 		t.Error("Modifying copy tags affected original")
+	}
+}
+
+func TestSyncManager_GetTrackersUnchecked(t *testing.T) {
+	sm := &SyncManager{}
+
+	if trackers := sm.GetTrackersUnchecked(); trackers != nil {
+		t.Error("Expected nil trackers when not initialized")
+	}
+
+	sm.data = &MainData{
+		Trackers: map[string][]string{
+			"http://tracker.example.invalid/announce": {"abc123"},
+		},
+	}
+
+	// Mutating the result must not reach sm.data, which the sync loop writes.
+	trackers := sm.GetTrackersUnchecked()
+	trackers["http://other.example.invalid/announce"] = []string{"def456"}
+	if len(sm.data.Trackers) != 1 {
+		t.Error("Modifying returned map affected cached data")
 	}
 }
 
@@ -871,6 +904,72 @@ func TestSyncManager_LastError(t *testing.T) {
 	err = syncManager.LastError()
 	if err != context.DeadlineExceeded {
 		t.Errorf("Expected DeadlineExceeded, got %v", err)
+	}
+}
+
+// newSyncManagerWithTransport builds a SyncManager whose client uses API key
+// auth (so the request path skips login) and a single attempt (so a failing
+// request returns immediately instead of retrying), with its transport driven
+// by rt. This lets the tests exercise the real doSync path deterministically.
+func newSyncManagerWithTransport(rt roundTripFunc) *SyncManager {
+	client := NewClient(Config{Host: "http://qbit.test", APIKey: "test-key", RetryAttempts: 1})
+	client.http.Transport = rt
+	return NewSyncManager(client)
+}
+
+func TestSyncManager_LastSuccessfulSyncTimeAdvancesOnSuccess(t *testing.T) {
+	body := []byte(`{"rid":1,"full_update":true,"torrents":{},"categories":{},"tags":[],"server_state":{}}`)
+	sm := newSyncManagerWithTransport(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewReader(body)),
+			Header:     make(http.Header),
+		}, nil
+	})
+
+	before := time.Now()
+	if err := sm.Sync(context.Background()); err != nil {
+		t.Fatalf("expected a successful sync, got error: %v", err)
+	}
+
+	if got := sm.LastSuccessfulSyncTime(); got.Before(before) {
+		t.Errorf("LastSuccessfulSyncTime should advance on a successful sync: got %v, before %v", got, before)
+	}
+	if err := sm.LastError(); err != nil {
+		t.Errorf("expected no LastError after a successful sync, got %v", err)
+	}
+}
+
+// TestSyncManager_LastSuccessfulSyncTimeUnchangedOnFailure is the regression
+// guard for the bug this change fixes: lastSync is stamped on every attempt, so
+// a failed sync makes LastSyncTime() report "fresh" even though the cached data
+// did not update. LastSuccessfulSyncTime() must stay put across a failed sync so
+// callers can derive an honest data age.
+func TestSyncManager_LastSuccessfulSyncTimeUnchangedOnFailure(t *testing.T) {
+	sm := newSyncManagerWithTransport(func(req *http.Request) (*http.Response, error) {
+		return nil, context.DeadlineExceeded
+	})
+
+	// Seed a prior successful sync at a clearly-old time.
+	priorSuccess := time.Now().Add(-time.Hour)
+	sm.lastSync = priorSuccess
+	sm.lastSuccessfulSync = priorSuccess
+
+	if err := sm.Sync(context.Background()); err == nil {
+		t.Fatal("expected the sync to fail")
+	}
+
+	if sm.LastError() == nil {
+		t.Error("expected LastError to be set after a failed sync")
+	}
+	// The attempt clock still advances; that is existing behavior we preserve.
+	if !sm.LastSyncTime().After(priorSuccess) {
+		t.Error("LastSyncTime (last attempted sync) should advance on a failed sync")
+	}
+	// The success clock must not move: this is the actual fix.
+	if !sm.LastSuccessfulSyncTime().Equal(priorSuccess) {
+		t.Errorf("LastSuccessfulSyncTime must not advance on a failed sync: got %v, want %v",
+			sm.LastSuccessfulSyncTime(), priorSuccess)
 	}
 }
 
@@ -1523,5 +1622,158 @@ func TestPeerSyncManager_ZeroSyncInterval(t *testing.T) {
 
 	if psm.options.SyncInterval != 5*time.Second {
 		t.Errorf("Expected SyncInterval to default to 5s when zero, got %v", psm.options.SyncInterval)
+	}
+}
+
+// TestSyncManager_ReadersNotBlockedDuringSlowSync is the regression test for
+// holding the SyncManager mutex across the maindata network round-trip: with a
+// slow qBittorrent, every getter (including the *Unchecked ones) parked behind
+// the in-flight request for its full duration, so one saturated instance
+// stalled every consumer reading through the manager.
+func TestSyncManager_ReadersNotBlockedDuringSlowSync(t *testing.T) {
+	release := make(chan struct{})
+	fetchStarted := make(chan struct{})
+	var startedOnce sync.Once
+
+	body := []byte(`{"rid":2,"full_update":true,"torrents":{},"categories":{},"tags":[],"server_state":{}}`)
+	sm := newSyncManagerWithTransport(func(req *http.Request) (*http.Response, error) {
+		startedOnce.Do(func() { close(fetchStarted) })
+		<-release // a saturated instance: the request parks until released
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewReader(body)),
+			Header:     make(http.Header),
+		}, nil
+	})
+
+	// Seed cached data so readers have something to return while the sync is in flight.
+	sm.data = &MainData{Rid: 1, Torrents: map[string]Torrent{"abc": {Hash: "abc"}}}
+	sm.updateAllTorrents()
+
+	syncDone := make(chan error, 1)
+	go func() { syncDone <- sm.Sync(context.Background()) }()
+	<-fetchStarted
+
+	readersDone := make(chan struct{})
+	go func() {
+		defer close(readersDone)
+		if got := sm.GetTorrentsUnchecked(TorrentFilterOptions{}); len(got) != 1 {
+			t.Errorf("expected the cached torrent while the sync is in flight, got %d", len(got))
+		}
+		if data := sm.GetDataUnchecked(); data == nil || data.Rid != 1 {
+			t.Error("expected the cached MainData while the sync is in flight")
+		}
+		_ = sm.LastSuccessfulSyncTime()
+	}()
+
+	select {
+	case <-readersDone:
+		// Readers returned while the network round-trip was still parked: the
+		// mutex is no longer held across the fetch.
+	case <-time.After(2 * time.Second):
+		t.Fatal("readers blocked behind an in-flight sync network round-trip")
+	}
+
+	close(release)
+	if err := <-syncDone; err != nil {
+		t.Fatalf("expected the released sync to succeed, got %v", err)
+	}
+	if data := sm.GetDataUnchecked(); data == nil || data.Rid != 2 {
+		t.Error("expected the merged sync result after release")
+	}
+}
+
+// TestSyncManager_CallbacksMayReenterSyncManager guards the callback locking
+// contract: OnUpdate and OnError run outside the manager's mutex, so a
+// callback may read back from the manager (LastSuccessfulSyncTime, getters)
+// without self-deadlocking on the non-reentrant RWMutex.
+func TestSyncManager_CallbacksMayReenterSyncManager(t *testing.T) {
+	successBody := `{"rid":1,"full_update":true,"torrents":{},"categories":{},"tags":[],"server_state":{}}`
+	var calls int
+	client := NewClient(Config{Host: "http://qbit.test", APIKey: "test-key", RetryAttempts: 1})
+	client.http.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		calls++
+		if calls == 1 {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewReader([]byte(successBody))),
+				Header:     make(http.Header),
+			}, nil
+		}
+		return nil, context.DeadlineExceeded
+	})
+
+	var sm *SyncManager
+	reentered := make(chan string, 2)
+	opts := DefaultSyncOptions()
+	opts.OnUpdate = func(*MainData) {
+		_ = sm.LastSuccessfulSyncTime() // re-enters the manager's mutex
+		_ = sm.GetTorrentsUnchecked(TorrentFilterOptions{})
+		reentered <- "update"
+	}
+	opts.OnError = func(error) {
+		_ = sm.LastError() // re-enters the manager's mutex
+		reentered <- "error"
+	}
+	sm = NewSyncManager(client, opts)
+
+	runSync := func(wantErr bool) {
+		t.Helper()
+		errCh := make(chan error, 1)
+		go func() { errCh <- sm.Sync(context.Background()) }()
+		select {
+		case err := <-errCh:
+			if wantErr && err == nil {
+				t.Fatal("expected the sync to fail")
+			}
+			if !wantErr && err != nil {
+				t.Fatalf("expected the sync to succeed, got %v", err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("Sync deadlocked: a callback re-entered the mutex while doSync held it")
+		}
+	}
+
+	runSync(false)
+	runSync(true)
+
+	if got := len(reentered); got != 2 {
+		t.Fatalf("expected both callbacks to have run and re-entered safely, got %d", got)
+	}
+	if first := <-reentered; first != "update" {
+		t.Errorf("expected OnUpdate to fire for the successful sync first, got %q", first)
+	}
+	if second := <-reentered; second != "error" {
+		t.Errorf("expected OnError to fire for the failed sync, got %q", second)
+	}
+}
+
+// TestSyncManager_FailedFirstSyncStillInitializesData pins failure-state
+// parity: even when the first sync fails, sm.data must be initialized so
+// (a) GetDataUnchecked returns an empty MainData rather than nil, and
+// (b) ensureFreshData paces retries by staleness instead of treating every
+// checked-getter call as a cold cache that fires an unpaced blocking sync.
+func TestSyncManager_FailedFirstSyncStillInitializesData(t *testing.T) {
+	var calls int
+	sm := newSyncManagerWithTransport(func(req *http.Request) (*http.Response, error) {
+		calls++
+		return nil, context.DeadlineExceeded
+	})
+
+	if err := sm.Sync(context.Background()); err == nil {
+		t.Fatal("expected the first sync to fail")
+	}
+
+	if data := sm.GetDataUnchecked(); data == nil {
+		t.Fatal("expected empty MainData after a failed first sync, got nil")
+	}
+
+	// Within the stale threshold (SyncInterval, default 2s) checked getters
+	// must serve the cached-empty state without firing another network sync.
+	callsAfterFailure := calls
+	_ = sm.GetTorrents(TorrentFilterOptions{})
+	_ = sm.GetData()
+	if calls != callsAfterFailure {
+		t.Fatalf("checked getters fired %d unpaced sync(s) right after a failed sync", calls-callsAfterFailure)
 	}
 }

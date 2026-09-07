@@ -35,6 +35,7 @@ type Config struct {
 	Host     string
 	Username string
 	Password string
+	APIKey   string
 
 	// TLS skip cert validation
 	TLSSkipVerify bool

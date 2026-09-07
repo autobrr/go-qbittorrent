@@ -136,6 +136,13 @@ func updateTorrentHash(val interface{}, obj *Torrent) {
 	}
 }
 
+// updateTorrentHasMetadata updates the HasMetadata field of Torrent
+func updateTorrentHasMetadata(val interface{}, obj *Torrent) {
+	if h, ok := val.(bool); ok {
+		obj.HasMetadata = &h
+	}
+}
+
 // updateTorrentInfohashV1 updates the InfohashV1 field of Torrent
 func updateTorrentInfohashV1(val interface{}, obj *Torrent) {
 	if i, ok := val.(string); ok {
@@ -297,6 +304,20 @@ func updateTorrentInactiveSeedingTimeLimit(val interface{}, obj *Torrent) {
 	}
 }
 
+// updateTorrentShareLimitAction updates the ShareLimitAction field of Torrent
+func updateTorrentShareLimitAction(val interface{}, obj *Torrent) {
+	if s, ok := val.(string); ok {
+		obj.ShareLimitAction = s
+	}
+}
+
+// updateTorrentShareLimitsMode updates the ShareLimitsMode field of Torrent
+func updateTorrentShareLimitsMode(val interface{}, obj *Torrent) {
+	if s, ok := val.(string); ok {
+		obj.ShareLimitsMode = s
+	}
+}
+
 // updateTorrentSeenComplete updates the SeenComplete field of Torrent
 func updateTorrentSeenComplete(val interface{}, obj *Torrent) {
 	if s, ok := val.(float64); ok {
@@ -432,6 +453,7 @@ var torrentFieldUpdaters = map[string]func(val interface{}, obj *Torrent){
 	"f_l_piece_prio": updateTorrentFirstLastPiecePrio,
 	"force_start": updateTorrentForceStart,
 	"hash": updateTorrentHash,
+	"has_metadata": updateTorrentHasMetadata,
 	"infohash_v1": updateTorrentInfohashV1,
 	"infohash_v2": updateTorrentInfohashV2,
 	"popularity": updateTorrentPopularity,
@@ -455,6 +477,8 @@ var torrentFieldUpdaters = map[string]func(val interface{}, obj *Torrent){
 	"seeding_time": updateTorrentSeedingTime,
 	"seeding_time_limit": updateTorrentSeedingTimeLimit,
 	"inactive_seeding_time_limit": updateTorrentInactiveSeedingTimeLimit,
+	"share_limit_action": updateTorrentShareLimitAction,
+	"share_limits_mode": updateTorrentShareLimitsMode,
 	"seen_complete": updateTorrentSeenComplete,
 	"seq_dl": updateTorrentSequentialDownload,
 	"size": updateTorrentSize,

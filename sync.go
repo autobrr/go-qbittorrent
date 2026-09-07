@@ -14,18 +14,19 @@ import (
 // SyncManager manages synchronization of MainData updates and provides
 // a consistent view of the qBittorrent state across partial updates.
 type SyncManager struct {
-	mu               sync.RWMutex
-	data             *MainData
-	rid              int64
-	lastSync         time.Time
-	lastSyncDuration time.Duration
-	lastError        error
-	client           *Client
-	trackerManager   *TrackerManager
-	syncGroup        singleflight.Group
-	options          SyncOptions
-	allTorrents      []Torrent
-	resultPool       sync.Pool
+	mu                 sync.RWMutex
+	data               *MainData
+	rid                int64
+	lastSync           time.Time
+	lastSuccessfulSync time.Time
+	lastSyncDuration   time.Duration
+	lastError          error
+	client             *Client
+	trackerManager     *TrackerManager
+	syncGroup          singleflight.Group
+	options            SyncOptions
+	allTorrents        []Torrent
+	resultPool         sync.Pool
 }
 
 // SyncOptions configures the behavior of the sync manager
@@ -121,41 +122,81 @@ func (sm *SyncManager) Sync(ctx context.Context) error {
 	return err
 }
 
-// doSync performs the actual sync operation (singleflight-compatible signature)
+// doSync performs the actual sync operation (singleflight-compatible signature).
+// Concurrent Sync callers are collapsed by the singleflight group, so doSync
+// never runs concurrently with itself and the network fetch needs no lock.
+// Keeping the mutex out of the fetch is load-bearing: holding it across the
+// round-trip parks every reader (including the *Unchecked getters) for the
+// full request duration whenever the server responds slowly.
 func (sm *SyncManager) doSync(ctx context.Context) (interface{}, error) {
 	startTime := time.Now()
-	var err error = nil
 
-	defer func() {
-		sm.lastSyncDuration = time.Since(startTime)
-		sm.lastSync = time.Now()
-		sm.lastError = err
-		sm.mu.Unlock()
-	}()
-
-	// Initialize data if needed
-	if sm.data == nil {
-		sm.data = &MainData{}
+	sm.mu.RLock()
+	var rid int64
+	if sm.data != nil {
+		rid = sm.data.Rid
 	}
+	sm.mu.RUnlock()
 
-	sm.mu.Lock()
-	if err = sm.data.Update(ctx, sm.client); err != nil {
+	source, rawData, err := sm.client.SyncMainDataCtxWithRaw(ctx, rid)
+
+	update := sm.applySyncResult(source, rawData, startTime, err)
+
+	// Callbacks run after the mutex is released so implementations can safely
+	// read back from the sync manager (the *Unchecked getters, LastError,
+	// LastSuccessfulSyncTime, ...): a callback invoked under the lock that
+	// re-entered any getter self-deadlocked on the non-reentrant RWMutex.
+	// Calling Sync (or a checked getter once data is stale) from a callback
+	// still deadlocks: it would join the singleflight call it is running in.
+	if err != nil {
 		if sm.options.OnError != nil {
 			sm.options.OnError(err)
 		}
 		return nil, err
 	}
-
-	sm.rid = sm.data.Rid
-	// Update cached torrent slice
-	sm.updateAllTorrents()
-
-	// Call update callback if set
-	if sm.options.OnUpdate != nil {
-		sm.options.OnUpdate(sm.copyMainData(sm.data))
+	if update != nil && sm.options.OnUpdate != nil {
+		sm.options.OnUpdate(update)
 	}
 
 	return nil, nil
+}
+
+// applySyncResult merges a fetched sync response and updates the sync clocks
+// under a brief write lock. It returns a deep copy of the merged data when an
+// OnUpdate callback needs to be invoked.
+func (sm *SyncManager) applySyncResult(source *MainData, rawData map[string]interface{}, startTime time.Time, syncErr error) *MainData {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	// Initialize even when the sync failed: a nil sm.data would make
+	// ensureFreshData treat every subsequent checked-getter call as a cold
+	// cache and fire an unpaced blocking sync per call against an instance
+	// that is already known to be down.
+	if sm.data == nil {
+		sm.data = &MainData{}
+	}
+
+	var update *MainData
+	if syncErr == nil {
+		sm.data.applySync(source, rawData)
+		sm.rid = sm.data.Rid
+		// Update cached torrent slice
+		sm.updateAllTorrents()
+		if sm.options.OnUpdate != nil {
+			update = sm.copyMainData(sm.data)
+		}
+	}
+
+	sm.lastSyncDuration = time.Since(startTime)
+	sm.lastSync = time.Now()
+	// lastSync records every attempt (used internally to pace syncs), but
+	// lastSuccessfulSync only advances when the data actually updated, so
+	// callers can tell how fresh the cached data really is during a failure.
+	if syncErr == nil {
+		sm.lastSuccessfulSync = sm.lastSync
+	}
+	sm.lastError = syncErr
+	return update
 }
 
 func (sm *SyncManager) updateAllTorrents() {
@@ -372,6 +413,27 @@ func (sm *SyncManager) GetCategoriesUnchecked() map[string]Category {
 	return maps.Clone(sm.data.Categories)
 }
 
+// GetTrackers returns a copy of the tracker URL to torrent hashes map.
+// The hash slices alias the cached data; callers must not modify them.
+func (sm *SyncManager) GetTrackers() map[string][]string {
+	sm.ensureFreshData()
+	return sm.GetTrackersUnchecked()
+}
+
+// GetTrackersUnchecked returns a copy of the tracker URL to torrent hashes map
+// without checking freshness. This is faster but may return stale data.
+// The hash slices alias the cached data; callers must not modify them.
+func (sm *SyncManager) GetTrackersUnchecked() map[string][]string {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+
+	if sm.data == nil {
+		return nil
+	}
+
+	return maps.Clone(sm.data.Trackers)
+}
+
 // GetTags returns a copy of all tags
 func (sm *SyncManager) GetTags() []string {
 	sm.ensureFreshData()
@@ -391,12 +453,25 @@ func (sm *SyncManager) GetTagsUnchecked() []string {
 	return slices.Clone(sm.data.Tags)
 }
 
-// LastSyncTime returns the time of the last successful sync
+// LastSyncTime returns the time of the last sync attempt, whether it succeeded
+// or failed. To know how fresh the cached data actually is, use
+// LastSuccessfulSyncTime instead.
 func (sm *SyncManager) LastSyncTime() time.Time {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 
 	return sm.lastSync
+}
+
+// LastSuccessfulSyncTime returns the time of the last sync that completed
+// without error. Unlike LastSyncTime it does not advance on failed syncs, so it
+// is the reliable signal for how stale the cached data has become while syncs
+// are timing out or failing.
+func (sm *SyncManager) LastSuccessfulSyncTime() time.Time {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+
+	return sm.lastSuccessfulSync
 }
 
 // LastSyncDuration returns the duration of the last sync operation

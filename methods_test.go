@@ -4,8 +4,10 @@
 package qbittorrent_test
 
 import (
+	"fmt"
 	"os"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -294,7 +296,7 @@ func TestClient_RenameFile(t *testing.T) {
 		Password: qBittorrentPassword,
 	})
 
-	err := client.AddTorrentFromMemory([]byte(sampleTorrent), nil)
+	_, err := client.AddTorrentFromMemory([]byte(sampleTorrent), nil)
 	assert.NoError(t, err)
 	defer func(client *qbittorrent.Client) {
 		_ = client.DeleteTorrents([]string{sampleInfoHash}, false)
@@ -311,7 +313,7 @@ func TestClient_RenameFolder(t *testing.T) {
 		Password: qBittorrentPassword,
 	})
 
-	err := client.AddTorrentFromMemory([]byte(sampleTorrent), nil)
+	_, err := client.AddTorrentFromMemory([]byte(sampleTorrent), nil)
 	assert.NoError(t, err)
 	defer func(client *qbittorrent.Client) {
 		_ = client.DeleteTorrents([]string{sampleInfoHash}, false)
@@ -347,6 +349,50 @@ func TestClient_GetWebAPIVersion(t *testing.T) {
 	version, err := client.GetWebAPIVersion()
 	assert.NoError(t, err)
 	assert.Regexp(t, regexp.MustCompile("\\d+\\.\\d+\\.\\d+"), version)
+}
+
+func TestClient_EditTracker(t *testing.T) {
+	client := qbittorrent.NewClient(qbittorrent.Config{
+		Host:     qBittorrentBaseURL,
+		Username: qBittorrentUsername,
+		Password: qBittorrentPassword,
+	})
+
+	// Patch sampleTorrent's file/torrent name to a value unique to this run, so
+	// its info hash won't collide with sampleTorrent itself or a prior run's
+	// leftover state.
+	name := fmt.Sprintf("qbt-test-%d", time.Now().UnixNano())
+	fileName := name + ".txt"
+	torrent := strings.Replace(sampleTorrent, "12:untitled.txt", fmt.Sprintf("%d:%s", len(fileName), fileName), 1)
+	torrent = strings.Replace(torrent, "8:untitled", fmt.Sprintf("%d:%s", len(name), name), 1)
+
+	resp, err := client.AddTorrentFromMemory([]byte(torrent), nil)
+	if err != nil || len(resp.AddedTorrentIds) != 1 {
+		t.Fatalf("could not add test torrent: err=%v resp=%+v", err, resp)
+	}
+	hash := resp.AddedTorrentIds[0]
+	defer func(client *qbittorrent.Client) {
+		_ = client.DeleteTorrents([]string{hash}, false)
+	}(client)
+
+	const oldURL = "http://tracker.example.com:6969/announce"
+	const newURL = "https://tracker.example.com/announce"
+
+	err = client.AddTrackers(hash, oldURL)
+	assert.NoError(t, err)
+
+	err = client.EditTracker(hash, oldURL, newURL)
+	assert.NoError(t, err)
+
+	trackers, err := client.GetTorrentTrackers(hash)
+	assert.NoError(t, err)
+
+	var urls []string
+	for _, tr := range trackers {
+		urls = append(urls, tr.Url)
+	}
+	assert.Contains(t, urls, newURL)
+	assert.NotContains(t, urls, oldURL)
 }
 
 func TestClient_GetWebAPIVersion_IncorrectPath(t *testing.T) {

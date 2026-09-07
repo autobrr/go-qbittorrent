@@ -20,6 +20,10 @@ func (c *Client) Login() error {
 }
 
 func (c *Client) LoginCtx(ctx context.Context) error {
+	if c.usingAPIKeyAuth() {
+		return nil
+	}
+
 	if c.cfg.Username == "" && c.cfg.Password == "" {
 		return nil
 	}
@@ -97,6 +101,32 @@ func (c *Client) GetBuildInfoCtx(ctx context.Context) (BuildInfo, error) {
 	}
 
 	return bi, nil
+}
+
+// GetProcessInfo get qBittorrent process information.
+func (c *Client) GetProcessInfo() (ProcessInfo, error) {
+	return c.GetProcessInfoCtx(context.Background())
+}
+
+// GetProcessInfoCtx get qBittorrent process information.
+func (c *Client) GetProcessInfoCtx(ctx context.Context) (ProcessInfo, error) {
+	var info ProcessInfo
+	resp, err := c.getCtx(ctx, "app/processInfo", nil)
+	if err != nil {
+		return info, errors.Wrap(err, "could not get app process info")
+	}
+
+	defer drainAndClose(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return info, errors.Wrap(ErrUnexpectedStatus, "could not get app process info; status code: %d", resp.StatusCode)
+	}
+
+	if err = json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		return info, errors.Wrap(err, "could not unmarshal body")
+	}
+
+	return info, nil
 }
 
 // Shutdown  Shuts down the qBittorrent client
@@ -260,6 +290,86 @@ func (c *Client) SetPreferencesCtx(ctx context.Context, prefs map[string]interfa
 
 	return nil
 }
+
+// MonitoredFolderMode describes where torrents discovered in a monitored folder should be downloaded.
+type MonitoredFolderMode int
+
+const (
+	// MonitoredFolderModeMonitoredFolder means download to the monitored folder itself.
+	MonitoredFolderModeMonitoredFolder MonitoredFolderMode = 0
+	// MonitoredFolderModeDefaultSavePath means download to qBittorrent's default save path.
+	MonitoredFolderModeDefaultSavePath MonitoredFolderMode = 1
+	// MonitoredFolderModeCustomPath means download to a custom path.
+	MonitoredFolderModeCustomPath MonitoredFolderMode = 2
+)
+
+// MonitoredFolderTarget represents one qBittorrent scan_dirs target value.
+// The Web API accepts either integer values (0, 1) or a custom path string.
+type MonitoredFolderTarget struct {
+	mode       MonitoredFolderMode
+	customPath string
+}
+
+// NewMonitoredFolderTarget creates an int-based monitored folder target (0 or 1).
+func NewMonitoredFolderTarget(mode MonitoredFolderMode) MonitoredFolderTarget {
+	return MonitoredFolderTarget{mode: mode}
+}
+
+// NewMonitoredFolderCustomPath creates a custom-path monitored folder target.
+func NewMonitoredFolderCustomPath(path string) MonitoredFolderTarget {
+	return MonitoredFolderTarget{
+		mode:       MonitoredFolderModeCustomPath,
+		customPath: path,
+	}
+}
+
+// Mode returns the target mode.
+func (d MonitoredFolderTarget) Mode() MonitoredFolderMode {
+	return d.mode
+}
+
+// CustomPath returns the custom path, if Mode() is MonitoredFolderModeCustomPath.
+func (d MonitoredFolderTarget) CustomPath() string {
+	return d.customPath
+}
+
+func (d MonitoredFolderTarget) MarshalJSON() ([]byte, error) {
+	switch d.mode {
+	case MonitoredFolderModeMonitoredFolder, MonitoredFolderModeDefaultSavePath:
+		return json.Marshal(int(d.mode))
+	case MonitoredFolderModeCustomPath:
+		return json.Marshal(d.customPath)
+	default:
+		return nil, errors.Wrap(ErrInvalidMonitoredFolderTarget, "invalid target mode: %d", d.mode)
+	}
+}
+
+func (d *MonitoredFolderTarget) UnmarshalJSON(data []byte) error {
+	var intValue int
+	if err := json.Unmarshal(data, &intValue); err == nil {
+		switch MonitoredFolderMode(intValue) {
+		case MonitoredFolderModeMonitoredFolder, MonitoredFolderModeDefaultSavePath:
+			d.mode = MonitoredFolderMode(intValue)
+			d.customPath = ""
+			return nil
+		default:
+			return errors.Wrap(ErrInvalidMonitoredFolderTarget, "invalid target integer value: %d", intValue)
+		}
+	}
+
+	var stringValue string
+	if err := json.Unmarshal(data, &stringValue); err == nil {
+		d.mode = MonitoredFolderModeCustomPath
+		d.customPath = stringValue
+		return nil
+	}
+
+	return errors.Wrap(ErrInvalidMonitoredFolderTarget, "invalid target value: %s", string(data))
+}
+
+// MonitoredFolders is the typed representation of qBittorrent's scan_dirs setting.
+// Key: monitored folder path, Value: target where discovered torrents should be saved.
+type MonitoredFolders map[string]MonitoredFolderTarget
 
 // GetDirectoryContent lists folders inside a directory (for autocomplete).
 func (c *Client) GetDirectoryContent(dirPath string, withMetadata bool) (any, error) {
@@ -526,109 +636,223 @@ func (c *Client) GetTorrentTrackersCtx(ctx context.Context, hash string) ([]Torr
 	return trackers, nil
 }
 
-func (c *Client) AddTorrentFromMemory(buf []byte, options map[string]string) error {
+func (c *Client) AddTorrentFromMemory(buf []byte, options map[string]string) (*TorrentAddResponse, error) {
 	return c.AddTorrentFromMemoryCtx(context.Background(), buf, options)
 }
 
-func (c *Client) AddTorrentFromMemoryCtx(ctx context.Context, buf []byte, options map[string]string) error {
+func (c *Client) AddTorrentFromMemoryCtx(ctx context.Context, buf []byte, options map[string]string) (*TorrentAddResponse, error) {
 	resp, err := c.postMemoryCtx(ctx, "torrents/add", buf, options)
 	if err != nil {
-		return errors.Wrap(err, "could not add torrent")
+		return nil, errors.Wrap(err, "could not add torrent")
 	}
 
 	defer drainAndClose(resp)
 
 	switch resp.StatusCode {
-	case http.StatusOK, http.StatusNoContent:
+	case http.StatusOK, http.StatusAccepted, http.StatusNoContent:
+		if strings.HasPrefix(resp.Header.Get("Content-Type"), "application/json") {
+			var res TorrentAddResponse
+			if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+				return nil, errors.Wrap(err, "could not unmarshal body")
+			}
+			return &res, nil
+		}
+
 		break
+	case http.StatusConflict:
+		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrent | conflicts detected")
+	case http.StatusUnsupportedMediaType:
+		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrent | torrent file not valid")
 	default:
-		return errors.Wrap(ErrUnexpectedStatus, "could not add torrent; status code: %d", resp.StatusCode)
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not add torrent | unexpected status code: %d", resp.StatusCode)
 	}
 
-	return nil
+	if !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/plain") {
+		return nil, errors.Wrap(ErrUnexpectedContentType, "could not add torrent | unexpected content-type: %s", resp.Header.Get("Content-Type"))
+	}
+
+	res := TorrentAddResponse{SuccessCount: 1}
+
+	return &res, nil
 }
 
 // AddTorrentsFromMemory adds multiple torrents from memory in a single request.
 // This is more efficient than calling AddTorrentFromMemory multiple times.
-func (c *Client) AddTorrentsFromMemory(files [][]byte, options map[string]string) error {
+func (c *Client) AddTorrentsFromMemory(files [][]byte, options map[string]string) (*TorrentAddResponse, error) {
 	return c.AddTorrentsFromMemoryCtx(context.Background(), files, options)
 }
 
 // AddTorrentsFromMemoryCtx adds multiple torrents from memory in a single request.
 // qBittorrent's API accepts multiple "torrents" form fields, allowing batch uploads.
-func (c *Client) AddTorrentsFromMemoryCtx(ctx context.Context, files [][]byte, options map[string]string) error {
+func (c *Client) AddTorrentsFromMemoryCtx(ctx context.Context, files [][]byte, options map[string]string) (*TorrentAddResponse, error) {
 	if len(files) == 0 {
-		return nil
+		return nil, ErrEmptyInput
 	}
 
 	resp, err := c.postMultiMemoryCtx(ctx, "torrents/add", files, options)
 	if err != nil {
-		return errors.Wrap(err, "could not add torrents")
+		return nil, errors.Wrap(err, "could not add torrents")
 	}
 
 	defer drainAndClose(resp)
 
 	switch resp.StatusCode {
-	case http.StatusOK, http.StatusNoContent:
+	case http.StatusOK, http.StatusAccepted, http.StatusNoContent:
+		if strings.HasPrefix(resp.Header.Get("Content-Type"), "application/json") {
+			var res TorrentAddResponse
+			if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+				return nil, errors.Wrap(err, "could not unmarshal body")
+			}
+			return &res, nil
+		}
+
 		break
+	case http.StatusConflict:
+		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrents | conflicts detected")
+	case http.StatusUnsupportedMediaType:
+		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrents | torrent file not valid")
 	default:
-		return errors.Wrap(ErrUnexpectedStatus, "could not add torrents; status code: %d", resp.StatusCode)
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not add torrents | unexpected status code: %d", resp.StatusCode)
 	}
 
-	return nil
+	if !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/plain") {
+		return nil, errors.Wrap(ErrUnexpectedContentType, "could not add torrents | unexpected content-type: %s", resp.Header.Get("Content-Type"))
+	}
+
+	res := TorrentAddResponse{SuccessCount: 1}
+
+	return &res, nil
 }
 
 // AddTorrentFromFile add new torrent from torrent file
-func (c *Client) AddTorrentFromFile(filePath string, options map[string]string) error {
+func (c *Client) AddTorrentFromFile(filePath string, options map[string]string) (*TorrentAddResponse, error) {
 	return c.AddTorrentFromFileCtx(context.Background(), filePath, options)
 }
 
-func (c *Client) AddTorrentFromFileCtx(ctx context.Context, filePath string, options map[string]string) error {
-
+func (c *Client) AddTorrentFromFileCtx(ctx context.Context, filePath string, options map[string]string) (*TorrentAddResponse, error) {
 	resp, err := c.postFileCtx(ctx, "torrents/add", filePath, options)
 	if err != nil {
-		return errors.Wrap(err, "could not add torrent; filePath: %v", filePath)
+		return nil, errors.Wrap(err, "could not add torrent; filePath: %s", filePath)
 	}
 
 	defer drainAndClose(resp)
 
 	switch resp.StatusCode {
-	case http.StatusOK, http.StatusNoContent:
+	case http.StatusOK, http.StatusAccepted, http.StatusNoContent:
+		if strings.HasPrefix(resp.Header.Get("Content-Type"), "application/json") {
+			var res TorrentAddResponse
+			if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+				return nil, errors.Wrap(err, "could not unmarshal body")
+			}
+			return &res, nil
+		}
+
 		break
+	case http.StatusConflict:
+		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrent: file: %s | conflicts detected", filePath)
+	case http.StatusUnsupportedMediaType:
+		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrent: file: %s | torrent file not valid", filePath)
 	default:
-		return errors.Wrap(ErrUnexpectedStatus, "could not add torrent; filePath: %v | status code: %d", filePath, resp.StatusCode)
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not add torrent: file: %s | unexpected status code: %d", filePath, resp.StatusCode)
 	}
 
-	return nil
+	if !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/plain") {
+		return nil, errors.Wrap(ErrUnexpectedContentType, "could not add torrent: file: %s | unexpected content-type: %s", filePath, resp.Header.Get("Content-Type"))
+	}
+
+	res := TorrentAddResponse{SuccessCount: 1}
+
+	return &res, nil
 }
 
 // AddTorrentFromUrl add new torrent from torrent file
-func (c *Client) AddTorrentFromUrl(url string, options map[string]string) error {
+func (c *Client) AddTorrentFromUrl(url string, options map[string]string) (*TorrentAddResponse, error) {
 	return c.AddTorrentFromUrlCtx(context.Background(), url, options)
 }
 
-func (c *Client) AddTorrentFromUrlCtx(ctx context.Context, url string, options map[string]string) error {
+func (c *Client) AddTorrentFromUrlCtx(ctx context.Context, url string, options map[string]string) (*TorrentAddResponse, error) {
 	if url == "" {
-		return ErrNoTorrentURLProvided
+		return nil, ErrNoTorrentURLProvided
 	}
 
 	options["urls"] = url
 
 	resp, err := c.postCtx(ctx, "torrents/add", options)
 	if err != nil {
-		return errors.Wrap(err, "could not add torrent; url: %v", url)
+		return nil, errors.Wrap(err, "could not add torrent; url: %v", url)
 	}
 
 	defer drainAndClose(resp)
 
 	switch resp.StatusCode {
-	case http.StatusOK, http.StatusNoContent:
+	case http.StatusOK, http.StatusAccepted, http.StatusNoContent:
+		if strings.HasPrefix(resp.Header.Get("Content-Type"), "application/json") {
+			var res TorrentAddResponse
+			if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+				return nil, errors.Wrap(err, "could not unmarshal body")
+			}
+			return &res, nil
+		}
+
 		break
+	case http.StatusConflict:
+		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrent: url: %s | conflicts detected", url)
+	case http.StatusUnsupportedMediaType:
+		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrent: url: %s | torrent file not valid", url)
 	default:
-		return errors.Wrap(ErrUnexpectedStatus, "could not add torrent: url: %v | status code: %d", url, resp.StatusCode)
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not add torrent: url: %s | unexpected status code: %d", url, resp.StatusCode)
 	}
 
-	return nil
+	if !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/plain") {
+		return nil, errors.Wrap(ErrUnexpectedContentType, "could not add torrent: url: %s | unexpected content-type: %s", url, resp.Header.Get("Content-Type"))
+	}
+
+	res := TorrentAddResponse{SuccessCount: 1}
+
+	return &res, nil
+}
+
+// AddTorrentsFromUrlsCtx add multiple new torrents from urls
+func (c *Client) AddTorrentsFromUrlsCtx(ctx context.Context, urls []string, options map[string]string) (*TorrentAddResponse, error) {
+	if len(urls) == 0 {
+		return nil, ErrNoTorrentURLProvided
+	}
+
+	options["urls"] = strings.Join(urls, "\n")
+
+	resp, err := c.postCtx(ctx, "torrents/add", options)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not add torrents; urls: %v", urls)
+	}
+
+	defer drainAndClose(resp)
+
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusAccepted, http.StatusNoContent:
+		if strings.HasPrefix(resp.Header.Get("Content-Type"), "application/json") {
+			var res TorrentAddResponse
+			if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+				return nil, errors.Wrap(err, "could not unmarshal body")
+			}
+			return &res, nil
+		}
+
+		break
+	case http.StatusConflict:
+		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrents: urls: %v | conflicts detected", urls)
+	case http.StatusUnsupportedMediaType:
+		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrents: urls: %v | torrent file not valid", urls)
+	default:
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not add torrents: urls: %v | unexpected status code: %d", urls, resp.StatusCode)
+	}
+
+	if !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/plain") {
+		return nil, errors.Wrap(ErrUnexpectedContentType, "could not add torrents: urls: %v | unexpected content-type: %s", urls, resp.Header.Get("Content-Type"))
+	}
+
+	res := TorrentAddResponse{SuccessCount: 1}
+
+	return &res, nil
 }
 
 func (c *Client) DeleteTorrents(hashes []string, deleteFiles bool) error {
@@ -1150,6 +1374,37 @@ func (c *Client) SetCategoryCtx(ctx context.Context, hashes []string, category s
 	}
 }
 
+// Requires qBittorrent 5.2 and WebAPI >= 2.12.1.
+func (c *Client) SetComment(hashes []string, comment string) error {
+	return c.SetCommentCtx(context.Background(), hashes, comment)
+}
+
+func (c *Client) SetCommentCtx(ctx context.Context, hashes []string, comment string) error {
+	if ok, err := c.RequiresMinVersion(semver.MustParse("2.12.1")); !ok {
+		return errors.Wrap(err, "SetComment requires qBittorrent 5.2 and WebAPI >= 2.12.1")
+	}
+
+	hv := strings.Join(hashes, "|")
+	opts := map[string]string{
+		"hashes":  hv,
+		"comment": comment,
+	}
+
+	resp, err := c.postCtx(ctx, "torrents/setComment", opts)
+	if err != nil {
+		return errors.Wrap(err, "could not set comment; hashes: %v", hashes)
+	}
+
+	defer drainAndClose(resp)
+
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		return nil
+	default:
+		return errors.Wrap(ErrUnexpectedStatus, "could not set comment; hashes: %v | status code: %d", hashes, resp.StatusCode)
+	}
+}
+
 func (c *Client) GetCategories() (map[string]Category, error) {
 	return c.GetCategoriesCtx(context.Background())
 }
@@ -1240,7 +1495,7 @@ func (c *Client) SetFilePriorityCtx(ctx context.Context, hash string, IDs string
 	case http.StatusNotFound:
 		return errors.Wrap(ErrTorrentNotFound, "hash: %s", hash)
 	case http.StatusConflict:
-		return ErrTorrentMetdataNotDownloadedYet
+		return ErrTorrentMetadataNotDownloadedYet
 	case http.StatusOK, http.StatusNoContent:
 		return nil
 	default:
@@ -1595,8 +1850,10 @@ func (c *Client) EditTracker(hash string, old, new string) error {
 // EditTrackerCtx edit tracker of torrent
 func (c *Client) EditTrackerCtx(ctx context.Context, hash string, old, new string) error {
 	opts := map[string]string{
-		"hash":    hash,
+		"hash": hash,
+		// WebAPI 2.13.0 renamed origUrl to url; send both.
 		"origUrl": old,
+		"url":     old,
 		"newUrl":  new,
 	}
 
@@ -1686,6 +1943,35 @@ func (c *Client) SetPreferencesMaxActiveUploads(max int) error {
 // SetPreferencesSubcategoriesEnabled enable/disable subcategories
 func (c *Client) SetPreferencesSubcategoriesEnabled(enabled bool) error {
 	return c.SetPreferences(map[string]interface{}{"use_subcategories": enabled})
+}
+
+// GetMonitoredFolders returns configured folders watched for torrent files.
+func (c *Client) GetMonitoredFolders() (MonitoredFolders, error) {
+	return c.GetMonitoredFoldersCtx(context.Background())
+}
+
+// GetMonitoredFoldersCtx returns configured folders watched for torrent files.
+func (c *Client) GetMonitoredFoldersCtx(ctx context.Context) (MonitoredFolders, error) {
+	prefs, err := c.GetAppPreferencesCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if prefs.ScanDirs == nil {
+		return MonitoredFolders{}, nil
+	}
+
+	return prefs.ScanDirs, nil
+}
+
+// SetMonitoredFolders updates folders watched for torrent files via app/setPreferences scan_dirs.
+func (c *Client) SetMonitoredFolders(scanDirs MonitoredFolders) error {
+	return c.SetMonitoredFoldersCtx(context.Background(), scanDirs)
+}
+
+// SetMonitoredFoldersCtx updates folders watched for torrent files via app/setPreferences scan_dirs.
+func (c *Client) SetMonitoredFoldersCtx(ctx context.Context, scanDirs MonitoredFolders) error {
+	return c.SetPreferencesCtx(ctx, map[string]interface{}{"scan_dirs": scanDirs})
 }
 
 // SetRSSAutoDownloadingEnabled enable/disable RSS auto-downloading
@@ -2233,23 +2519,70 @@ func (c *Client) SetTorrentSuperSeedingCtx(ctx context.Context, hashes []string,
 	return nil
 }
 
-// SetTorrentShareLimit set share limits for torrents specified by hashes
-func (c *Client) SetTorrentShareLimit(hashes []string, ratioLimit float64, seedingTimeLimit int64, inactiveSeedingTimeLimit int64) error {
-	return c.SetTorrentShareLimitCtx(context.Background(), hashes, ratioLimit, seedingTimeLimit, inactiveSeedingTimeLimit)
+// ShareLimitOptions defines share limit settings for torrents.
+// ShareLimitAction and ShareLimitsMode were added in webapi 2.12.
+//
+// ShareLimitAction and ShareLimitsMode must be Qt meta enum key names as used
+// by the WebUI (see Utils::String::toEnum in qBittorrent). Numeric strings such
+// as "0" are not recognized and are treated as Default by the server.
+type ShareLimitOptions struct {
+	RatioLimit               float64
+	SeedingTimeLimit         int64
+	InactiveSeedingTimeLimit int64
+	ShareLimitAction         string
+	ShareLimitsMode          string
 }
 
-// SetTorrentShareLimitCtx set share limits for torrents specified by hashes
-func (c *Client) SetTorrentShareLimitCtx(ctx context.Context, hashes []string, ratioLimit float64, seedingTimeLimit int64, inactiveSeedingTimeLimit int64) error {
-	opts := map[string]string{
-		"hashes":                   strings.Join(hashes, "|"),
-		"ratioLimit":               strconv.FormatFloat(ratioLimit, 'f', 2, 64),
-		"seedingTimeLimit":         strconv.FormatInt(seedingTimeLimit, 10),
-		"inactiveSeedingTimeLimit": strconv.FormatInt(inactiveSeedingTimeLimit, 10),
+// Share limit action names for SetTorrentShareLimit (BitTorrent::ShareLimitAction).
+const (
+	ShareLimitActionDefault             = "Default"
+	ShareLimitActionStop                = "Stop"
+	ShareLimitActionRemove              = "Remove"
+	ShareLimitActionEnableSuperSeeding  = "EnableSuperSeeding"
+	ShareLimitActionRemoveWithContent   = "RemoveWithContent"
+)
+
+// Share limits mode names for SetTorrentShareLimit (BitTorrent::ShareLimitsMode).
+const (
+	ShareLimitsModeDefault  = "Default"
+	ShareLimitsModeMatchAny = "MatchAny"
+	ShareLimitsModeMatchAll = "MatchAll"
+)
+
+const (
+	shareLimitActionDefault = ShareLimitActionDefault
+	shareLimitsModeDefault  = ShareLimitsModeDefault
+)
+
+// SetTorrentShareLimit set share limits for torrents specified by hashes.
+func (c *Client) SetTorrentShareLimit(hashes []string, opts ShareLimitOptions) error {
+	return c.SetTorrentShareLimitCtx(context.Background(), hashes, opts)
+}
+
+// SetTorrentShareLimitCtx set share limits for torrents specified by hashes.
+func (c *Client) SetTorrentShareLimitCtx(ctx context.Context, hashes []string, opts ShareLimitOptions) error {
+	shareLimitAction := opts.ShareLimitAction
+	if shareLimitAction == "" {
+		shareLimitAction = shareLimitActionDefault
 	}
 
-	resp, err := c.postCtx(ctx, "torrents/setShareLimits", opts)
+	shareLimitsMode := opts.ShareLimitsMode
+	if shareLimitsMode == "" {
+		shareLimitsMode = shareLimitsModeDefault
+	}
+
+	form := map[string]string{
+		"hashes":                   strings.Join(hashes, "|"),
+		"ratioLimit":               strconv.FormatFloat(opts.RatioLimit, 'f', 2, 64),
+		"seedingTimeLimit":         strconv.FormatInt(opts.SeedingTimeLimit, 10),
+		"inactiveSeedingTimeLimit": strconv.FormatInt(opts.InactiveSeedingTimeLimit, 10),
+		"shareLimitAction":         shareLimitAction,
+		"shareLimitsMode":          shareLimitsMode,
+	}
+
+	resp, err := c.postCtx(ctx, "torrents/setShareLimits", form)
 	if err != nil {
-		return errors.Wrap(err, "could not set share limits; hashes: %v | ratioLimit: %v | seedingTimeLimit: %v | inactiveSeedingTimeLimit %v", hashes, ratioLimit, seedingTimeLimit, inactiveSeedingTimeLimit)
+		return errors.Wrap(err, "could not set share limits; hashes: %v | ratioLimit: %v | seedingTimeLimit: %v | inactiveSeedingTimeLimit %v | shareLimitAction: %v | shareLimitsMode: %v", hashes, opts.RatioLimit, opts.SeedingTimeLimit, opts.InactiveSeedingTimeLimit, shareLimitAction, shareLimitsMode)
 	}
 
 	defer drainAndClose(resp)
@@ -2265,7 +2598,7 @@ func (c *Client) SetTorrentShareLimitCtx(ctx context.Context, hashes []string, r
 	case http.StatusBadRequest:
 		return ErrInvalidShareLimit
 	default:
-		return errors.Wrap(ErrUnexpectedStatus, "could not set share limits; hashes: %v | ratioLimit: %v | seedingTimeLimit: %v | inactiveSeedingTimeLimit %v | status code: %d", hashes, ratioLimit, seedingTimeLimit, inactiveSeedingTimeLimit, resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not set share limits; hashes: %v | ratioLimit: %v | seedingTimeLimit: %v | inactiveSeedingTimeLimit %v | shareLimitAction: %v | shareLimitsMode: %v | status code: %d", hashes, opts.RatioLimit, opts.SeedingTimeLimit, opts.InactiveSeedingTimeLimit, shareLimitAction, shareLimitsMode, resp.StatusCode)
 	}
 }
 
@@ -3006,14 +3339,10 @@ func (c *Client) DeleteTorrentCreationTaskCtx(ctx context.Context, taskID string
 	}
 }
 
-// Check if status not working or something else
-// https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-4.1)#get-torrent-trackers
+// Check if at least one non-disabled tracker reports status OK (2). Status values are
+// TrackerStatus* in domain.go (inline comments on 4-6 describe how they differ).
 //
-//	0 Tracker is disabled (used for DHT, PeX, and LSD)
-//	1 Tracker has not been contacted yet
-//	2 Tracker has been contacted and is working
-//	3 Tracker is updating
-//	4 Tracker has been contacted, but it is not working (or doesn't send proper replies)
+// https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-4.1)#get-torrent-trackers
 func isTrackerStatusOK(trackers []TorrentTracker) bool {
 	for _, tracker := range trackers {
 		if tracker.Status == TrackerStatusDisabled {
