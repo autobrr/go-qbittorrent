@@ -395,7 +395,12 @@ func (c *Client) ListDirectory(dirPath string, mode DirectoryContentMode, withMe
 // Note: withMetadata requires WebAPI >= 2.11.8 (qBittorrent 5.2).
 // When false, returns []string; when true, returns []PathMetadata.
 func (c *Client) ListDirectoryCtx(ctx context.Context, dirPath string, mode DirectoryContentMode, withMetadata bool) (any, error) {
+	// An older server ignores withMetadata and answers with the string list,
+	// which would not decode as []PathMetadata.
 	minVersion, _ := semver.NewVersion("2.11.2")
+	if withMetadata {
+		minVersion, _ = semver.NewVersion("2.11.8")
+	}
 	if _, err := c.RequiresMinVersion(minVersion); err != nil {
 		return nil, err
 	}
