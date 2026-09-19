@@ -420,7 +420,6 @@ func TestMergeTorrents_NewTorrent(t *testing.T) {
 	rawData := map[string]interface{}{
 		"torrents": map[string]interface{}{
 			"def456": map[string]interface{}{
-				"hash":     "def456",
 				"name":     "New Torrent",
 				"progress": 0.25,
 				"dlspeed":  float64(2000),
@@ -446,6 +445,9 @@ func TestMergeTorrents_NewTorrent(t *testing.T) {
 	newTorrent, exists := sm.data.Torrents["def456"]
 	if !exists {
 		t.Fatal("Expected new torrent def456 to exist")
+	}
+	if newTorrent.Hash != "def456" {
+		t.Errorf("Expected hash 'def456', got %q", newTorrent.Hash)
 	}
 
 	if newTorrent.Name != "New Torrent" {
