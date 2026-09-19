@@ -385,6 +385,7 @@ func (c *Client) GetDirectoryContentCtx(ctx context.Context, dirPath string, wit
 }
 
 // ListDirectory lists the entries inside a directory that match mode.
+// Requires qBittorrent 5.0 and WebAPI >= 2.11.2.
 func (c *Client) ListDirectory(dirPath string, mode DirectoryContentMode, withMetadata bool) (any, error) {
 	return c.ListDirectoryCtx(context.Background(), dirPath, mode, withMetadata)
 }

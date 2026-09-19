@@ -7,8 +7,6 @@ import (
 	"testing"
 )
 
-// A server older than WebAPI 2.11.8 ignores withMetadata and answers with the
-// plain string list, so the client must refuse before it decodes that.
 func TestClient_ListDirectory_MetadataVersionGate(t *testing.T) {
 	var gotMode string
 	mux := http.NewServeMux()
