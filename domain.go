@@ -940,6 +940,15 @@ type TorrentCreationTaskResponse struct {
 	TaskID string `json:"taskID"`
 }
 
+// DirectoryContentMode selects which entries getDirectoryContent returns.
+type DirectoryContentMode string
+
+const (
+	DirectoryContentAll   DirectoryContentMode = "all"
+	DirectoryContentDirs  DirectoryContentMode = "dirs"
+	DirectoryContentFiles DirectoryContentMode = "files"
+)
+
 // PathMetadata represents the response of the getDirectoryContent method with withMetadata set to true
 type PathMetadata struct {
 	Name                 string `json:"name"`

@@ -369,10 +369,30 @@ func (c *Client) GetDirectoryContent(dirPath string, withMetadata bool) (any, er
 
 // GetDirectoryContentCtx lists folders inside a directory (for autocomplete).
 // Requires qBittorrent 5.0 and WebAPI >= 2.11.2.
-// Note: withMetadata parameter is not yet released in qBittorrent (as of Dec 2025),
-// expected in the next version. When false, returns []string; when true, returns []PathMetadata.
+// Note: withMetadata requires WebAPI >= 2.11.8 (qBittorrent 5.2).
+// When false, returns []string; when true, returns []PathMetadata.
 func (c *Client) GetDirectoryContentCtx(ctx context.Context, dirPath string, withMetadata bool) (any, error) {
-	minVersion, _ := semver.NewVersion("2.11.2")
+	return c.ListDirectoryCtx(ctx, dirPath, DirectoryContentDirs, withMetadata)
+}
+
+// ListDirectory lists the entries inside a directory that match mode.
+// Requires qBittorrent 5.0 and WebAPI >= 2.11.2.
+func (c *Client) ListDirectory(dirPath string, mode DirectoryContentMode, withMetadata bool) (any, error) {
+	return c.ListDirectoryCtx(context.Background(), dirPath, mode, withMetadata)
+}
+
+// ListDirectoryCtx lists the entries inside a directory that match mode.
+// The zero mode lists directories and files, like DirectoryContentAll.
+// Requires qBittorrent 5.0 and WebAPI >= 2.11.2.
+// Note: withMetadata requires WebAPI >= 2.11.8 (qBittorrent 5.2).
+// When false, returns []string; when true, returns []PathMetadata.
+func (c *Client) ListDirectoryCtx(ctx context.Context, dirPath string, mode DirectoryContentMode, withMetadata bool) (any, error) {
+	// An older server ignores withMetadata and answers with the string list,
+	// which would not decode as []PathMetadata.
+	minVersion := semver.MustParse("2.11.2")
+	if withMetadata {
+		minVersion = semver.MustParse("2.11.8")
+	}
 	if _, err := c.RequiresMinVersion(minVersion); err != nil {
 		return nil, err
 	}
@@ -380,7 +400,10 @@ func (c *Client) GetDirectoryContentCtx(ctx context.Context, dirPath string, wit
 	opts := map[string]string{
 		"dirPath":      dirPath,
 		"withMetadata": strconv.FormatBool(withMetadata),
-		"mode":         "dirs",
+	}
+	// An empty mode is rejected by qBittorrent; omit it and let the server default to all.
+	if mode != "" {
+		opts["mode"] = string(mode)
 	}
 	resp, err := c.getCtx(ctx, "app/getDirectoryContent", opts)
 	if err != nil {
