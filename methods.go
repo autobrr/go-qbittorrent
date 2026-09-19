@@ -151,33 +151,24 @@ func (c *Client) ShutdownCtx(ctx context.Context) error {
 	return nil
 }
 
-func (c *Client) setApiVersion() error {
+func (c *Client) getApiVersion() (*semver.Version, error) {
+	if ver := c.version.Load(); ver != nil {
+		return ver, nil
+	}
+
 	versionString, err := c.GetWebAPIVersionCtx(context.Background())
 	if err != nil {
-		return errors.Wrap(err, "could not get webapi version")
+		return nil, errors.Wrap(err, "could not get webapi version")
 	}
 
 	c.log.Printf("webapi version: %v", versionString)
 
-	ver, err := semver.NewVersion(versionString)
-	if err != nil {
-		return errors.Wrap(err, "could not parse webapi version")
+	ver := c.version.Load()
+	if ver == nil {
+		return nil, errors.New("could not parse webapi version %q", versionString)
 	}
 
-	c.version = ver
-
-	return nil
-}
-
-func (c *Client) getApiVersion() (*semver.Version, error) {
-	if c.version == nil || (c.version.Major() == 0 && c.version.Minor() == 0 && c.version.Patch() == 0) {
-		err := c.setApiVersion()
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return c.version, nil
+	return ver, nil
 }
 
 // translateFilter translates filter names based on qBittorrent version for compatibility
@@ -378,10 +369,30 @@ func (c *Client) GetDirectoryContent(dirPath string, withMetadata bool) (any, er
 
 // GetDirectoryContentCtx lists folders inside a directory (for autocomplete).
 // Requires qBittorrent 5.0 and WebAPI >= 2.11.2.
-// Note: withMetadata parameter is not yet released in qBittorrent (as of Dec 2025),
-// expected in the next version. When false, returns []string; when true, returns []PathMetadata.
+// Note: withMetadata requires WebAPI >= 2.11.8 (qBittorrent 5.2).
+// When false, returns []string; when true, returns []PathMetadata.
 func (c *Client) GetDirectoryContentCtx(ctx context.Context, dirPath string, withMetadata bool) (any, error) {
-	minVersion, _ := semver.NewVersion("2.11.2")
+	return c.ListDirectoryCtx(ctx, dirPath, DirectoryContentDirs, withMetadata)
+}
+
+// ListDirectory lists the entries inside a directory that match mode.
+// Requires qBittorrent 5.0 and WebAPI >= 2.11.2.
+func (c *Client) ListDirectory(dirPath string, mode DirectoryContentMode, withMetadata bool) (any, error) {
+	return c.ListDirectoryCtx(context.Background(), dirPath, mode, withMetadata)
+}
+
+// ListDirectoryCtx lists the entries inside a directory that match mode.
+// The zero mode lists directories and files, like DirectoryContentAll.
+// Requires qBittorrent 5.0 and WebAPI >= 2.11.2.
+// Note: withMetadata requires WebAPI >= 2.11.8 (qBittorrent 5.2).
+// When false, returns []string; when true, returns []PathMetadata.
+func (c *Client) ListDirectoryCtx(ctx context.Context, dirPath string, mode DirectoryContentMode, withMetadata bool) (any, error) {
+	// An older server ignores withMetadata and answers with the string list,
+	// which would not decode as []PathMetadata.
+	minVersion := semver.MustParse("2.11.2")
+	if withMetadata {
+		minVersion = semver.MustParse("2.11.8")
+	}
 	if _, err := c.RequiresMinVersion(minVersion); err != nil {
 		return nil, err
 	}
@@ -389,7 +400,10 @@ func (c *Client) GetDirectoryContentCtx(ctx context.Context, dirPath string, wit
 	opts := map[string]string{
 		"dirPath":      dirPath,
 		"withMetadata": strconv.FormatBool(withMetadata),
-		"mode":         "dirs",
+	}
+	// An empty mode is rejected by qBittorrent; omit it and let the server default to all.
+	if mode != "" {
+		opts["mode"] = string(mode)
 	}
 	resp, err := c.getCtx(ctx, "app/getDirectoryContent", opts)
 	if err != nil {
@@ -2844,7 +2858,12 @@ func (c *Client) GetWebAPIVersionCtx(ctx context.Context) (string, error) {
 		return "", errors.Wrap(err, "could not read body")
 	}
 
-	return string(body), nil
+	versionString := string(body)
+	if ver, err := semver.NewVersion(versionString); err == nil {
+		c.version.Store(ver)
+	}
+
+	return versionString, nil
 }
 
 // GetLogs get main client logs
