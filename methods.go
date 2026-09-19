@@ -151,33 +151,24 @@ func (c *Client) ShutdownCtx(ctx context.Context) error {
 	return nil
 }
 
-func (c *Client) setApiVersion() error {
+func (c *Client) getApiVersion() (*semver.Version, error) {
+	if ver := c.version.Load(); ver != nil {
+		return ver, nil
+	}
+
 	versionString, err := c.GetWebAPIVersionCtx(context.Background())
 	if err != nil {
-		return errors.Wrap(err, "could not get webapi version")
+		return nil, errors.Wrap(err, "could not get webapi version")
 	}
 
 	c.log.Printf("webapi version: %v", versionString)
 
-	ver, err := semver.NewVersion(versionString)
-	if err != nil {
-		return errors.Wrap(err, "could not parse webapi version")
+	ver := c.version.Load()
+	if ver == nil {
+		return nil, errors.New("could not parse webapi version %q", versionString)
 	}
 
-	c.version = ver
-
-	return nil
-}
-
-func (c *Client) getApiVersion() (*semver.Version, error) {
-	if c.version == nil || (c.version.Major() == 0 && c.version.Minor() == 0 && c.version.Patch() == 0) {
-		err := c.setApiVersion()
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return c.version, nil
+	return ver, nil
 }
 
 // translateFilter translates filter names based on qBittorrent version for compatibility
@@ -2839,7 +2830,12 @@ func (c *Client) GetWebAPIVersionCtx(ctx context.Context) (string, error) {
 		return "", errors.Wrap(err, "could not read body")
 	}
 
-	return string(body), nil
+	versionString := string(body)
+	if ver, err := semver.NewVersion(versionString); err == nil {
+		c.version.Store(ver)
+	}
+
+	return versionString, nil
 }
 
 // GetLogs get main client logs
