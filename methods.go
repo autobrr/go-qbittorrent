@@ -397,9 +397,9 @@ func (c *Client) ListDirectory(dirPath string, mode DirectoryContentMode, withMe
 func (c *Client) ListDirectoryCtx(ctx context.Context, dirPath string, mode DirectoryContentMode, withMetadata bool) (any, error) {
 	// An older server ignores withMetadata and answers with the string list,
 	// which would not decode as []PathMetadata.
-	minVersion, _ := semver.NewVersion("2.11.2")
+	minVersion := semver.MustParse("2.11.2")
 	if withMetadata {
-		minVersion, _ = semver.NewVersion("2.11.8")
+		minVersion = semver.MustParse("2.11.8")
 	}
 	if _, err := c.RequiresMinVersion(minVersion); err != nil {
 		return nil, err

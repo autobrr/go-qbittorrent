@@ -35,8 +35,9 @@ func TestClient_ListDirectory_MetadataVersionGate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("without metadata on 2.11.2: err = %v", err)
 	}
-	if got := entries.([]string); len(got) != 1 || got[0] != "/data/sub" {
-		t.Fatalf("entries = %v, want [/data/sub]", got)
+	got, ok := entries.([]string)
+	if !ok || len(got) != 1 || got[0] != "/data/sub" {
+		t.Fatalf("entries = %#v, want []string{\"/data/sub\"}", entries)
 	}
 	if gotMode != "all" {
 		t.Fatalf("mode = %q, want all", gotMode)
