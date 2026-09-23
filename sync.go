@@ -1,6 +1,7 @@
 package qbittorrent
 
 import (
+	"cmp"
 	"context"
 	"maps"
 	"math/rand"
@@ -129,9 +130,16 @@ func (sm *SyncManager) Sync(ctx context.Context) error {
 }
 
 // startSync starts a shared sync, or joins the one in progress.
+// The shared sync has its own deadline: every retry attempt with its full
+// timeout and delay. Without it, a http.Client with no Timeout could hang
+// the sync forever, and every later caller would join the stuck call.
 func (sm *SyncManager) startSync(ctx context.Context) <-chan singleflight.Result {
 	return sm.syncGroup.DoChan("sync", func() (any, error) {
-		return sm.doSync(context.WithoutCancel(ctx))
+		c := sm.client
+		attempt := cmp.Or(c.http.Timeout, c.timeout)
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Duration(c.retryAttempts)*(attempt+c.retryDelay))
+		defer cancel()
+		return sm.doSync(ctx)
 	})
 }
 

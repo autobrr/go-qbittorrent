@@ -69,6 +69,7 @@ func NewMockClient() *MockClient {
 		},
 		// A literal Client skips the NewClient defaults that retryDo needs.
 		log:           log.New(io.Discard, "", 0),
+		timeout:       DefaultTimeout,
 		retryAttempts: 1,
 	}
 

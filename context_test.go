@@ -193,3 +193,51 @@ func TestSyncManager_CheckedGetterColdCacheWaitsAtMostOneTimeout(t *testing.T) {
 		t.Fatalf("GetTorrents blocked for %v on a cold cache, want about 100ms", elapsed)
 	}
 }
+
+func TestRetryDo_DialFailureWaitsRetryDelay(t *testing.T) {
+	srv := httptest.NewServer(http.NotFoundHandler())
+	srv.Close() // nothing listens here now, so every dial is refused
+	c := NewClient(Config{Host: srv.URL, APIKey: "test-key", RetryAttempts: 2, RetryDelay: 1})
+
+	start := time.Now()
+	if _, err := c.getCtx(t.Context(), "sync/maindata", nil); err == nil {
+		t.Fatal("expected an error")
+	}
+	if elapsed := time.Since(start); elapsed < time.Second {
+		t.Fatalf("retryDo returned after %v, want at least the 1s RetryDelay", elapsed)
+	}
+}
+
+func TestRetryDo_DoesNotReplayTimedOutPost(t *testing.T) {
+	// The server does not see the client go away while the POST body is
+	// unread, so release the handler before srv.Close waits for it.
+	release := make(chan struct{})
+	srv, hits := newHangingServer(t, 0, release)
+	t.Cleanup(func() { close(release) })
+	c := newTestClient(srv.URL, 5)
+	c.http.Timeout = 50 * time.Millisecond
+
+	if _, err := c.postCtx(t.Context(), "torrents/toggleSequentialDownload", nil); err == nil {
+		t.Fatal("expected an error")
+	}
+	if got := hits.Load(); got != 1 {
+		t.Fatalf("server got %d requests, want 1", got)
+	}
+}
+
+func TestSyncManager_SharedSyncEndsWithoutClientTimeout(t *testing.T) {
+	srv, _ := newHangingServer(t, 0, nil)
+	c := newTestClient(srv.URL, 1)
+	c.http.Timeout = 0 // a custom http.Client with no timeout
+	c.timeout = 50 * time.Millisecond
+	c.retryDelay = 0
+	sm := NewSyncManager(c)
+
+	start := time.Now()
+	if err := sm.Sync(t.Context()); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected context.DeadlineExceeded, got %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("shared sync ran for %v, want about 50ms", elapsed)
+	}
+}
