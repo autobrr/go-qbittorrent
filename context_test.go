@@ -241,3 +241,34 @@ func TestSyncManager_SharedSyncEndsWithoutClientTimeout(t *testing.T) {
 		t.Fatalf("shared sync ran for %v, want about 50ms", elapsed)
 	}
 }
+
+func TestSyncManager_StaleReadsDoNotJoinRunningSync(t *testing.T) {
+	release := make(chan struct{})
+	defer close(release)
+	srv, hits := newHangingServer(t, 1, release)
+	opts := DefaultSyncOptions()
+	opts.DynamicSync = true
+	sm := NewSyncManager(newTestClient(srv.URL, 1), opts)
+
+	if err := sm.Sync(t.Context()); err != nil {
+		t.Fatalf("initial sync: %v", err)
+	}
+	sm.mu.Lock()
+	sm.lastSync = time.Now().Add(-time.Hour)
+	sm.mu.Unlock()
+
+	// The first stale read starts the background sync, which then hangs.
+	sm.GetTorrents(TorrentFilterOptions{})
+	for hits.Load() < 2 {
+		time.Sleep(time.Millisecond)
+	}
+
+	read := func() { sm.GetTorrents(TorrentFilterOptions{}) }
+	stale := testing.AllocsPerRun(100, read)
+	sm.mu.Lock()
+	sm.options.DynamicSync = false // the same read, with no sync to join
+	sm.mu.Unlock()
+	if noSync := testing.AllocsPerRun(100, read); stale != noSync {
+		t.Fatalf("stale read allocates %v, want %v: it joins the running sync", stale, noSync)
+	}
+}

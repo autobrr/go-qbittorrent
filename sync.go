@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/sync/singleflight"
@@ -25,6 +26,7 @@ type SyncManager struct {
 	client             *Client
 	trackerManager     *TrackerManager
 	syncGroup          singleflight.Group
+	syncing            atomic.Bool // a shared sync is in flight
 	options            SyncOptions
 	allTorrents        []Torrent
 	resultPool         sync.Pool
@@ -135,6 +137,8 @@ func (sm *SyncManager) Sync(ctx context.Context) error {
 // the sync forever, and every later caller would join the stuck call.
 func (sm *SyncManager) startSync(ctx context.Context) <-chan singleflight.Result {
 	return sm.syncGroup.DoChan("sync", func() (any, error) {
+		sm.syncing.Store(true)
+		defer sm.syncing.Store(false)
 		c := sm.client
 		attempt := cmp.Or(c.http.Timeout, c.timeout)
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Duration(c.retryAttempts)*(attempt+c.retryDelay))
@@ -263,8 +267,12 @@ func (sm *SyncManager) ensureFreshData() {
 		return
 	}
 	if !coldCache {
-		// The channel is buffered, so dropping it leaks nothing.
-		sm.startSync(context.Background())
+		// Each join keeps a result channel until the sync ends, so do not
+		// join a sync that is already running. The channel is buffered, so
+		// dropping it leaks nothing.
+		if !sm.syncing.Load() {
+			sm.startSync(context.Background())
+		}
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), sm.client.timeout)
