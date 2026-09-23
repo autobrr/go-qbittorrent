@@ -2,9 +2,7 @@ package qbittorrent
 
 import (
 	"context"
-	"fmt"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -19,7 +17,6 @@ const (
 // trackerAPI describes the subset of Client functionality required by TrackerManager.
 type trackerAPI interface {
 	GetTorrentsCtx(ctx context.Context, o TorrentFilterOptions) ([]Torrent, error)
-	GetTorrentTrackersCtx(ctx context.Context, hash string) ([]TorrentTracker, error)
 }
 
 // TrackerManager coordinates tracker metadata hydration with caching.
@@ -40,8 +37,8 @@ func NewTrackerManager(api trackerAPI) *TrackerManager {
 }
 
 // HydrateTorrents enriches the provided torrents with tracker metadata from cache.
-// For versions that support IncludeTrackers, fetches all trackers at once.
-// Otherwise fetches individually if not cached.
+// When IncludeTrackers is supported, it fetches the hashes that are not cached.
+// Otherwise it applies only the cached entries.
 // It returns the enriched slice and a cache of tracker lists keyed by hash.
 func (tm *TrackerManager) HydrateTorrents(ctx context.Context, torrents []Torrent) ([]Torrent, map[string][]TorrentTracker) {
 	if tm == nil || len(torrents) == 0 {
@@ -80,58 +77,38 @@ func (tm *TrackerManager) HydrateTorrents(ctx context.Context, torrents []Torren
 		return torrents, trackerMap
 	}
 
-	// Fast path: fetch trackers with includeTrackers support when available
 	if tm.SupportsIncludeTrackers() {
 		tm.hydrateWithIncludeTrackers(ctx, torrents, trackerMap, hashesToFetch, hashToTorrentIndex)
-	} else {
-		// Fetch hashes individually (fallback when fast path not supported)
-		// Use pipelining to fetch in parallel for better performance
-		type fetchResult struct {
-			hash     string
-			trackers []TorrentTracker
-			err      error
-		}
-
-		results := make(chan fetchResult, len(hashesToFetch))
-		sem := make(chan struct{}, 50) // Limit concurrency to 50
-		var wg sync.WaitGroup
-
-		wg.Add(len(hashesToFetch))
-		for _, hash := range hashesToFetch {
-			sem <- struct{}{} // Acquire semaphore before starting goroutine
-			go func(h string) {
-				defer wg.Done()
-				defer func() { <-sem }() // Release semaphore
-
-				select {
-				case <-ctx.Done():
-					results <- fetchResult{hash: h, err: ctx.Err()}
-					return
-				default:
-				}
-
-				trackers, err := tm.fetchTrackersForHash(ctx, h)
-				results <- fetchResult{hash: h, trackers: trackers, err: err}
-			}(hash)
-		}
-
-		// Close results channel after all goroutines finish
-		go func() {
-			wg.Wait()
-			close(results)
-		}()
-
-		// Collect results
-		for res := range results {
-			if res.err == nil && len(res.trackers) > 0 {
-				i := hashToTorrentIndex[res.hash]
-				torrents[i].Trackers = res.trackers
-				trackerMap[res.hash] = res.trackers
-				tm.cache.Set(res.hash, res.trackers, trackerCacheTTL)
-			}
-		}
 	}
 
+	return torrents, trackerMap
+}
+
+// Refresh fetches tracker metadata for all provided torrents and writes it to the cache.
+// Use it for a periodic pass that needs current tracker status: unlike Invalidate followed
+// by HydrateTorrents, a failed fetch does not empty the cache for other readers.
+// It ignores the cache and the trackers already on the torrents. A hash that the fetch
+// does not return keeps its old cache entry and its current Trackers, and is absent from
+// the returned map.
+// When IncludeTrackers is not supported, it returns the torrents unchanged.
+func (tm *TrackerManager) Refresh(ctx context.Context, torrents []Torrent) ([]Torrent, map[string][]TorrentTracker) {
+	if tm == nil || len(torrents) == 0 || !tm.SupportsIncludeTrackers() {
+		return torrents, nil
+	}
+
+	trackerMap := make(map[string][]TorrentTracker, len(torrents))
+	hashes := make([]string, 0, len(torrents))
+	hashToTorrentIndex := make(map[string]int, len(torrents))
+	for i := range torrents {
+		hash := strings.TrimSpace(torrents[i].Hash)
+		if hash == "" {
+			continue
+		}
+		hashToTorrentIndex[hash] = i
+		hashes = append(hashes, hash)
+	}
+
+	tm.hydrateWithIncludeTrackers(ctx, torrents, trackerMap, hashes, hashToTorrentIndex)
 	return torrents, trackerMap
 }
 
@@ -200,7 +177,7 @@ func (tm *TrackerManager) hydrateWithIncludeTrackers(ctx context.Context, torren
 	}
 
 	for len(pending) > 0 {
-		chunk := make([]string, 0, minInt(len(pending), trackerIncludeChunkSize))
+		chunk := make([]string, 0, min(len(pending), trackerIncludeChunkSize))
 		for hash := range pending {
 			chunk = append(chunk, hash)
 			if len(chunk) >= trackerIncludeChunkSize {
@@ -222,27 +199,6 @@ func (tm *TrackerManager) hydrateWithIncludeTrackers(ctx context.Context, torren
 			return
 		}
 	}
-}
-
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-// calculateTrackerTTL calculates the appropriate TTL for tracker cache based on reannounce time
-func calculateTrackerTTL(reannounce int64) time.Duration {
-	ttl := trackerCacheTTL
-
-	if reannounce > 0 {
-		// Use the reannounce time, but cap at maximum TTL
-		if reannounceDuration := time.Duration(reannounce) * time.Second; reannounceDuration < ttl {
-			ttl = reannounceDuration
-		}
-	}
-
-	return ttl
 }
 
 // Invalidate clears cached tracker metadata for the supplied hashes. When no hashes are provided
@@ -286,12 +242,4 @@ func (tm *TrackerManager) SupportsIncludeTrackers() bool {
 		return false
 	}
 	return tm.useIncludeTrackers.Load()
-}
-
-func (tm *TrackerManager) fetchTrackersForHash(ctx context.Context, hash string) ([]TorrentTracker, error) {
-	if tm == nil || tm.api == nil {
-		return nil, fmt.Errorf("tracker manager not initialized")
-	}
-
-	return tm.api.GetTorrentTrackersCtx(ctx, hash)
 }
