@@ -84,32 +84,44 @@ func (tm *TrackerManager) HydrateTorrents(ctx context.Context, torrents []Torren
 	return torrents, trackerMap
 }
 
-// Refresh fetches tracker metadata for all provided torrents and writes it to the cache.
-// Use it for a periodic pass that needs current tracker status: unlike Invalidate followed
-// by HydrateTorrents, a failed fetch does not empty the cache for other readers.
-// It ignores the cache and the trackers already on the torrents. A hash that the fetch
-// does not return keeps its old cache entry and its current Trackers, and is absent from
-// the returned map.
-// When IncludeTrackers is not supported, it returns the torrents unchanged.
-func (tm *TrackerManager) Refresh(ctx context.Context, torrents []Torrent) ([]Torrent, map[string][]TorrentTracker) {
+// Refresh fetches tracker metadata for the whole library in one request and writes it
+// to the cache. Use it for a periodic pass over the whole library.
+// The request has no hash filter, so the URL stays short for any library size.
+// A failed fetch does not empty the cache, so other readers still get data.
+// Refresh ignores the cache and the trackers already on the torrents.
+// A torrent that the fetch does not return keeps its current Trackers and is absent
+// from the returned map. When the fetch fails, Refresh returns the torrents unchanged
+// and the error.
+// When IncludeTrackers is not supported, it returns the torrents unchanged and no error.
+func (tm *TrackerManager) Refresh(ctx context.Context, torrents []Torrent) ([]Torrent, map[string][]TorrentTracker, error) {
 	if tm == nil || len(torrents) == 0 || !tm.SupportsIncludeTrackers() {
-		return torrents, nil
+		return torrents, nil, nil
 	}
 
-	trackerMap := make(map[string][]TorrentTracker, len(torrents))
-	hashes := make([]string, 0, len(torrents))
-	hashToTorrentIndex := make(map[string]int, len(torrents))
-	for i := range torrents {
-		hash := strings.TrimSpace(torrents[i].Hash)
+	fetched, err := tm.api.GetTorrentsCtx(ctx, TorrentFilterOptions{IncludeTrackers: true})
+	if err != nil {
+		return torrents, nil, err
+	}
+
+	byHash := make(map[string][]TorrentTracker, len(fetched))
+	for _, torrent := range fetched {
+		hash := strings.TrimSpace(torrent.Hash)
 		if hash == "" {
 			continue
 		}
-		hashToTorrentIndex[hash] = i
-		hashes = append(hashes, hash)
+		byHash[hash] = torrent.Trackers
+		tm.cache.Set(hash, torrent.Trackers, trackerCacheTTL)
 	}
 
-	tm.hydrateWithIncludeTrackers(ctx, torrents, trackerMap, hashes, hashToTorrentIndex)
-	return torrents, trackerMap
+	trackerMap := make(map[string][]TorrentTracker, len(torrents))
+	for i := range torrents {
+		hash := strings.TrimSpace(torrents[i].Hash)
+		if trackers, ok := byHash[hash]; ok {
+			torrents[i].Trackers = trackers
+			trackerMap[hash] = trackers
+		}
+	}
+	return torrents, trackerMap, nil
 }
 
 func (tm *TrackerManager) hydrateWithIncludeTrackers(ctx context.Context, torrents []Torrent, trackerMap map[string][]TorrentTracker, hashes []string, hashToTorrentIndex map[string]int) {
