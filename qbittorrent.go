@@ -74,7 +74,7 @@ func NewClient(cfg Config) *Client {
 
 	// set retry defaults
 	c.retryAttempts = 5
-	c.retryDelay = 1
+	c.retryDelay = time.Second
 
 	if cfg.RetryAttempts > 0 {
 		c.retryAttempts = cfg.RetryAttempts

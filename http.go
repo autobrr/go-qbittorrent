@@ -391,7 +391,9 @@ func (c *Client) retryDo(ctx context.Context, req *http.Request) (*http.Response
 		resp, err = c.http.Do(req)
 
 		if err != nil {
-			if err == context.DeadlineExceeded || err == context.Canceled {
+			// Stop when the caller's context ends. A http.Client.Timeout
+			// error leaves ctx intact, so that attempt is retried.
+			if ctx.Err() != nil {
 				return retry.Unrecoverable(err)
 			}
 
@@ -403,7 +405,6 @@ func (c *Client) retryDo(ctx context.Context, req *http.Request) (*http.Response
 				return err
 			}
 
-			retry.Delay(c.retryDelay)
 			return err
 		}
 
@@ -415,7 +416,6 @@ func (c *Client) retryDo(ctx context.Context, req *http.Request) (*http.Response
 			if err := c.LoginCtx(ctx); err != nil {
 				return errors.Wrap(err, "qbit re-login failed")
 			}
-			retry.Delay(100 * time.Millisecond)
 			return errors.New("qbit re-login")
 		} else if resp.StatusCode < 500 {
 			return nil
@@ -428,7 +428,16 @@ func (c *Client) retryDo(ctx context.Context, req *http.Request) (*http.Response
 	},
 		retry.OnRetry(func(n uint, err error) { c.log.Printf("%q: attempt %d - %v\n", err, n, req.URL.String()) }),
 		retry.Attempts(uint(c.retryAttempts)),
-		retry.MaxJitter(time.Second*1),
+		retry.Context(ctx),
+		retry.Delay(c.retryDelay),
+		retry.DelayType(func(n uint, err error, config *retry.Config) time.Duration {
+			// Retry closed/dead pooled connections at once.
+			if isClosedConnectionError(err) {
+				return 0
+			}
+			return retry.FixedDelay(n, err, config)
+		}),
+		retry.LastErrorOnly(true),
 	)
 
 	if err != nil {

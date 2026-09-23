@@ -111,15 +111,28 @@ func (sm *SyncManager) Start(ctx context.Context) error {
 	return nil
 }
 
-// Sync performs a synchronization with the qBittorrent server
-// If another sync is already in progress, this method will wait for it to complete
-// and all callers will receive the same result (using singleflight pattern).
-// Note: Uses context.Background() for all syncs to avoid context confusion in batched calls.
+// Sync performs a synchronization with the qBittorrent server.
+// Concurrent callers share one sync (singleflight pattern) and receive its result.
+// The shared sync ignores the cancellation of the caller that started it, so one
+// caller's deadline cannot fail the sync for the others. Each caller stops
+// waiting and returns ctx.Err() when its own ctx ends.
 func (sm *SyncManager) Sync(ctx context.Context) error {
-	_, err, _ := sm.syncGroup.Do("sync", func() (interface{}, error) {
-		return sm.doSync(ctx)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	select {
+	case res := <-sm.startSync(ctx):
+		return res.Err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// startSync starts a shared sync, or joins the one in progress.
+func (sm *SyncManager) startSync(ctx context.Context) <-chan singleflight.Result {
+	return sm.syncGroup.DoChan("sync", func() (any, error) {
+		return sm.doSync(context.WithoutCancel(ctx))
 	})
-	return err
 }
 
 // doSync performs the actual sync operation (singleflight-compatible signature).
@@ -146,8 +159,9 @@ func (sm *SyncManager) doSync(ctx context.Context) (interface{}, error) {
 	// read back from the sync manager (the *Unchecked getters, LastError,
 	// LastSuccessfulSyncTime, ...): a callback invoked under the lock that
 	// re-entered any getter self-deadlocked on the non-reentrant RWMutex.
-	// Calling Sync (or a checked getter once data is stale) from a callback
-	// still deadlocks: it would join the singleflight call it is running in.
+	// Calling Sync from a callback blocks until its ctx ends: it would join
+	// the singleflight call it is running in. Checked getters do not block
+	// here, because sm.data is always set by the time a callback runs.
 	if err != nil {
 		if sm.options.OnError != nil {
 			sm.options.OnError(err)
@@ -206,7 +220,10 @@ func (sm *SyncManager) updateAllTorrents() {
 	}
 }
 
-// ensureFreshData checks if data is stale or missing and triggers a non-blocking sync if needed
+// ensureFreshData starts a sync when the data is stale or missing.
+// Stale data is returned at once while the sync runs in the background.
+// Missing data makes the caller wait for the sync, but for no longer than
+// the client timeout (one request attempt).
 func (sm *SyncManager) ensureFreshData() {
 	// Fast path: check if we just checked freshness very recently (< 100ms)
 	// This prevents redundant checks when multiple Get* methods are called in quick succession
@@ -232,12 +249,19 @@ func (sm *SyncManager) ensureFreshData() {
 		}
 	}
 
+	coldCache := sm.data == nil
 	sm.mu.RUnlock()
-	// Trigger async sync if needed - don't block the reader
-	// singleflight will automatically deduplicate concurrent syncs
-	if shouldSync {
-		sm.Sync(context.Background())
+	if !shouldSync {
+		return
 	}
+	if !coldCache {
+		// The channel is buffered, so dropping it leaks nothing.
+		sm.startSync(context.Background())
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), sm.client.timeout)
+	defer cancel()
+	_ = sm.Sync(ctx)
 }
 
 // calculateStaleThreshold determines how old data can be before it's considered stale
