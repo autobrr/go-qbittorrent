@@ -36,6 +36,34 @@ func newTestClient(host string, attempts int) *Client {
 	return NewClient(Config{Host: host, APIKey: "test-key", RetryAttempts: attempts})
 }
 
+// waitForHits waits until the server has received n requests.
+func waitForHits(t *testing.T, hits *atomic.Int32, n int32) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for hits.Load() < n {
+		if time.Now().After(deadline) {
+			t.Fatalf("server got %d requests, want %d", hits.Load(), n)
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+// newStaleSyncManager returns a sync manager with dynamic sync on and one
+// successful sync whose data is now stale.
+func newStaleSyncManager(t *testing.T, c *Client) *SyncManager {
+	t.Helper()
+	opts := DefaultSyncOptions()
+	opts.DynamicSync = true
+	sm := NewSyncManager(c, opts)
+	if err := sm.Sync(t.Context()); err != nil {
+		t.Fatalf("initial sync: %v", err)
+	}
+	sm.mu.Lock()
+	sm.lastSync = time.Now().Add(-time.Hour)
+	sm.mu.Unlock()
+	return sm
+}
+
 func TestNewClient_DefaultRetryDelayIsOneSecond(t *testing.T) {
 	if got := NewClient(Config{Host: "http://qbit.test"}).retryDelay; got != time.Second {
 		t.Fatalf("default retryDelay = %v, want 1s", got)
@@ -66,8 +94,9 @@ func TestRetryDo_StopsWhenContextEnds(t *testing.T) {
 
 func TestRetryDo_RetriesClientTimeoutWithRetryDelay(t *testing.T) {
 	srv, hits := newHangingServer(t, 0, nil)
-	c := NewClient(Config{Host: srv.URL, APIKey: "test-key", RetryAttempts: 2, RetryDelay: 1})
+	c := newTestClient(srv.URL, 2)
 	c.http.Timeout = 50 * time.Millisecond
+	c.retryDelay = 200 * time.Millisecond
 
 	start := time.Now()
 	if _, err := c.getCtx(t.Context(), "sync/maindata", nil); err == nil {
@@ -78,8 +107,8 @@ func TestRetryDo_RetriesClientTimeoutWithRetryDelay(t *testing.T) {
 	if got := hits.Load(); got != 2 {
 		t.Fatalf("server got %d requests, want 2", got)
 	}
-	if elapsed < time.Second {
-		t.Fatalf("retryDo returned after %v, want at least the 1s RetryDelay", elapsed)
+	if elapsed < 250*time.Millisecond {
+		t.Fatalf("retryDo returned after %v, want at least one 50ms attempt and the 200ms retry delay", elapsed)
 	}
 }
 
@@ -95,9 +124,7 @@ func TestSyncManager_SyncCallerReturnsAtDeadlineWhileSharedSyncContinues(t *test
 	shortErr := make(chan error, 1)
 	start := time.Now()
 	go func() { shortErr <- sm.Sync(ctx) }()
-	for hits.Load() == 0 {
-		time.Sleep(time.Millisecond)
-	}
+	waitForHits(t, hits, 1)
 
 	// A second caller joins the same sync with no deadline.
 	longErr := make(chan error, 1)
@@ -146,17 +173,7 @@ func TestSyncManager_CheckedGetterStaleDataDoesNotBlock(t *testing.T) {
 	release := make(chan struct{})
 	defer close(release)
 	srv, hits := newHangingServer(t, 1, release)
-	opts := DefaultSyncOptions()
-	opts.DynamicSync = true
-	sm := NewSyncManager(newTestClient(srv.URL, 5), opts)
-
-	if err := sm.Sync(t.Context()); err != nil {
-		t.Fatalf("initial sync: %v", err)
-	}
-	// Make the cached data stale.
-	sm.mu.Lock()
-	sm.lastSync = time.Now().Add(-time.Hour)
-	sm.mu.Unlock()
+	sm := newStaleSyncManager(t, newTestClient(srv.URL, 5))
 
 	start := time.Now()
 	torrents := sm.GetTorrents(TorrentFilterOptions{})
@@ -168,13 +185,7 @@ func TestSyncManager_CheckedGetterStaleDataDoesNotBlock(t *testing.T) {
 	}
 
 	// The getter still starts a background sync.
-	deadline := time.Now().Add(2 * time.Second)
-	for hits.Load() < 2 && time.Now().Before(deadline) {
-		time.Sleep(time.Millisecond)
-	}
-	if got := hits.Load(); got != 2 {
-		t.Fatalf("server got %d requests, want 2 (initial and background sync)", got)
-	}
+	waitForHits(t, hits, 2)
 }
 
 func TestSyncManager_CheckedGetterColdCacheWaitsAtMostOneTimeout(t *testing.T) {
@@ -197,14 +208,34 @@ func TestSyncManager_CheckedGetterColdCacheWaitsAtMostOneTimeout(t *testing.T) {
 func TestRetryDo_DialFailureWaitsRetryDelay(t *testing.T) {
 	srv := httptest.NewServer(http.NotFoundHandler())
 	srv.Close() // nothing listens here now, so every dial is refused
-	c := NewClient(Config{Host: srv.URL, APIKey: "test-key", RetryAttempts: 2, RetryDelay: 1})
+	c := newTestClient(srv.URL, 2)
+	c.retryDelay = 200 * time.Millisecond
 
 	start := time.Now()
 	if _, err := c.getCtx(t.Context(), "sync/maindata", nil); err == nil {
 		t.Fatal("expected an error")
 	}
-	if elapsed := time.Since(start); elapsed < time.Second {
-		t.Fatalf("retryDo returned after %v, want at least the 1s RetryDelay", elapsed)
+	if elapsed := time.Since(start); elapsed < c.retryDelay {
+		t.Fatalf("retryDo returned after %v, want at least the %v retry delay", elapsed, c.retryDelay)
+	}
+}
+
+func TestRetryDo_StopsWhenContextEndsDuringRetryDelay(t *testing.T) {
+	srv := httptest.NewServer(http.NotFoundHandler())
+	srv.Close() // every dial is refused, so retryDo waits the retry delay
+	c := newTestClient(srv.URL, 2)
+	c.retryDelay = 2 * time.Second
+
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	_, err := c.getCtx(ctx, "sync/maindata", nil)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected context.DeadlineExceeded, got %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
+		t.Fatalf("retryDo returned after %v, want about 50ms", elapsed)
 	}
 }
 
@@ -268,29 +299,21 @@ func TestSyncManager_StaleReadsDoNotJoinRunningSync(t *testing.T) {
 	release := make(chan struct{})
 	defer close(release)
 	srv, hits := newHangingServer(t, 1, release)
-	opts := DefaultSyncOptions()
-	opts.DynamicSync = true
-	sm := NewSyncManager(newTestClient(srv.URL, 1), opts)
-
-	if err := sm.Sync(t.Context()); err != nil {
-		t.Fatalf("initial sync: %v", err)
-	}
-	sm.mu.Lock()
-	sm.lastSync = time.Now().Add(-time.Hour)
-	sm.mu.Unlock()
+	sm := newStaleSyncManager(t, newTestClient(srv.URL, 1))
 
 	// The first stale read starts the background sync, which then hangs.
 	sm.GetTorrents(TorrentFilterOptions{})
-	for hits.Load() < 2 {
-		time.Sleep(time.Millisecond)
-	}
+	waitForHits(t, hits, 2)
 
+	// A join sends no request and does not block. Its only trace is the
+	// result channel it allocates, so compare against the same read with
+	// no sync to join.
 	read := func() { sm.GetTorrents(TorrentFilterOptions{}) }
 	stale := testing.AllocsPerRun(100, read)
 	sm.mu.Lock()
-	sm.options.DynamicSync = false // the same read, with no sync to join
+	sm.options.DynamicSync = false
 	sm.mu.Unlock()
-	if noSync := testing.AllocsPerRun(100, read); stale != noSync {
-		t.Fatalf("stale read allocates %v, want %v: it joins the running sync", stale, noSync)
+	if noSync := testing.AllocsPerRun(100, read); stale > noSync {
+		t.Fatalf("stale read allocates %v, want at most %v: it joins the running sync", stale, noSync)
 	}
 }
