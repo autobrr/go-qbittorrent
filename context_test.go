@@ -295,6 +295,29 @@ func TestSyncManager_SharedSyncEndsWithoutClientTimeout(t *testing.T) {
 	}
 }
 
+func TestSyncManager_SharedSyncBudgetsLogin(t *testing.T) {
+	// Login and sync each take most of the attempt timeout, so together they
+	// run longer than one attempt timeout.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(70 * time.Millisecond)
+		if r.URL.Path == "/api/v2/auth/login" {
+			http.SetCookie(w, &http.Cookie{Name: "SID", Value: "test", Path: "/"})
+			_, _ = w.Write([]byte("Ok."))
+			return
+		}
+		_, _ = w.Write([]byte(syncBody))
+	}))
+	t.Cleanup(srv.Close)
+	c := NewClient(Config{Host: srv.URL, Username: "user", Password: "pass", RetryAttempts: 1})
+	c.http.Timeout = 100 * time.Millisecond
+	c.retryDelay = 0
+	sm := NewSyncManager(c)
+
+	if err := sm.Sync(t.Context()); err != nil {
+		t.Fatalf("expected login and sync to fit the shared sync deadline, got %v", err)
+	}
+}
+
 func TestSyncManager_StaleReadsDoNotJoinRunningSync(t *testing.T) {
 	release := make(chan struct{})
 	defer close(release)

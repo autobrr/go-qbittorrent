@@ -131,15 +131,16 @@ func (sm *SyncManager) Sync(ctx context.Context) error {
 }
 
 // startSync starts a shared sync, or joins the one in progress.
-// The shared sync has a deadline of retryAttempts × (attempt timeout + retry
-// delay). Without it, an http.Client with no Timeout could hang the sync
+// The shared sync has a deadline of retryAttempts × (2 × attempt timeout +
+// retry delay): each attempt can need a login request before the sync request.
+// Without it, an http.Client with no Timeout could hang the sync
 // forever, and every later caller would join the stuck call.
 func (sm *SyncManager) startSync(ctx context.Context) <-chan singleflight.Result {
 	return sm.syncGroup.DoChan("sync", func() (any, error) {
 		sm.syncing.Store(true)
 		defer sm.syncing.Store(false)
 		c := sm.client
-		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Duration(c.retryAttempts)*(c.attemptTimeout()+c.retryDelay))
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Duration(c.retryAttempts)*(2*c.attemptTimeout()+c.retryDelay))
 		defer cancel()
 		return sm.doSync(ctx)
 	})
