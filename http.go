@@ -342,7 +342,7 @@ func isClosedConnectionError(err error) bool {
 
 	// Check for unexpected EOF during request (not response body read)
 	// http.Do can return this if connection dies during headers
-	if err == io.ErrUnexpectedEOF {
+	if errors.Is(err, io.ErrUnexpectedEOF) {
 		return true
 	}
 
@@ -352,7 +352,6 @@ func isClosedConnectionError(err error) bool {
 		"use of closed network connection",
 		"broken pipe",
 		"connection reset by peer",
-		"connection refused",
 	}
 
 	for _, connErr := range connectionErrors {
@@ -361,9 +360,7 @@ func isClosedConnectionError(err error) bool {
 		}
 	}
 
-	// Check for net.OpError with connection issues
-	var opErr *net.OpError
-	return errors.As(err, &opErr)
+	return false
 }
 
 // isDialError reports whether err came from the dial, before the request was sent.
@@ -397,17 +394,19 @@ func (c *Client) retryDo(ctx context.Context, req *http.Request) (*http.Response
 		resp, err = c.http.Do(req)
 
 		if err != nil {
-			// Stop when the caller's context ends. A http.Client.Timeout
+			// Stop when the caller's context ends. An http.Client.Timeout
 			// error leaves ctx intact, so that attempt is retried unless
 			// it is a POST (see below).
 			if ctx.Err() != nil {
 				return retry.Unrecoverable(err)
 			}
 
-			// A POST that timed out after the dial may have reached the
-			// server. A replay could apply a toggle or a priority change twice.
-			var netErr net.Error
-			if req.Method == http.MethodPost && errors.As(err, &netErr) && netErr.Timeout() && !isDialError(err) {
+			// Retry a POST only when the dial failed. Any other error may
+			// come after the server got the request, and a replay could
+			// apply a toggle or a priority change twice. An http.Client.Timeout
+			// error hides the dial error, so a POST that times out is never
+			// retried. The transport already resends a POST it did not write.
+			if req.Method == http.MethodPost && !isDialError(err) {
 				return retry.Unrecoverable(err)
 			}
 
@@ -416,7 +415,6 @@ func (c *Client) retryDo(ctx context.Context, req *http.Request) (*http.Response
 			if isClosedConnectionError(err) {
 				// Clean up stale connections in the pool
 				c.http.CloseIdleConnections()
-				return err
 			}
 
 			return err
@@ -445,9 +443,9 @@ func (c *Client) retryDo(ctx context.Context, req *http.Request) (*http.Response
 		retry.Context(ctx),
 		retry.Delay(c.retryDelay),
 		retry.DelayType(func(n uint, err error, config *retry.Config) time.Duration {
-			// Retry closed/dead pooled connections at once. A failed dial
-			// means the server is down, so that retry waits.
-			if isClosedConnectionError(err) && !isDialError(err) {
+			// Retry closed/dead pooled connections at once. Other errors,
+			// such as a failed dial, wait the retry delay.
+			if isClosedConnectionError(err) {
 				return 0
 			}
 			return retry.FixedDelay(n, err, config)

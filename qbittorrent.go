@@ -1,6 +1,7 @@
 package qbittorrent
 
 import (
+	"cmp"
 	"crypto/tls"
 	"io"
 	"log"
@@ -117,6 +118,12 @@ func NewClient(cfg Config) *Client {
 	}
 
 	return c
+}
+
+// attemptTimeout returns the timeout of one request attempt. A custom
+// http.Client with no Timeout falls back to the configured timeout.
+func (c *Client) attemptTimeout() time.Duration {
+	return cmp.Or(c.http.Timeout, c.timeout)
 }
 
 // WithHTTPClient allows you to a provide a custom [http.Client].

@@ -184,7 +184,7 @@ func TestSyncManager_CheckedGetterColdCacheWaitsAtMostOneTimeout(t *testing.T) {
 	opts := DefaultSyncOptions()
 	opts.DynamicSync = true
 	c := newTestClient(srv.URL, 5)
-	c.timeout = 100 * time.Millisecond
+	c.http.Timeout = 100 * time.Millisecond // shorter than c.timeout, like a custom client
 	sm := NewSyncManager(c, opts)
 
 	start := time.Now()
@@ -216,6 +216,28 @@ func TestRetryDo_DoesNotReplayTimedOutPost(t *testing.T) {
 	t.Cleanup(func() { close(release) })
 	c := newTestClient(srv.URL, 5)
 	c.http.Timeout = 50 * time.Millisecond
+
+	if _, err := c.postCtx(t.Context(), "torrents/toggleSequentialDownload", nil); err == nil {
+		t.Fatal("expected an error")
+	}
+	if got := hits.Load(); got != 1 {
+		t.Fatalf("server got %d requests, want 1", got)
+	}
+}
+
+func TestRetryDo_DoesNotReplayPostAfterConnectionReset(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		conn, _, err := http.NewResponseController(w).Hijack()
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		conn.Close() // the server got the request, then the connection drops
+	}))
+	t.Cleanup(srv.Close)
+	c := newTestClient(srv.URL, 5)
 
 	if _, err := c.postCtx(t.Context(), "torrents/toggleSequentialDownload", nil); err == nil {
 		t.Fatal("expected an error")
