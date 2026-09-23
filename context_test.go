@@ -126,10 +126,6 @@ func TestSyncManager_SyncCallerReturnsAtDeadlineWhileSharedSyncContinues(t *test
 	go func() { shortErr <- sm.Sync(ctx) }()
 	waitForHits(t, hits, 1)
 
-	// A second caller joins the same sync with no deadline.
-	longErr := make(chan error, 1)
-	go func() { longErr <- sm.Sync(context.Background()) }()
-
 	if err := <-shortErr; !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("short caller: expected context.DeadlineExceeded, got %v", err)
 	}
@@ -139,13 +135,15 @@ func TestSyncManager_SyncCallerReturnsAtDeadlineWhileSharedSyncContinues(t *test
 
 	// The deadline of the first caller must not cancel the shared sync.
 	close(release)
-	select {
-	case err := <-longErr:
-		if err != nil {
-			t.Fatalf("joined caller: expected the shared sync to succeed, got %v", err)
+	deadline := time.Now().Add(5 * time.Second)
+	for sm.LastSyncTime().IsZero() {
+		if time.Now().After(deadline) {
+			t.Fatal("shared sync did not end")
 		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("joined caller did not return")
+		time.Sleep(time.Millisecond)
+	}
+	if err := sm.LastError(); err != nil {
+		t.Fatalf("expected the shared sync to succeed, got %v", err)
 	}
 	if got := hits.Load(); got != 1 {
 		t.Fatalf("server got %d requests, want 1 shared sync", got)

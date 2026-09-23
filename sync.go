@@ -6,7 +6,6 @@ import (
 	"math/rand"
 	"slices"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"golang.org/x/sync/singleflight"
@@ -25,7 +24,8 @@ type SyncManager struct {
 	client             *Client
 	trackerManager     *TrackerManager
 	syncGroup          singleflight.Group
-	syncing            atomic.Bool // a shared sync is in flight
+	bgMu               sync.Mutex
+	bgDone             chan struct{} // closed when the background sync ends; nil when none runs
 	options            SyncOptions
 	allTorrents        []Torrent
 	resultPool         sync.Pool
@@ -137,8 +137,6 @@ func (sm *SyncManager) Sync(ctx context.Context) error {
 // forever, and every later caller would join the stuck call.
 func (sm *SyncManager) startSync(ctx context.Context) <-chan singleflight.Result {
 	return sm.syncGroup.DoChan("sync", func() (any, error) {
-		sm.syncing.Store(true)
-		defer sm.syncing.Store(false)
 		c := sm.client
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Duration(c.retryAttempts)*(2*c.attemptTimeout()+c.retryDelay))
 		defer cancel()
@@ -265,18 +263,39 @@ func (sm *SyncManager) ensureFreshData() {
 	if !shouldSync {
 		return
 	}
+	done := sm.backgroundSync()
 	if !coldCache {
-		// Each join keeps a result channel until the sync ends, so do not
-		// join a sync that is already running. The channel is buffered, so
-		// dropping it leaks nothing.
-		if !sm.syncing.Load() {
-			sm.startSync(context.Background())
-		}
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), sm.client.attemptTimeout())
-	defer cancel()
-	_ = sm.Sync(ctx)
+	select {
+	case <-done:
+	case <-time.After(sm.client.attemptTimeout()):
+	}
+}
+
+// backgroundSync starts a shared sync for the checked getters, or returns
+// the done channel of the one they already started. Each join of the shared
+// sync keeps a result channel until the sync ends, so the getters join it
+// only once per sync, however many reads arrive while it runs.
+func (sm *SyncManager) backgroundSync() <-chan struct{} {
+	sm.bgMu.Lock()
+	defer sm.bgMu.Unlock()
+	if sm.bgDone != nil {
+		return sm.bgDone
+	}
+	done := make(chan struct{})
+	sm.bgDone = done
+	res := sm.startSync(context.Background())
+	go func() {
+		// singleflight removes the call before it sends the result, so a
+		// read after this point starts a new sync.
+		<-res
+		sm.bgMu.Lock()
+		sm.bgDone = nil
+		sm.bgMu.Unlock()
+		close(done)
+	}()
+	return done
 }
 
 // calculateStaleThreshold determines how old data can be before it's considered stale
