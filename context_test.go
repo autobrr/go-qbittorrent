@@ -3,6 +3,7 @@ package qbittorrent
 import (
 	"context"
 	"errors"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -314,6 +315,22 @@ func TestSyncManager_SharedSyncBudgetsLogin(t *testing.T) {
 	if err := sm.Sync(t.Context()); err != nil {
 		t.Fatalf("expected login and sync to fit the shared sync deadline, got %v", err)
 	}
+}
+
+func TestSyncManager_StaleReadStartsNewSyncAfterBackgroundSyncEnds(t *testing.T) {
+	srv, hits := newHangingServer(t, math.MaxInt32, nil)
+	sm := newStaleSyncManager(t, newTestClient(srv.URL, 1))
+
+	// The first stale read starts a background sync. Wait for it to end.
+	sm.GetTorrents(TorrentFilterOptions{})
+	<-sm.backgroundSync()
+
+	// The next stale read must start a new sync, not join the ended one.
+	sm.mu.Lock()
+	sm.lastSync = time.Now().Add(-time.Hour)
+	sm.mu.Unlock()
+	sm.GetTorrents(TorrentFilterOptions{})
+	waitForHits(t, hits, 3)
 }
 
 func TestSyncManager_StaleReadsDoNotJoinRunningSync(t *testing.T) {

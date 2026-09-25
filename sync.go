@@ -118,6 +118,8 @@ func (sm *SyncManager) Start(ctx context.Context) error {
 // The shared sync ignores the cancellation of the caller that started it, so one
 // caller's deadline cannot fail the sync for the others. Each caller stops
 // waiting and returns ctx.Err() when its own ctx ends.
+// The shared sync runs until it ends or reaches its own deadline (see
+// startSync), so OnUpdate or OnError can run after Sync returns.
 func (sm *SyncManager) Sync(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
