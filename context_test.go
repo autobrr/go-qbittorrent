@@ -333,7 +333,10 @@ func TestRetryDo_DoesNotReplayPostAfterConnectionReset(t *testing.T) {
 			t.Error(err)
 			return
 		}
-		conn.Close() // the server got the request, then the connection drops
+		// The server got the request, then resets the connection. A reset
+		// is a *net.OpError, like a dial error, so only the Op tells them apart.
+		_ = conn.(*net.TCPConn).SetLinger(0)
+		_ = conn.Close()
 	}))
 	t.Cleanup(srv.Close)
 	c := newTestClient(srv.URL, 5)

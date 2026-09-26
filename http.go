@@ -414,10 +414,8 @@ func (c *Client) retryDo(ctx context.Context, req *http.Request) (*http.Response
 				return retry.Unrecoverable(err)
 			}
 
-			// Handle closed/dead connections immediately without delay
-			// These are internal connection pool issues that should be retried fast
+			// Drop the other pooled connections, which may be dead too.
 			if isClosedConnectionError(err) {
-				// Clean up stale connections in the pool
 				c.http.CloseIdleConnections()
 			}
 
@@ -450,8 +448,9 @@ func (c *Client) retryDo(ctx context.Context, req *http.Request) (*http.Response
 		retry.Context(ctx),
 		retry.Delay(c.retryDelay),
 		retry.DelayType(func(n uint, err error, config *retry.Config) time.Duration {
-			// Retry closed/dead pooled connections at once. Other errors,
-			// such as a failed dial, wait the retry delay.
+			// Retry a reset, broken pipe or unexpected EOF at once, on a pooled
+			// or a new connection. Other errors, such as a failed dial, wait
+			// the retry delay.
 			if isClosedConnectionError(err) {
 				return 0
 			}
