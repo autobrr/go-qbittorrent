@@ -3,6 +3,7 @@
 package qbittorrent
 
 import (
+	"maps"
 	"slices"
 	"strings"
 )
@@ -87,7 +88,9 @@ func containsExactTag(tags string, target string) bool {
 	return false
 }
 
-// stateFilterMatches is a precomputed lookup table for state-filter matches
+// stateFilterMatches is a precomputed lookup table for state-filter matches.
+// Its keys are the known states returned by KnownTorrentStates, so every
+// TorrentState constant needs an entry here.
 var stateFilterMatches = map[TorrentState]map[TorrentFilter]struct{}{
 	TorrentStateError: {
 		TorrentFilterAll:      struct{}{},
@@ -205,6 +208,19 @@ var stateFilterMatches = map[TorrentState]map[TorrentFilter]struct{}{
 	TorrentStateUnknown: {
 		TorrentFilterAll: struct{}{},
 	},
+}
+
+// IsKnown reports whether s is a TorrentState declared by this library.
+// It does not validate: unknown values are still unmarshalled verbatim.
+func (s TorrentState) IsKnown() bool {
+	_, ok := stateFilterMatches[s]
+	return ok
+}
+
+// KnownTorrentStates returns every TorrentState declared by this library, sorted.
+// The caller owns the returned slice.
+func KnownTorrentStates() []TorrentState {
+	return slices.Sorted(maps.Keys(stateFilterMatches))
 }
 
 // matchesStateFilter checks if a torrent state matches the given filter using precomputed lookup
