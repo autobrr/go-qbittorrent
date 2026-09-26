@@ -3,6 +3,7 @@ package qbittorrent
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"math/rand"
 	"mime/multipart"
@@ -383,7 +384,10 @@ func (c *Client) retryDo(ctx context.Context, req *http.Request) (*http.Response
 		return nil, err
 	}
 
-	var resp *http.Response
+	var (
+		resp    *http.Response
+		lastErr error
+	)
 
 	// try request and if fail run 10 retries
 	err = retry.Do(func() error {
@@ -438,7 +442,10 @@ func (c *Client) retryDo(ctx context.Context, req *http.Request) (*http.Response
 
 		return nil
 	},
-		retry.OnRetry(func(n uint, err error) { c.log.Printf("%q: attempt %d - %v\n", err, n, req.URL.String()) }),
+		retry.OnRetry(func(n uint, err error) {
+			lastErr = err
+			c.log.Printf("%q: attempt %d - %v\n", err, n, req.URL.String())
+		}),
 		retry.Attempts(uint(c.retryAttempts)),
 		retry.Context(ctx),
 		retry.Delay(c.retryDelay),
@@ -452,6 +459,12 @@ func (c *Client) retryDo(ctx context.Context, req *http.Request) (*http.Response
 		}),
 		retry.LastErrorOnly(true),
 	)
+
+	// retry-go returns only ctx.Err() when ctx ends during the retry delay,
+	// so keep the cause of the last attempt.
+	if err != nil && err == ctx.Err() && lastErr != nil {
+		err = fmt.Errorf("%w (last attempt: %w)", err, lastErr)
+	}
 
 	if err != nil {
 		return nil, errors.Wrap(err, "error making request")

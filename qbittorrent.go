@@ -101,7 +101,7 @@ func NewClient(cfg Config) *Client {
 		ForceAttemptHTTP2:     true,             // HTTP/2 provides better multiplexing for API calls to the same host
 		MaxIdleConns:          100,              // default transport value
 		MaxIdleConnsPerHost:   10,               // increased from default 2 for better connection reuse
-		IdleConnTimeout:       90 * time.Second, // default transport value
+		IdleConnTimeout:       5 * time.Second,  // below qBittorrent's 7s keep-alive, so a POST never races the server closing an idle conn
 		TLSHandshakeTimeout:   10 * time.Second, // default transport value
 		ExpectContinueTimeout: 1 * time.Second,  // default transport value
 		ReadBufferSize:        65536,

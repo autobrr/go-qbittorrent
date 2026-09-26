@@ -329,14 +329,18 @@ func (sm *SyncManager) calculateStaleThreshold() time.Duration {
 	return 2 * time.Second
 }
 
-// GetData returns a deep copy of the current synchronized data
+// GetData returns a deep copy of the current synchronized data.
+// It returns the cached data at once. When DynamicSync is on and the data is
+// stale, it also starts a sync in the background. Before the first sync ends,
+// it waits for that sync for up to one request timeout and can return nil;
+// LastSyncTime().IsZero() reports that case.
 func (sm *SyncManager) GetData() *MainData {
 	sm.ensureFreshData()
 	return sm.GetDataUnchecked()
 }
 
 // GetDataUnchecked returns a deep copy of the current synchronized data without checking freshness.
-// This is faster but may return stale data. Use this when you've just called Sync() or when
+// Unlike GetData, it never starts a sync. Use this when you've just called Sync() or when
 // AutoSync is enabled and you don't need the absolute latest data.
 func (sm *SyncManager) GetDataUnchecked() *MainData {
 	sm.mu.RLock()
@@ -350,14 +354,15 @@ func (sm *SyncManager) GetDataUnchecked() *MainData {
 	return sm.copyMainData(sm.data)
 }
 
-// GetTorrents returns a filtered list of torrents
+// GetTorrents returns a filtered list of torrents.
+// Freshness works as in [SyncManager.GetData].
 func (sm *SyncManager) GetTorrents(options TorrentFilterOptions) []Torrent {
 	sm.ensureFreshData()
 	return sm.GetTorrentsUnchecked(options)
 }
 
 // GetTorrentsUnchecked returns a filtered list of torrents without checking freshness.
-// This is faster but may return stale data. Use this when you've just called Sync() or when
+// Unlike GetTorrents, it never starts a sync. Use this when you've just called Sync() or when
 // AutoSync is enabled and you don't need the absolute latest data.
 func (sm *SyncManager) GetTorrentsUnchecked(options TorrentFilterOptions) []Torrent {
 	sm.mu.RLock()
@@ -401,7 +406,8 @@ func (sm *SyncManager) GetTorrentsUnchecked(options TorrentFilterOptions) []Torr
 	return result
 }
 
-// GetTorrentMap returns a filtered map of torrents keyed by hash
+// GetTorrentMap returns a filtered map of torrents keyed by hash.
+// Freshness works as in [SyncManager.GetData].
 func (sm *SyncManager) GetTorrentMap(options TorrentFilterOptions) map[string]Torrent {
 	torrents := sm.GetTorrents(options)
 	if torrents == nil {
@@ -414,14 +420,15 @@ func (sm *SyncManager) GetTorrentMap(options TorrentFilterOptions) map[string]To
 	return result
 }
 
-// GetTorrent returns a specific torrent by hash
+// GetTorrent returns a specific torrent by hash.
+// Freshness works as in [SyncManager.GetData].
 func (sm *SyncManager) GetTorrent(hash string) (Torrent, bool) {
 	sm.ensureFreshData()
 	return sm.GetTorrentUnchecked(hash)
 }
 
 // GetTorrentUnchecked returns a specific torrent by hash without checking freshness.
-// This is faster but may return stale data. Use this when you've just called Sync() or when
+// Unlike GetTorrent, it never starts a sync. Use this when you've just called Sync() or when
 // AutoSync is enabled and you don't need the absolute latest data.
 func (sm *SyncManager) GetTorrentUnchecked(hash string) (Torrent, bool) {
 	sm.mu.RLock()
@@ -435,14 +442,15 @@ func (sm *SyncManager) GetTorrentUnchecked(hash string) (Torrent, bool) {
 	return torrent, exists
 }
 
-// GetServerState returns the current server state
+// GetServerState returns the current server state.
+// Freshness works as in [SyncManager.GetData].
 func (sm *SyncManager) GetServerState() ServerState {
 	sm.ensureFreshData()
 	return sm.GetServerStateUnchecked()
 }
 
 // GetServerStateUnchecked returns the current server state without checking freshness.
-// This is faster but may return stale data.
+// Unlike GetServerState, it never starts a sync.
 func (sm *SyncManager) GetServerStateUnchecked() ServerState {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
@@ -454,14 +462,15 @@ func (sm *SyncManager) GetServerStateUnchecked() ServerState {
 	return sm.data.ServerState
 }
 
-// GetCategories returns a copy of all categories
+// GetCategories returns a copy of all categories.
+// Freshness works as in [SyncManager.GetData].
 func (sm *SyncManager) GetCategories() map[string]Category {
 	sm.ensureFreshData()
 	return sm.GetCategoriesUnchecked()
 }
 
 // GetCategoriesUnchecked returns a copy of all categories without checking freshness.
-// This is faster but may return stale data.
+// Unlike GetCategories, it never starts a sync.
 func (sm *SyncManager) GetCategoriesUnchecked() map[string]Category {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
@@ -474,6 +483,7 @@ func (sm *SyncManager) GetCategoriesUnchecked() map[string]Category {
 }
 
 // GetTrackers returns a copy of the tracker URL to torrent hashes map.
+// Freshness works as in [SyncManager.GetData].
 // The hash slices alias the cached data; callers must not modify them.
 func (sm *SyncManager) GetTrackers() map[string][]string {
 	sm.ensureFreshData()
@@ -481,7 +491,7 @@ func (sm *SyncManager) GetTrackers() map[string][]string {
 }
 
 // GetTrackersUnchecked returns a copy of the tracker URL to torrent hashes map
-// without checking freshness. This is faster but may return stale data.
+// without checking freshness. Unlike GetTrackers, it never starts a sync.
 // The hash slices alias the cached data; callers must not modify them.
 func (sm *SyncManager) GetTrackersUnchecked() map[string][]string {
 	sm.mu.RLock()
@@ -494,14 +504,15 @@ func (sm *SyncManager) GetTrackersUnchecked() map[string][]string {
 	return maps.Clone(sm.data.Trackers)
 }
 
-// GetTags returns a copy of all tags
+// GetTags returns a copy of all tags.
+// Freshness works as in [SyncManager.GetData].
 func (sm *SyncManager) GetTags() []string {
 	sm.ensureFreshData()
 	return sm.GetTagsUnchecked()
 }
 
 // GetTagsUnchecked returns a copy of all tags without checking freshness.
-// This is faster but may return stale data.
+// Unlike GetTags, it never starts a sync.
 func (sm *SyncManager) GetTagsUnchecked() []string {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()

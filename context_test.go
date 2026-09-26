@@ -3,6 +3,7 @@ package qbittorrent
 import (
 	"context"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -159,6 +160,11 @@ func TestSyncManager_SyncWithDoneContextStartsNoSync(t *testing.T) {
 	if err := sm.Sync(ctx); !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected context.Canceled, got %v", err)
 	}
+	// A request sent by the cancelled Sync would arrive in this window.
+	time.Sleep(100 * time.Millisecond)
+	if got := hits.Load(); got != 0 {
+		t.Fatalf("server got %d requests from a cancelled Sync, want 0", got)
+	}
 	if err := sm.Sync(t.Context()); err != nil {
 		t.Fatalf("follow-up sync: %v", err)
 	}
@@ -203,18 +209,79 @@ func TestSyncManager_CheckedGetterColdCacheWaitsAtMostOneTimeout(t *testing.T) {
 	}
 }
 
-func TestRetryDo_DialFailureWaitsRetryDelay(t *testing.T) {
+func TestSyncManager_CheckedGetterColdCacheWaitsForFirstSync(t *testing.T) {
+	srv, _ := newHangingServer(t, 1, nil)
+	opts := DefaultSyncOptions()
+	opts.DynamicSync = true
+	sm := NewSyncManager(newTestClient(srv.URL, 1), opts)
+
+	if got := len(sm.GetTorrents(TorrentFilterOptions{})); got != 1 {
+		t.Fatalf("GetTorrents on a cold cache returned %d torrents, want the 1 from the first sync", got)
+	}
+}
+
+func TestRetryDo_DialFailureWaitsFixedRetryDelay(t *testing.T) {
 	srv := httptest.NewServer(http.NotFoundHandler())
 	srv.Close() // nothing listens here now, so every dial is refused
-	c := newTestClient(srv.URL, 2)
+	c := newTestClient(srv.URL, 3)
 	c.retryDelay = 200 * time.Millisecond
 
 	start := time.Now()
 	if _, err := c.getCtx(t.Context(), "sync/maindata", nil); err == nil {
 		t.Fatal("expected an error")
 	}
+	// Two fixed delays; a backoff would wait 200ms, then 400ms.
+	elapsed := time.Since(start)
+	if elapsed < 2*c.retryDelay || elapsed >= 2*c.retryDelay+c.retryDelay/2 {
+		t.Fatalf("retryDo returned after %v, want two %v retry delays", elapsed, c.retryDelay)
+	}
+}
+
+func TestRetryDo_RetriesPostDialFailure(t *testing.T) {
+	srv := httptest.NewServer(http.NotFoundHandler())
+	srv.Close() // every dial is refused, so the server never got the POST
+	c := newTestClient(srv.URL, 2)
+	c.retryDelay = 200 * time.Millisecond
+
+	start := time.Now()
+	if _, err := c.postCtx(t.Context(), "torrents/toggleSequentialDownload", nil); err == nil {
+		t.Fatal("expected an error")
+	}
 	if elapsed := time.Since(start); elapsed < c.retryDelay {
-		t.Fatalf("retryDo returned after %v, want at least the %v retry delay", elapsed, c.retryDelay)
+		t.Fatalf("POST returned after %v, want a retry after the %v retry delay", elapsed, c.retryDelay)
+	}
+}
+
+func TestRetryDo_RetriesConnectionResetWithoutDelay(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if hits.Add(1) > 1 {
+			_, _ = w.Write([]byte(syncBody))
+			return
+		}
+		conn, _, err := http.NewResponseController(w).Hijack()
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		_ = conn.(*net.TCPConn).SetLinger(0) // close with a reset
+		_ = conn.Close()
+	}))
+	t.Cleanup(srv.Close)
+	c := newTestClient(srv.URL, 2)
+	c.retryDelay = 2 * time.Second
+
+	start := time.Now()
+	resp, err := c.getCtx(t.Context(), "sync/maindata", nil)
+	if err != nil {
+		t.Fatalf("expected the retry to succeed, got %v", err)
+	}
+	_ = resp.Body.Close()
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("retryDo returned after %v, want a retry with no delay", elapsed)
+	}
+	if got := hits.Load(); got != 2 {
+		t.Fatalf("server got %d requests, want 2", got)
 	}
 }
 
@@ -231,6 +298,9 @@ func TestRetryDo_StopsWhenContextEndsDuringRetryDelay(t *testing.T) {
 	_, err := c.getCtx(ctx, "sync/maindata", nil)
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("expected context.DeadlineExceeded, got %v", err)
+	}
+	if !isDialError(err) {
+		t.Fatalf("expected the error to keep the dial failure of the last attempt, got %v", err)
 	}
 	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
 		t.Fatalf("retryDo returned after %v, want about 50ms", elapsed)
@@ -277,7 +347,7 @@ func TestRetryDo_DoesNotReplayPostAfterConnectionReset(t *testing.T) {
 }
 
 func TestSyncManager_SharedSyncEndsWithoutClientTimeout(t *testing.T) {
-	srv, _ := newHangingServer(t, 0, nil)
+	srv, hits := newHangingServer(t, 0, nil)
 	c := newTestClient(srv.URL, 1)
 	c.http.Timeout = 0 // a custom http.Client with no timeout
 	c.timeout = 50 * time.Millisecond
@@ -288,8 +358,12 @@ func TestSyncManager_SharedSyncEndsWithoutClientTimeout(t *testing.T) {
 	if err := sm.Sync(t.Context()); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("expected context.DeadlineExceeded, got %v", err)
 	}
-	if elapsed := time.Since(start); elapsed > time.Second {
-		t.Fatalf("shared sync ran for %v, want about 50ms", elapsed)
+	// The deadline is 2 × c.timeout; a zero deadline would fail at once.
+	if elapsed := time.Since(start); elapsed < 90*time.Millisecond || elapsed > time.Second {
+		t.Fatalf("shared sync ran for %v, want about 100ms", elapsed)
+	}
+	if got := hits.Load(); got != 1 {
+		t.Fatalf("server got %d requests, want 1", got)
 	}
 }
 
