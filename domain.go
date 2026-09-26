@@ -453,8 +453,7 @@ func ParseTorrentFilter(filter string) TorrentFilter {
 	switch filter {
 	case "downloading":
 		return TorrentFilterDownloading
-	// qBittorrent calls this filter "seeding"; "uploading" is TorrentFilterUploading's own value, not a qBittorrent name
-	case "seeding", "uploading":
+	case "seeding":
 		return TorrentFilterUploading
 	case "completed":
 		return TorrentFilterCompleted

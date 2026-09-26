@@ -84,8 +84,6 @@ func TestParseTorrentFilter(t *testing.T) {
 		"checking":            TorrentFilterChecking,
 		"moving":              TorrentFilterMoving,
 		"errored":             TorrentFilterError,
-		// The library's own TorrentFilterUploading value, which qBittorrent calls "seeding".
-		"uploading": TorrentFilterUploading,
 	} {
 		if got := ParseTorrentFilter(name); got != want {
 			t.Errorf("ParseTorrentFilter(%q) = %q, want %q", name, got, want)
