@@ -449,6 +449,8 @@ type TorrentAddResponse struct {
 	AddedTorrentIds []string `json:"added_torrent_ids"`
 }
 
+// ParseTorrentFilter returns the TorrentFilter for a filter name qBittorrent accepts, in any version.
+// Like qBittorrent, it returns TorrentFilterAll for a name it doesn't know.
 func ParseTorrentFilter(filter string) TorrentFilter {
 	switch filter {
 	case "downloading":
