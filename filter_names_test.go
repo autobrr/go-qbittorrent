@@ -6,11 +6,8 @@ import (
 	"testing"
 )
 
-// The filter names each qBittorrent version accepts in torrents/info come from
-// TorrentFilter::setTypeByName in src/base/torrentfilter.cpp (release-4.3.9 to release-5.0.0) and
-// parseTorrentStatus in src/webui/api/torrentscontroller.cpp (master). An unknown name matches every
-// torrent. Commit 5d1c2496 renamed "paused"/"resumed" to "stopped"/"running" and moved API_VERSION in
-// src/webui/webapplication.h from 2.10.4 to 2.11.0; release-4.6.7 serves 2.9.3, release-5.0.0 2.11.2.
+// qBittorrent treats a filter name it doesn't know as "all", so a wrong name returns every torrent.
+// The "paused"/"resumed" to "stopped"/"running" rename came with WebAPI 2.11.0.
 func TestGetTorrentsCtx_FilterNames(t *testing.T) {
 	older := map[TorrentFilter]string{
 		TorrentFilterPaused:    "paused",
@@ -66,7 +63,7 @@ func TestGetTorrentsCtx_FilterNames(t *testing.T) {
 }
 
 func TestParseTorrentFilter(t *testing.T) {
-	// Every name qBittorrent accepts in some version from 4.3.9 to master.
+	// Every filter name qBittorrent accepts, in any version.
 	for name, want := range map[string]TorrentFilter{
 		"all":                 TorrentFilterAll,
 		"downloading":         TorrentFilterDownloading,

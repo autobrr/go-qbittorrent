@@ -234,19 +234,19 @@ const (
 
 	// Torrent is resumed (for backward compatibility with qBittorrent < 5.0.0)
 	// In older versions (e.g., v4.3.9), "resumed" means !isPaused()
-	// Removed in v5.0.0 / WebAPI 2.11.0 (commit 5d1c2496, March 2024) in favor of "running"
+	// Removed in qBittorrent 5.0.0 in favor of "running"
 	TorrentFilterResumed TorrentFilter = "resumed"
 
 	// Torrent is paused
 	TorrentFilterPaused TorrentFilter = "paused"
 
 	// Torrent is stopped
-	// Added in qBittorrent v5.0.0 / WebAPI 2.11.0 (commit 5d1c2496, March 2024)
+	// Added in qBittorrent 5.0.0
 	// Replaces the old "paused" filter
 	TorrentFilterStopped TorrentFilter = "stopped"
 
 	// Torrent is running (not stopped)
-	// Added in qBittorrent v5.0.0 / WebAPI 2.11.0 (commit 5d1c2496, March 2024)
+	// Added in qBittorrent 5.0.0
 	// Replaces the old "resumed" filter
 	TorrentFilterRunning TorrentFilter = "running"
 

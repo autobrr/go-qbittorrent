@@ -172,8 +172,8 @@ func (c *Client) getApiVersion() (*semver.Version, error) {
 }
 
 // translateFilter translates filter names to the ones the server's qBittorrent version accepts.
-// qBittorrent 5.0.0 (WebAPI 2.11.0, commit 5d1c2496) renamed the "paused"/"resumed" filters to
-// "stopped"/"running". Every version names the seeding filter "seeding".
+// qBittorrent 5.0.0 (WebAPI 2.11) renamed "paused"/"resumed" to "stopped"/"running"; the seeding
+// filter has always been "seeding".
 func (c *Client) translateFilter(filter TorrentFilter) string {
 	if filter == TorrentFilterUploading {
 		return "seeding"
