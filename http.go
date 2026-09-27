@@ -3,6 +3,7 @@ package qbittorrent
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"math/rand"
 	"mime/multipart"
@@ -342,7 +343,7 @@ func isClosedConnectionError(err error) bool {
 
 	// Check for unexpected EOF during request (not response body read)
 	// http.Do can return this if connection dies during headers
-	if err == io.ErrUnexpectedEOF {
+	if errors.Is(err, io.ErrUnexpectedEOF) {
 		return true
 	}
 
@@ -352,7 +353,6 @@ func isClosedConnectionError(err error) bool {
 		"use of closed network connection",
 		"broken pipe",
 		"connection reset by peer",
-		"connection refused",
 	}
 
 	for _, connErr := range connectionErrors {
@@ -361,9 +361,13 @@ func isClosedConnectionError(err error) bool {
 		}
 	}
 
-	// Check for net.OpError with connection issues
+	return false
+}
+
+// isDialError reports whether err came from the dial, before the request was sent.
+func isDialError(err error) bool {
 	var opErr *net.OpError
-	return errors.As(err, &opErr)
+	return errors.As(err, &opErr) && opErr.Op == "dial"
 }
 
 func (c *Client) retryDo(ctx context.Context, req *http.Request) (*http.Response, error) {
@@ -380,7 +384,10 @@ func (c *Client) retryDo(ctx context.Context, req *http.Request) (*http.Response
 		return nil, err
 	}
 
-	var resp *http.Response
+	var (
+		resp    *http.Response
+		lastErr error
+	)
 
 	// try request and if fail run 10 retries
 	err = retry.Do(func() error {
@@ -391,19 +398,27 @@ func (c *Client) retryDo(ctx context.Context, req *http.Request) (*http.Response
 		resp, err = c.http.Do(req)
 
 		if err != nil {
-			if err == context.DeadlineExceeded || err == context.Canceled {
+			// Stop when the caller's context ends. An http.Client.Timeout
+			// error leaves ctx intact, so that attempt is retried unless
+			// it is a POST (see below).
+			if ctx.Err() != nil {
 				return retry.Unrecoverable(err)
 			}
 
-			// Handle closed/dead connections immediately without delay
-			// These are internal connection pool issues that should be retried fast
-			if isClosedConnectionError(err) {
-				// Clean up stale connections in the pool
-				c.http.CloseIdleConnections()
-				return err
+			// Retry a POST only when the dial failed. Any other error may
+			// come after the server got the request, and a replay could
+			// apply a toggle or a priority change twice. An http.Client.Timeout
+			// error hides the dial error, so a POST that times out is never
+			// retried. The transport already resends a POST it did not write.
+			if req.Method == http.MethodPost && !isDialError(err) {
+				return retry.Unrecoverable(err)
 			}
 
-			retry.Delay(c.retryDelay)
+			// Drop the other pooled connections, which may be dead too.
+			if isClosedConnectionError(err) {
+				c.http.CloseIdleConnections()
+			}
+
 			return err
 		}
 
@@ -415,7 +430,6 @@ func (c *Client) retryDo(ctx context.Context, req *http.Request) (*http.Response
 			if err := c.LoginCtx(ctx); err != nil {
 				return errors.Wrap(err, "qbit re-login failed")
 			}
-			retry.Delay(100 * time.Millisecond)
 			return errors.New("qbit re-login")
 		} else if resp.StatusCode < 500 {
 			return nil
@@ -426,10 +440,30 @@ func (c *Client) retryDo(ctx context.Context, req *http.Request) (*http.Response
 
 		return nil
 	},
-		retry.OnRetry(func(n uint, err error) { c.log.Printf("%q: attempt %d - %v\n", err, n, req.URL.String()) }),
+		retry.OnRetry(func(n uint, err error) {
+			lastErr = err
+			c.log.Printf("%q: attempt %d - %v\n", err, n, req.URL.String())
+		}),
 		retry.Attempts(uint(c.retryAttempts)),
-		retry.MaxJitter(time.Second*1),
+		retry.Context(ctx),
+		retry.Delay(c.retryDelay),
+		retry.DelayType(func(n uint, err error, config *retry.Config) time.Duration {
+			// Retry a reset, broken pipe or unexpected EOF at once, on a pooled
+			// or a new connection. Other errors, such as a failed dial, wait
+			// the retry delay.
+			if isClosedConnectionError(err) {
+				return 0
+			}
+			return retry.FixedDelay(n, err, config)
+		}),
+		retry.LastErrorOnly(true),
 	)
+
+	// retry-go returns only ctx.Err() when ctx ends during the retry delay,
+	// so keep the cause of the last attempt.
+	if err != nil && err == ctx.Err() && lastErr != nil {
+		err = fmt.Errorf("%w (last attempt: %w)", err, lastErr)
+	}
 
 	if err != nil {
 		return nil, errors.Wrap(err, "error making request")
