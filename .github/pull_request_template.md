@@ -37,8 +37,8 @@ Fixes # (issue)
 ## Performance
 
 <!--- For a change to the sync layer or to sorting, give before and after
-      `go test -bench` output and name the benchmark. Delete this section if the
-      change touches neither. --->
+      `go test -bench` output and name the benchmark. A throwaway benchmark is fine
+      and you need not commit it. Delete this section if the change touches neither. --->
 
 ## Checklist
 
