@@ -11,16 +11,20 @@ Fixes # (issue)
 
 ## Downstream impact
 
-<!--- Optional, but it must be accurate. Say whether this change reaches the projects
-      that use this library, and whether each one needs a code change or only a
-      version bump. Check the code before you claim it. Delete this section if the
-      change cannot reach any of them.
+<!--- This must be accurate. For each project, say whether the change reaches it, and
+      whether it needs a code change or only a version bump. Write "none" where the
+      change cannot reach it. Check the code before you claim it. Keep this section.
 
       qui      — uses the sync layer, the client pool and the view and filter types,
                  so it feels almost any change here.
       autobrr  — uses the plain client: add, reannounce, filters, transfer info.
-      librrary — uses the plain client. Private repo, so skip it if you cannot read it.
+      librrary — uses the plain client. Private repo, so write "unknown" if you
+                 cannot read it.
 --->
+
+- **qui**:
+- **autobrr**:
+- **librrary**:
 
 ## How has this been tested?
 
