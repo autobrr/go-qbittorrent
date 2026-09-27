@@ -11,7 +11,8 @@ Fixes # (issue)
 
 ## Downstream impact
 
-<!--- This must be accurate. For each project, say whether the change reaches it, and
+<!--- This must be accurate. These three projects in the autobrr org are the main
+      consumers of this library. For each one, say whether the change reaches it, and
       whether it needs a code change or only a version bump. Write "none" where the
       change cannot reach it. Check the code before you claim it. Keep this section.
 
