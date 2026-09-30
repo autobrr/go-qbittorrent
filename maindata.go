@@ -15,19 +15,6 @@ func normalizeHashes(dest map[string]Torrent) {
 	}
 }
 
-// normalizeHashesRaw normalizes hashes in raw JSON data format
-func normalizeHashesRaw(rawData map[string]interface{}) {
-	if torrentsRaw, exists := rawData["torrents"]; exists {
-		if torrentsMap, ok := torrentsRaw.(map[string]interface{}); ok {
-			for hash, torrentRaw := range torrentsMap {
-				if torrentMap, ok := torrentRaw.(map[string]interface{}); ok {
-					torrentMap["hash"] = hash
-				}
-			}
-		}
-	}
-}
-
 // ensureInitialized prepares MainData maps/slices so merge helpers can write safely.
 func (dest *MainData) ensureInitialized() {
 	if dest.Torrents == nil {
@@ -135,11 +122,10 @@ func (dest *MainData) mergeTorrentsPartial(torrentsMap map[string]interface{}) {
 
 		existing, exists := dest.Torrents[hash]
 		if !exists {
-			// New torrent - create a minimal torrent with the hash at least
-			existing = Torrent{Hash: hash}
+			existing = Torrent{}
 		}
 
-		// Always start with existing data and update only provided fields
+		existing.Hash = hash
 		updateTorrentFields(&existing, updateMap)
 
 		dest.Torrents[hash] = existing
