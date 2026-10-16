@@ -70,18 +70,44 @@ type RSSRuleTorrentParams struct {
 	DownloadPath             string   `json:"download_path,omitempty"`
 	ContentLayout            string   `json:"content_layout,omitempty"`
 	OperatingMode            string   `json:"operating_mode,omitempty"`
-	SkipChecking             bool     `json:"skip_checking,omitempty"`
+	SkipChecking             bool     `json:"skip_checking"`
 	UploadLimit              int      `json:"upload_limit,omitempty"`
 	DownloadLimit            int      `json:"download_limit,omitempty"`
 	SeedingTimeLimit         int      `json:"seeding_time_limit,omitempty"`
 	InactiveSeedingTimeLimit int      `json:"inactive_seeding_time_limit,omitempty"`
 	ShareLimitAction         string   `json:"share_limit_action,omitempty"`
+	ShareLimitsMode          string   `json:"share_limits_mode,omitempty"`
 	RatioLimit               float64  `json:"ratio_limit,omitempty"`
 	Stopped                  *bool    `json:"stopped,omitempty"`
 	StopCondition            string   `json:"stop_condition,omitempty"`
 	UseAutoTMM               *bool    `json:"use_auto_tmm,omitempty"`
 	UseDownloadPath          *bool    `json:"use_download_path,omitempty"`
 	AddToQueueTop            *bool    `json:"add_to_top_of_queue,omitempty"`
+}
+
+// UnmarshalJSON gives seed_mode precedence over the legacy skip_checking field.
+func (p *RSSRuleTorrentParams) UnmarshalJSON(data []byte) error {
+	type params RSSRuleTorrentParams
+	wire := struct {
+		*params
+		SeedMode *bool `json:"seed_mode"`
+	}{params: (*params)(p)}
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+	if wire.SeedMode != nil {
+		p.SkipChecking = *wire.SeedMode
+	}
+	return nil
+}
+
+// MarshalJSON preserves false and sends matching aliases for old and new servers.
+func (p RSSRuleTorrentParams) MarshalJSON() ([]byte, error) {
+	type params RSSRuleTorrentParams
+	return json.Marshal(struct {
+		params
+		SeedMode bool `json:"seed_mode"`
+	}{params: params(p), SeedMode: p.SkipChecking})
 }
 
 // RSSRules represents the response from rss/rules endpoint.
