@@ -189,6 +189,9 @@ const (
 	// Torrent has just started downloading and is fetching metadata
 	TorrentStateMetaDl TorrentState = "metaDL"
 
+	// Same as metaDL, but torrent is forced to start and ignores queue limit
+	TorrentStateForcedMetaDl TorrentState = "forcedMetaDL"
+
 	// Torrent is paused and has NOT finished downloading
 	TorrentStatePausedDl TorrentState = "pausedDL"
 
