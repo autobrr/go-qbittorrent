@@ -7,9 +7,10 @@ import (
 	"net"
 	"net/http"
 	"net/http/cookiejar"
+	"sync/atomic"
 	"time"
 
-	"github.com/Masterminds/semver"
+	"github.com/Masterminds/semver/v3"
 	"golang.org/x/net/publicsuffix"
 )
 
@@ -28,7 +29,8 @@ type Client struct {
 
 	log *log.Logger
 
-	version *semver.Version
+	// version is the last WebAPI version the server reported; every fetch refreshes it so an upgrade under a running client re-selects endpoints.
+	version atomic.Pointer[semver.Version]
 }
 
 type Config struct {
