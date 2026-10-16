@@ -151,6 +151,11 @@ func (c *Client) ShutdownCtx(ctx context.Context) error {
 	return nil
 }
 
+// GetNetworkInterfaces lists the network interfaces that have an address.
+func (c *Client) GetNetworkInterfaces() ([]NetworkInterface, error) {
+	return c.GetNetworkInterfacesCtx(context.Background())
+}
+
 // GetNetworkInterfacesCtx lists the network interfaces that have an address.
 func (c *Client) GetNetworkInterfacesCtx(ctx context.Context) ([]NetworkInterface, error) {
 	resp, err := c.getCtx(ctx, "app/networkInterfaceList", nil)
@@ -169,6 +174,12 @@ func (c *Client) GetNetworkInterfacesCtx(ctx context.Context) ([]NetworkInterfac
 	}
 
 	return ifaces, nil
+}
+
+// GetNetworkInterfaceAddresses lists the IP addresses of the interface iface,
+// where iface is a NetworkInterface Value. An empty iface lists the addresses of all interfaces.
+func (c *Client) GetNetworkInterfaceAddresses(iface string) ([]string, error) {
+	return c.GetNetworkInterfaceAddressesCtx(context.Background(), iface)
 }
 
 // GetNetworkInterfaceAddressesCtx lists the IP addresses of the interface iface,
@@ -190,6 +201,13 @@ func (c *Client) GetNetworkInterfaceAddressesCtx(ctx context.Context, iface stri
 	}
 
 	return addrs, nil
+}
+
+// SendTestEmail asks qBittorrent to send a test email with its email notification settings.
+// A nil error means only that qBittorrent queued the email, not that the email was sent.
+// Requires qBittorrent 5.0 and WebAPI >= 2.11.2.
+func (c *Client) SendTestEmail() error {
+	return c.SendTestEmailCtx(context.Background())
 }
 
 // SendTestEmailCtx asks qBittorrent to send a test email with its email notification settings.
