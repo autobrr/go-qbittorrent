@@ -151,6 +151,68 @@ func (c *Client) ShutdownCtx(ctx context.Context) error {
 	return nil
 }
 
+// GetNetworkInterfacesCtx lists the network interfaces that have an address.
+func (c *Client) GetNetworkInterfacesCtx(ctx context.Context) ([]NetworkInterface, error) {
+	resp, err := c.getCtx(ctx, "app/networkInterfaceList", nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get network interfaces")
+	}
+	defer drainAndClose(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get network interfaces; status code: %d", resp.StatusCode)
+	}
+
+	var ifaces []NetworkInterface
+	if err := json.NewDecoder(resp.Body).Decode(&ifaces); err != nil {
+		return nil, errors.Wrap(err, "could not unmarshal body")
+	}
+
+	return ifaces, nil
+}
+
+// GetNetworkInterfaceAddressesCtx lists the IP addresses of the interface iface,
+// where iface is a NetworkInterface Value. An empty iface lists the addresses of all interfaces.
+func (c *Client) GetNetworkInterfaceAddressesCtx(ctx context.Context, iface string) ([]string, error) {
+	resp, err := c.getCtx(ctx, "app/networkInterfaceAddressList", map[string]string{"iface": iface})
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get network interface addresses; iface: %s", iface)
+	}
+	defer drainAndClose(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get network interface addresses; iface: %s | status code: %d", iface, resp.StatusCode)
+	}
+
+	var addrs []string
+	if err := json.NewDecoder(resp.Body).Decode(&addrs); err != nil {
+		return nil, errors.Wrap(err, "could not unmarshal body")
+	}
+
+	return addrs, nil
+}
+
+// SendTestEmailCtx asks qBittorrent to send a test email with its email notification settings.
+// A nil error means only that qBittorrent queued the email, not that the email was sent.
+// Requires qBittorrent 5.0 and WebAPI >= 2.11.2.
+func (c *Client) SendTestEmailCtx(ctx context.Context) error {
+	if _, err := c.RequiresMinVersion(semver.MustParse("2.11.2")); err != nil {
+		return err
+	}
+
+	resp, err := c.postCtx(ctx, "app/sendTestEmail", nil)
+	if err != nil {
+		return errors.Wrap(err, "could not send test email")
+	}
+	defer drainAndClose(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return errors.Wrap(ErrUnexpectedStatus, "could not send test email; status code: %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
 func (c *Client) getApiVersion() (*semver.Version, error) {
 	if ver := c.version.Load(); ver != nil {
 		return ver, nil
