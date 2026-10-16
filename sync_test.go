@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 	"net/http/cookiejar"
 	"sync"
@@ -66,6 +67,10 @@ func NewMockClient() *MockClient {
 			Transport: mockTransport,
 			Jar:       jar,
 		},
+		// A literal Client skips the NewClient defaults that retryDo needs.
+		log:           log.New(io.Discard, "", 0),
+		timeout:       DefaultTimeout,
+		retryAttempts: 1,
 	}
 
 	mock := &MockClient{
