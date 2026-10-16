@@ -258,6 +258,7 @@ func TestAppPreferencesCompatibility(t *testing.T) {
 			})
 			prefs, err := client.GetAppPreferencesCtx(t.Context())
 			require.NoError(t, err)
+			prefs.sent = nil // TestAppPreferencesHasMatchesCapture covers the record of sent keys.
 			require.Equal(t, tc.want, prefs)
 			var write map[string]any
 			require.NoError(t, json.Unmarshal([]byte(tc.body), &write))
