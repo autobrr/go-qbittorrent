@@ -997,6 +997,12 @@ type BuildInfo struct {
 	Platform   string `json:"platform"`   // Platform (linux, macos, windows, unknown)
 }
 
+// NetworkInterface is one entry of the network interface list.
+type NetworkInterface struct {
+	Name  string `json:"name"`  // Human-readable name
+	Value string `json:"value"` // System name, the value of the current_network_interface preference
+}
+
 type Cookie struct {
 	Name           string `json:"name"`           // Cookie name
 	Domain         string `json:"domain"`         // Cookie domain
