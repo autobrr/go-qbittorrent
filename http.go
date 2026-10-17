@@ -451,6 +451,7 @@ func (c *Client) retryDo(ctx context.Context, req *http.Request) (*http.Response
 		retry.OnRetry(func(n uint, err error) { c.log.Printf("%q: attempt %d - %v\n", err, n, req.URL.String()) }),
 		retry.Attempts(uint(c.retryAttempts)),
 		retry.MaxJitter(time.Second*1),
+		retry.Context(ctx),
 	)
 
 	if err != nil {
