@@ -2,6 +2,7 @@ package qbittorrent
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -52,7 +53,8 @@ func TestPauseCtx_AfterServerUpgrade(t *testing.T) {
 }
 
 // The first version check on a new client sends app/webapiVersion. A hung
-// qBittorrent must not hold the caller past its own deadline.
+// qBittorrent must not hold the caller past its own deadline, also not in the
+// wait between retries.
 func TestListDirectoryCtx_VersionFetchUsesCallerContext(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v2/app/webapiVersion", func(_ http.ResponseWriter, r *http.Request) {
@@ -60,17 +62,17 @@ func TestListDirectoryCtx_VersionFetchUsesCallerContext(t *testing.T) {
 	})
 	server := httptest.NewServer(mux)
 	defer server.Close()
-	client := NewClient(Config{Host: server.URL, RetryAttempts: 1})
+	client := NewClient(Config{Host: server.URL})
 
 	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 	defer cancel()
 	start := time.Now()
 	_, err := client.ListDirectoryCtx(ctx, "/downloads", DirectoryContentAll, false)
 
-	if err == nil {
-		t.Fatal("ListDirectoryCtx() error = nil, want the deadline error")
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("ListDirectoryCtx() error = %v, want context.DeadlineExceeded", err)
 	}
-	if elapsed := time.Since(start); elapsed > 5*time.Second {
+	if elapsed := time.Since(start); elapsed > time.Second {
 		t.Fatalf("ListDirectoryCtx() returned after %v, want shortly after the 50ms deadline", elapsed)
 	}
 }
