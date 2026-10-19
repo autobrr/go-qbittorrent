@@ -388,6 +388,10 @@ func isClosedConnectionError(err error) bool {
 	return errors.As(err, &opErr)
 }
 
+// retryDo sends req, and sends it again after a transport error. A nil error
+// does not mean that req went out one time. This loop retries, and net/http
+// resends an idempotent request on a reused connection when no reply byte
+// arrived.
 func (c *Client) retryDo(ctx context.Context, req *http.Request) (*http.Response, error) {
 	var (
 		originalBody []byte
