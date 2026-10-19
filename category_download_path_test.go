@@ -332,3 +332,19 @@ func TestMainDataFullUpdateClearsCategoryDownloadPath(t *testing.T) {
 	require.NoError(t, data.Update(ctx, client))
 	require.Nil(t, data.Categories["movies"].DownloadPath)
 }
+
+func TestSyncSnapshotsCopyCategoryDownloadPath(t *testing.T) {
+	sm := &SyncManager{data: &MainData{Categories: map[string]Category{
+		"movies": {Name: "movies", DownloadPath: &CategoryDownloadPath{Enabled: true, Path: "/dl/movies"}},
+		"tv":     {Name: "tv"},
+	}}}
+
+	categories := sm.GetCategoriesUnchecked()
+	categories["movies"].DownloadPath.Path = "/changed"
+	require.Equal(t, "/dl/movies", sm.data.Categories["movies"].DownloadPath.Path)
+	require.Nil(t, categories["tv"].DownloadPath)
+
+	data := sm.copyMainData(sm.data)
+	data.Categories["movies"].DownloadPath.Path = "/changed"
+	require.Equal(t, "/dl/movies", sm.data.Categories["movies"].DownloadPath.Path)
+}
