@@ -6,8 +6,10 @@ import (
 	"io"
 	"maps"
 	"net/http"
+	"net/http/httptrace"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/Masterminds/semver/v3"
@@ -1078,6 +1080,13 @@ func (c *Client) SyncMainDataCtxWithRaw(ctx context.Context, rid int64) (*MainDa
 		"rid": strconv.FormatInt(rid, 10),
 	}
 
+	// Go's transport and the retry loop can send the request again with the
+	// same rid. Count each request that goes out with this context.
+	var sent atomic.Int32
+	ctx = httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{
+		WroteRequest: func(httptrace.WroteRequestInfo) { sent.Add(1) },
+	})
+
 	resp, err := c.getCtx(ctx, "/sync/maindata", opts)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "could not get main data")
@@ -1113,6 +1122,15 @@ func (c *Client) SyncMainDataCtxWithRaw(ctx context.Context, rid int64) (*MainDa
 
 	if mapErr != nil {
 		return nil, nil, errors.Wrap(mapErr, "could not unmarshal body to map")
+	}
+
+	// qBittorrent can count the reply to a request that went out before as
+	// sent. Before 5.3.0rc1, the reply to a later request with the same rid
+	// can then miss changes. Thus return rid 0, so the next sync is a full
+	// update.
+	if sent.Load() > 1 && !info.FullUpdate {
+		info.Rid = 0
+		rawData["rid"] = float64(0)
 	}
 
 	normalizeHashes(info.Torrents)
