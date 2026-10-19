@@ -1979,3 +1979,48 @@ func TestSyncManager_ResentSyncRequestsFullUpdate(t *testing.T) {
 		})
 	}
 }
+
+// TestSyncManager_RedirectedSyncKeepsRid checks that a redirect does not
+// count as a resent sync request. A reverse proxy can redirect each request,
+// for example from HTTP to HTTPS, and qBittorrent still gets each request
+// one time.
+func TestSyncManager_RedirectedSyncKeepsRid(t *testing.T) {
+	var (
+		mu   sync.Mutex
+		rids []string
+	)
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /old/api/v2/sync/maindata", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/api/v2/sync/maindata?"+r.URL.RawQuery, http.StatusTemporaryRedirect)
+	})
+	mux.HandleFunc("GET /api/v2/sync/maindata", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		rids = append(rids, r.URL.Query().Get("rid"))
+		call := len(rids)
+		mu.Unlock()
+
+		if call == 1 {
+			_, _ = io.WriteString(w, `{"rid":5,"full_update":true,"torrents":{},"categories":{},"tags":[],"server_state":{}}`)
+			return
+		}
+		_, _ = io.WriteString(w, `{"rid":7,"torrents":{}}`)
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	client := NewClient(Config{Host: server.URL + "/old", APIKey: "test-key", RetryAttempts: 1})
+	sm := NewSyncManager(client)
+
+	for i := range 3 {
+		if err := sm.Sync(t.Context()); err != nil {
+			t.Fatalf("sync %d: %v", i+1, err)
+		}
+	}
+
+	mu.Lock()
+	got := slices.Clone(rids)
+	mu.Unlock()
+	if want := []string{"0", "5", "7"}; !slices.Equal(got, want) {
+		t.Fatalf("expected rids %v, got %v", want, got)
+	}
+}

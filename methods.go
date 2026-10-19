@@ -1081,10 +1081,12 @@ func (c *Client) SyncMainDataCtxWithRaw(ctx context.Context, rid int64) (*MainDa
 	}
 
 	// Go's transport and the retry loop can send the request again with the
-	// same rid. Count each request that goes out with this context.
-	var sent atomic.Int32
+	// same rid. Count the requests that go out with this context and get no
+	// reply. A redirect hop or a login gets a reply, so it does not count.
+	var unanswered atomic.Int32
 	ctx = httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{
-		WroteRequest: func(httptrace.WroteRequestInfo) { sent.Add(1) },
+		WroteRequest:         func(httptrace.WroteRequestInfo) { unanswered.Add(1) },
+		GotFirstResponseByte: func() { unanswered.Add(-1) },
 	})
 
 	resp, err := c.getCtx(ctx, "/sync/maindata", opts)
@@ -1124,11 +1126,10 @@ func (c *Client) SyncMainDataCtxWithRaw(ctx context.Context, rid int64) (*MainDa
 		return nil, nil, errors.Wrap(mapErr, "could not unmarshal body to map")
 	}
 
-	// qBittorrent can count the reply to a request that went out before as
-	// sent. Before 5.3.0rc1, the reply to a later request with the same rid
-	// can then miss changes. Thus return rid 0, so the next sync is a full
-	// update.
-	if sent.Load() > 1 && !info.FullUpdate {
+	// qBittorrent can count the lost reply to an earlier request as sent.
+	// Before 5.3.0rc1, the reply to a later request with the same rid can
+	// then miss changes. Thus return rid 0, so the next sync is a full update.
+	if unanswered.Load() > 0 && !info.FullUpdate {
 		info.Rid = 0
 		rawData["rid"] = float64(0)
 	}
