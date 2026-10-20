@@ -1955,6 +1955,29 @@ func TestSyncManager_ShortCallerWaitsForRunningIncrementalSync(t *testing.T) {
 	}
 }
 
+// TestSyncManager_CallbackPanicReachesCaller checks that a panic in OnUpdate
+// comes back to the caller of Sync, where the caller can recover it.
+func TestSyncManager_CallbackPanicReachesCaller(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v2/sync/maindata", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, `{"rid":5,"full_update":true,"torrents":{},"categories":{},"tags":[],"server_state":{}}`)
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	options := DefaultSyncOptions()
+	options.OnUpdate = func(*MainData) { panic("callback failed") }
+	sm := NewSyncManager(NewClient(Config{Host: server.URL, APIKey: "test-key", RetryAttempts: 1}), options)
+
+	recovered := func() (r any) {
+		defer func() { r = recover() }()
+		_ = sm.Sync(t.Context())
+		return nil
+	}()
+	if recovered == nil {
+		t.Fatal("expected the callback panic to reach the caller of Sync")
+	}
+}
+
 // TestSyncManager_FullUpdateUsesCustomHTTPClientTimeout checks that a full
 // update gets the timeout of a client set with WithHTTPClient, not the timeout
 // from Config.

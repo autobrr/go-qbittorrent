@@ -3,8 +3,11 @@ package qbittorrent
 import (
 	"cmp"
 	"context"
+	"errors"
+	"fmt"
 	"maps"
 	"math/rand"
+	"runtime/debug"
 	"slices"
 	"sync"
 	"time"
@@ -117,10 +120,18 @@ func (sm *SyncManager) Start(ctx context.Context) error {
 // The sync runs on the context of the caller that starts it, except a full
 // update: see doSync.
 func (sm *SyncManager) Sync(ctx context.Context) error {
-	ch := sm.syncGroup.DoChan("sync", func() (any, error) { return sm.doSync(ctx) })
+	ch := sm.syncGroup.DoChan("sync", func() (_ any, err error) {
+		// On a panic, DoChan stops the process. Give the panic to the callers instead.
+		defer func() {
+			if r := recover(); r != nil {
+				err = &syncPanic{value: r, stack: debug.Stack()}
+			}
+		}()
+		return sm.doSync(ctx)
+	})
 	select {
 	case res := <-ch:
-		return res.Err
+		return syncResult(res)
 	case <-ctx.Done():
 	}
 
@@ -133,7 +144,26 @@ func (sm *SyncManager) Sync(ctx context.Context) error {
 	if fullUpdate {
 		return ctx.Err()
 	}
-	return (<-ch).Err
+	return syncResult(<-ch)
+}
+
+// syncPanic carries a panic out of the shared sync. Each caller that waits for
+// the result panics with it again, as singleflight's Do does, so that the
+// caller can recover it.
+type syncPanic struct {
+	value any
+	stack []byte
+}
+
+func (p *syncPanic) Error() string {
+	return fmt.Sprintf("sync panic: %v\n%s", p.value, p.stack)
+}
+
+func syncResult(res singleflight.Result) error {
+	if p, ok := errors.AsType[*syncPanic](res.Err); ok {
+		panic(p)
+	}
+	return res.Err
 }
 
 // doSync performs the actual sync operation (singleflight-compatible signature).
