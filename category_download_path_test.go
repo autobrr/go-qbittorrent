@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"testing"
 
@@ -23,9 +22,9 @@ func newCategoryTestClientVersion(t *testing.T, version string, handler http.Han
 		_, _ = w.Write([]byte(version))
 	})
 	mux.HandleFunc("/", handler)
-	server := httptest.NewServer(mux)
-	t.Cleanup(server.Close)
-	return NewClient(Config{Host: server.URL, APIKey: "fixture"})
+	// The handler runs on the test's goroutine, so a failed require in it
+	// fails the test once instead of making the client retry.
+	return newCompatibilityClient(mux.ServeHTTP)
 }
 
 func TestGetCategoriesDownloadPath(t *testing.T) {
