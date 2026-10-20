@@ -113,12 +113,35 @@ func (sm *SyncManager) Start(ctx context.Context) error {
 // Sync performs a synchronization with the qBittorrent server
 // If another sync is already in progress, this method will wait for it to complete
 // and all callers will receive the same result (using singleflight pattern).
-// Note: Uses context.Background() for all syncs to avoid context confusion in batched calls.
+// The sync runs on the context of the caller that starts it, except a full
+// update: see below.
 func (sm *SyncManager) Sync(ctx context.Context) error {
-	_, err, _ := sm.syncGroup.Do("sync", func() (interface{}, error) {
-		return sm.doSync(ctx)
+	sm.mu.RLock()
+	fullUpdate := sm.data == nil || sm.data.Rid == 0
+	sm.mu.RUnlock()
+
+	if !fullUpdate {
+		_, err, _ := sm.syncGroup.Do("sync", func() (any, error) {
+			return sm.doSync(ctx)
+		})
+		return err
+	}
+
+	// A full update can take longer than a caller with a short deadline waits.
+	// If that caller cancelled it, the rid would stay 0 and each later sync would
+	// ask for a full update again. Thus the full update runs on its own deadline,
+	// the client timeout, and each caller stops waiting at its own deadline.
+	ch := sm.syncGroup.DoChan("sync", func() (any, error) {
+		fullCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), sm.client.timeout)
+		defer cancel()
+		return sm.doSync(fullCtx)
 	})
-	return err
+	select {
+	case res := <-ch:
+		return res.Err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // doSync performs the actual sync operation (singleflight-compatible signature).

@@ -1858,6 +1858,62 @@ func TestSyncManager_FailedSyncRequestsFullUpdate(t *testing.T) {
 	}
 }
 
+// TestSyncManager_ShortCallerDoesNotCancelFullUpdate checks that a caller with a
+// short deadline stops waiting at that deadline, but the full update goes on and
+// lands for the next caller. If the short caller cancelled it, each later sync
+// would ask for a full update again.
+func TestSyncManager_ShortCallerDoesNotCancelFullUpdate(t *testing.T) {
+	var (
+		mu   sync.Mutex
+		rids []string
+	)
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v2/sync/maindata", func(w http.ResponseWriter, r *http.Request) {
+		rid := r.URL.Query().Get("rid")
+		mu.Lock()
+		rids = append(rids, rid)
+		mu.Unlock()
+
+		if rid != "0" {
+			_, _ = io.WriteString(w, `{"rid":6}`)
+			return
+		}
+		select {
+		case <-r.Context().Done():
+			return
+		case <-time.After(300 * time.Millisecond):
+		}
+		_, _ = io.WriteString(w, `{"rid":5,"full_update":true,"torrents":{"abc":{"hash":"abc"}},"categories":{},"tags":[],"server_state":{}}`)
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	sm := NewSyncManager(NewClient(Config{Host: server.URL, APIKey: "test-key", RetryAttempts: 1}))
+
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	if err := sm.Sync(ctx); err == nil {
+		t.Fatal("expected the short caller to stop at its deadline")
+	}
+	if elapsed := time.Since(start); elapsed > 200*time.Millisecond {
+		t.Fatalf("expected the short caller to return at its deadline, took %v", elapsed)
+	}
+
+	// This call joins the full update that is still in flight.
+	if err := sm.Sync(t.Context()); err != nil {
+		t.Fatalf("second sync: %v", err)
+	}
+	if err := sm.Sync(t.Context()); err != nil {
+		t.Fatalf("third sync: %v", err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if want := []string{"0", "5"}; !slices.Equal(rids, want) {
+		t.Fatalf("expected rids %v, got %v", want, rids)
+	}
+}
+
 // TestMainData_FailedUpdateRequestsFullUpdate checks the same rid reset for
 // callers that keep their own MainData.
 func TestMainData_FailedUpdateRequestsFullUpdate(t *testing.T) {
