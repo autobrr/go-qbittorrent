@@ -47,6 +47,8 @@ func (dest *MainData) ensureInitialized() {
 func (dest *MainData) Update(ctx context.Context, c *Client) error {
 	source, rawData, err := c.SyncMainDataCtxWithRaw(ctx, dest.Rid)
 	if err != nil {
+		// Ask for a full update next time. SyncManager.applySyncResult tells why.
+		dest.Rid = 0
 		return err
 	}
 

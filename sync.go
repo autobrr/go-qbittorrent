@@ -16,7 +16,6 @@ import (
 type SyncManager struct {
 	mu                 sync.RWMutex
 	data               *MainData
-	rid                int64
 	lastSync           time.Time
 	lastSuccessfulSync time.Time
 	lastSyncDuration   time.Duration
@@ -179,12 +178,16 @@ func (sm *SyncManager) applySyncResult(source *MainData, rawData map[string]inte
 	var update *MainData
 	if syncErr == nil {
 		sm.data.applySync(source, rawData)
-		sm.rid = sm.data.Rid
 		// Update cached torrent slice
 		sm.updateAllTorrents()
 		if sm.options.OnUpdate != nil {
 			update = sm.copyMainData(sm.data)
 		}
+	} else {
+		// qBittorrent can count a lost response as sent. Before 5.3.0rc1, it then
+		// drops changes when the client sends the old rid again. Thus ask for a
+		// full update. The cached data stays until the full update arrives.
+		sm.data.Rid = 0
 	}
 
 	sm.lastSyncDuration = time.Since(startTime)

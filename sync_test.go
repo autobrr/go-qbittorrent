@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/cookiejar"
+	"net/http/httptest"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -215,6 +217,8 @@ func TestSyncManager_GetDataWhenEmpty(t *testing.T) {
 
 func TestSyncManager_InitializeData(t *testing.T) {
 	syncManager, _ := createMockSyncManager()
+	// Disable dynamic sync for this test to prevent automatic syncing
+	syncManager.options.DynamicSync = false
 
 	// Manually initialize data to test getter methods
 	syncManager.data = &MainData{
@@ -1775,5 +1779,112 @@ func TestSyncManager_FailedFirstSyncStillInitializesData(t *testing.T) {
 	_ = sm.GetData()
 	if calls != callsAfterFailure {
 		t.Fatalf("checked getters fired %d unpaced sync(s) right after a failed sync", calls-callsAfterFailure)
+	}
+}
+
+// newLostResponseClient returns a client for a fake sync endpoint. The first
+// request gets rid 5 and two torrents. The second request gets no response
+// until the caller gives up. Each later request gets a full update with one
+// torrent. The returned function gives the rid of each request.
+func newLostResponseClient(t *testing.T) (*Client, func() []string) {
+	t.Helper()
+	var (
+		mu   sync.Mutex
+		rids []string
+	)
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v2/sync/maindata", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		rids = append(rids, r.URL.Query().Get("rid"))
+		call := len(rids)
+		mu.Unlock()
+
+		switch call {
+		case 1:
+			_, _ = io.WriteString(w, `{"rid":5,"full_update":true,"torrents":{"abc":{"hash":"abc","progress":0.5},"def":{"hash":"def","progress":1}},"categories":{},"tags":[],"server_state":{}}`)
+		case 2:
+			// The response never arrives: the caller gives up first.
+			select {
+			case <-r.Context().Done():
+			case <-time.After(5 * time.Second):
+			}
+		default:
+			_, _ = io.WriteString(w, `{"rid":1,"full_update":true,"torrents":{"abc":{"hash":"abc","progress":1}},"categories":{},"tags":[],"server_state":{}}`)
+		}
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	client := NewClient(Config{Host: server.URL, APIKey: "test-key", RetryAttempts: 1})
+	return client, func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.Clone(rids)
+	}
+}
+
+// TestSyncManager_FailedSyncRequestsFullUpdate checks the rid reset after a
+// failed sync. qBittorrent before 5.3.0rc1 can drop changes when a client
+// sends a rid again after it lost the response for that rid. A full update
+// brings back every value that the lost response carried.
+func TestSyncManager_FailedSyncRequestsFullUpdate(t *testing.T) {
+	client, rids := newLostResponseClient(t)
+	sm := NewSyncManager(client)
+
+	if err := sm.Sync(t.Context()); err != nil {
+		t.Fatalf("first sync: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+	defer cancel()
+	if err := sm.Sync(ctx); err == nil {
+		t.Fatal("expected the second sync to fail")
+	}
+	if got := len(sm.GetTorrentsUnchecked(TorrentFilterOptions{})); got != 2 {
+		t.Fatalf("expected the cached torrents after the failed sync, got %d", got)
+	}
+
+	if err := sm.Sync(t.Context()); err != nil {
+		t.Fatalf("third sync: %v", err)
+	}
+
+	if want, got := []string{"0", "5", "0"}, rids(); !slices.Equal(got, want) {
+		t.Fatalf("expected rids %v, got %v", want, got)
+	}
+
+	torrents := sm.GetTorrentsUnchecked(TorrentFilterOptions{})
+	if len(torrents) != 1 || torrents[0].Hash != "abc" || torrents[0].Progress != 1 {
+		t.Fatalf("expected the full update to replace the cached torrents, got %+v", torrents)
+	}
+}
+
+// TestMainData_FailedUpdateRequestsFullUpdate checks the same rid reset for
+// callers that keep their own MainData.
+func TestMainData_FailedUpdateRequestsFullUpdate(t *testing.T) {
+	client, rids := newLostResponseClient(t)
+	var data MainData
+
+	if err := data.Update(t.Context(), client); err != nil {
+		t.Fatalf("first update: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+	defer cancel()
+	if err := data.Update(ctx, client); err == nil {
+		t.Fatal("expected the second update to fail")
+	}
+	if got := len(data.Torrents); got != 2 {
+		t.Fatalf("expected the torrents after the failed update, got %d", got)
+	}
+
+	if err := data.Update(t.Context(), client); err != nil {
+		t.Fatalf("third update: %v", err)
+	}
+
+	if want, got := []string{"0", "5", "0"}, rids(); !slices.Equal(got, want) {
+		t.Fatalf("expected rids %v, got %v", want, got)
+	}
+	if torrent, ok := data.Torrents["abc"]; len(data.Torrents) != 1 || !ok || torrent.Progress != 1 {
+		t.Fatalf("expected the full update to replace the torrents, got %+v", data.Torrents)
 	}
 }
