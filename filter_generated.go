@@ -180,6 +180,36 @@ func compareHash(a, b *Torrent) int {
 	return 1
 }
 
+func compareHasTrackerWarning(a, b *Torrent) int {
+	if a.HasTrackerWarning != b.HasTrackerWarning {
+		if a.HasTrackerWarning {
+			return 1
+		}
+		return -1
+	}
+	return 0
+}
+
+func compareHasTrackerError(a, b *Torrent) int {
+	if a.HasTrackerError != b.HasTrackerError {
+		if a.HasTrackerError {
+			return 1
+		}
+		return -1
+	}
+	return 0
+}
+
+func compareHasOtherAnnounceError(a, b *Torrent) int {
+	if a.HasOtherAnnounceError != b.HasOtherAnnounceError {
+		if a.HasOtherAnnounceError {
+			return 1
+		}
+		return -1
+	}
+	return 0
+}
+
 func compareInfohashV1(a, b *Torrent) int {
 	if a.InfohashV1 == b.InfohashV1 {
 		return 0
@@ -564,6 +594,9 @@ var torrentComparators = map[string]func(a, b *Torrent) int{
 	"f_l_piece_prio": compareFirstLastPiecePrio,
 	"force_start": compareForceStart,
 	"hash": compareHash,
+	"has_tracker_warning": compareHasTrackerWarning,
+	"has_tracker_error": compareHasTrackerError,
+	"has_other_announce_error": compareHasOtherAnnounceError,
 	"infohash_v1": compareInfohashV1,
 	"infohash_v2": compareInfohashV2,
 	"popularity": comparePopularity,

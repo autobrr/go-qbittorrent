@@ -48,7 +48,8 @@ type SyncOptions struct {
 	MinSyncInterval time.Duration
 	// JitterPercent adds randomness to sync intervals (0-100, default: 10)
 	JitterPercent int
-	// OnUpdate is called whenever the data is updated
+	// OnUpdate is called after each sync response that changed the data.
+	// MainData.Changes tells what changed.
 	OnUpdate func(*MainData)
 	// OnError is called when sync encounters an error
 	OnError func(error)
@@ -228,7 +229,7 @@ func (sm *SyncManager) doSync(ctx context.Context) (interface{}, error) {
 
 // applySyncResult merges a fetched sync response and updates the sync clocks
 // under a brief write lock. It returns a deep copy of the merged data when an
-// OnUpdate callback needs to be invoked.
+// OnUpdate callback needs to be invoked, and nil when the response changed nothing.
 func (sm *SyncManager) applySyncResult(source *MainData, rawData map[string]interface{}, startTime time.Time, syncErr error) *MainData {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
@@ -244,9 +245,11 @@ func (sm *SyncManager) applySyncResult(source *MainData, rawData map[string]inte
 	var update *MainData
 	if syncErr == nil {
 		sm.data.applySync(source, rawData)
-		// Update cached torrent slice
-		sm.updateAllTorrents()
-		if sm.options.OnUpdate != nil {
+		changes := sm.data.Changes
+		if len(changes.Torrents) > 0 || len(changes.TorrentsRemoved) > 0 {
+			sm.updateAllTorrents()
+		}
+		if sm.options.OnUpdate != nil && !changes.empty() {
 			update = sm.copyMainData(sm.data)
 		}
 	} else {
@@ -715,7 +718,10 @@ func (sm *SyncManager) copyMainData(src *MainData) *MainData {
 		Categories:  cloneCategories(src.Categories),
 		Trackers:    maps.Clone(src.Trackers),
 		Tags:        slices.Clone(src.Tags),
+		Changes:     src.Changes,
 	}
+	dst.Changes.Torrents = slices.Clone(src.Changes.Torrents)
+	dst.Changes.TorrentsRemoved = slices.Clone(src.Changes.TorrentsRemoved)
 
 	return dst
 }
