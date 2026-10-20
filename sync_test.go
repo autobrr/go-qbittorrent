@@ -1837,8 +1837,13 @@ func TestSyncManager_FailedSyncRequestsFullUpdate(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 	defer cancel()
+	start := time.Now()
 	if err := sm.Sync(ctx); err == nil {
 		t.Fatal("expected the second sync to fail")
+	}
+	// Only a full update gets its own deadline. This sync had a rid.
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("expected the second sync to stop at the caller's deadline, took %v", elapsed)
 	}
 	if got := len(sm.GetTorrentsUnchecked(TorrentFilterOptions{})); got != 2 {
 		t.Fatalf("expected the cached torrents after the failed sync, got %d", got)
@@ -1855,6 +1860,144 @@ func TestSyncManager_FailedSyncRequestsFullUpdate(t *testing.T) {
 	torrents := sm.GetTorrentsUnchecked(TorrentFilterOptions{})
 	if len(torrents) != 1 || torrents[0].Hash != "abc" || torrents[0].Progress != 1 {
 		t.Fatalf("expected the full update to replace the cached torrents, got %+v", torrents)
+	}
+}
+
+// TestSyncManager_ShortCallerDoesNotCancelFullUpdate checks that a caller with a
+// short deadline stops waiting at that deadline, but the full update goes on and
+// lands for the next caller. If the short caller cancelled it, each later sync
+// would ask for a full update again.
+func TestSyncManager_ShortCallerDoesNotCancelFullUpdate(t *testing.T) {
+	var (
+		mu   sync.Mutex
+		rids []string
+	)
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v2/sync/maindata", func(w http.ResponseWriter, r *http.Request) {
+		rid := r.URL.Query().Get("rid")
+		mu.Lock()
+		rids = append(rids, rid)
+		mu.Unlock()
+
+		if rid != "0" {
+			_, _ = io.WriteString(w, `{"rid":6}`)
+			return
+		}
+		select {
+		case <-r.Context().Done():
+			return
+		case <-time.After(300 * time.Millisecond):
+		}
+		_, _ = io.WriteString(w, `{"rid":5,"full_update":true,"torrents":{"abc":{"hash":"abc"}},"categories":{},"tags":[],"server_state":{}}`)
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	sm := NewSyncManager(NewClient(Config{Host: server.URL, APIKey: "test-key", RetryAttempts: 1}))
+
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	if err := sm.Sync(ctx); err == nil {
+		t.Fatal("expected the short caller to stop at its deadline")
+	}
+	if elapsed := time.Since(start); elapsed > 200*time.Millisecond {
+		t.Fatalf("expected the short caller to return at its deadline, took %v", elapsed)
+	}
+
+	// This call joins the full update that is still in flight.
+	if err := sm.Sync(t.Context()); err != nil {
+		t.Fatalf("second sync: %v", err)
+	}
+	if err := sm.Sync(t.Context()); err != nil {
+		t.Fatalf("third sync: %v", err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if want := []string{"0", "5"}; !slices.Equal(rids, want) {
+		t.Fatalf("expected rids %v, got %v", want, rids)
+	}
+}
+
+// TestSyncManager_ShortCallerWaitsForRunningIncrementalSync checks that a
+// caller with a short deadline that joins a running sync with a rid waits for
+// its result, as before full updates got their own deadline.
+func TestSyncManager_ShortCallerWaitsForRunningIncrementalSync(t *testing.T) {
+	started := make(chan struct{})
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v2/sync/maindata", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("rid") == "0" {
+			_, _ = io.WriteString(w, `{"rid":5,"full_update":true,"torrents":{},"categories":{},"tags":[],"server_state":{}}`)
+			return
+		}
+		close(started)
+		time.Sleep(300 * time.Millisecond)
+		_, _ = io.WriteString(w, `{"rid":6}`)
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	sm := NewSyncManager(NewClient(Config{Host: server.URL, APIKey: "test-key", RetryAttempts: 1}))
+	if err := sm.Sync(t.Context()); err != nil {
+		t.Fatalf("first sync: %v", err)
+	}
+
+	leader := make(chan error, 1)
+	go func() { leader <- sm.Sync(t.Context()) }()
+	<-started
+
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+	defer cancel()
+	if err := sm.Sync(ctx); err != nil {
+		t.Fatalf("expected the short caller to get the result of the running sync: %v", err)
+	}
+	if err := <-leader; err != nil {
+		t.Fatalf("leader sync: %v", err)
+	}
+}
+
+// TestSyncManager_CallbackPanicReachesCaller checks that a panic in OnUpdate
+// comes back to the caller of Sync, where the caller can recover it.
+func TestSyncManager_CallbackPanicReachesCaller(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v2/sync/maindata", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, `{"rid":5,"full_update":true,"torrents":{},"categories":{},"tags":[],"server_state":{}}`)
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	options := DefaultSyncOptions()
+	options.OnUpdate = func(*MainData) { panic("callback failed") }
+	sm := NewSyncManager(NewClient(Config{Host: server.URL, APIKey: "test-key", RetryAttempts: 1}), options)
+
+	recovered := func() (r any) {
+		defer func() { r = recover() }()
+		_ = sm.Sync(t.Context())
+		return nil
+	}()
+	if recovered == nil {
+		t.Fatal("expected the callback panic to reach the caller of Sync")
+	}
+}
+
+// TestSyncManager_FullUpdateUsesCustomHTTPClientTimeout checks that a full
+// update gets the timeout of a client set with WithHTTPClient, not the timeout
+// from Config.
+func TestSyncManager_FullUpdateUsesCustomHTTPClientTimeout(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v2/sync/maindata", func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-time.After(1500 * time.Millisecond):
+		}
+		_, _ = io.WriteString(w, `{"rid":5,"full_update":true,"torrents":{},"categories":{},"tags":[],"server_state":{}}`)
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	client := NewClient(Config{Host: server.URL, APIKey: "test-key", RetryAttempts: 1, Timeout: 1}).
+		WithHTTPClient(&http.Client{Timeout: 5 * time.Second})
+	if err := NewSyncManager(client).Sync(t.Context()); err != nil {
+		t.Fatalf("expected the full update to get the 5 s timeout of the custom client: %v", err)
 	}
 }
 

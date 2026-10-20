@@ -1,9 +1,13 @@
 package qbittorrent
 
 import (
+	"cmp"
 	"context"
+	"errors"
+	"fmt"
 	"maps"
 	"math/rand"
+	"runtime/debug"
 	"slices"
 	"sync"
 	"time"
@@ -113,12 +117,53 @@ func (sm *SyncManager) Start(ctx context.Context) error {
 // Sync performs a synchronization with the qBittorrent server
 // If another sync is already in progress, this method will wait for it to complete
 // and all callers will receive the same result (using singleflight pattern).
-// Note: Uses context.Background() for all syncs to avoid context confusion in batched calls.
+// The sync runs on the context of the caller that starts it, except a full
+// update: see doSync.
 func (sm *SyncManager) Sync(ctx context.Context) error {
-	_, err, _ := sm.syncGroup.Do("sync", func() (interface{}, error) {
+	ch := sm.syncGroup.DoChan("sync", func() (_ any, err error) {
+		// On a panic, DoChan stops the process. Give the panic to the callers instead.
+		defer func() {
+			if r := recover(); r != nil {
+				err = &syncPanic{value: r, stack: debug.Stack()}
+			}
+		}()
 		return sm.doSync(ctx)
 	})
-	return err
+	select {
+	case res := <-ch:
+		return syncResult(res)
+	case <-ctx.Done():
+	}
+
+	// A full update runs on its own deadline, so a caller stops waiting for it
+	// at the caller's deadline. A caller waits for a running sync with a rid,
+	// which ends with the context of the caller that started it.
+	sm.mu.RLock()
+	fullUpdate := sm.data == nil || sm.data.Rid == 0
+	sm.mu.RUnlock()
+	if fullUpdate {
+		return ctx.Err()
+	}
+	return syncResult(<-ch)
+}
+
+// syncPanic carries a panic out of the shared sync. Each caller that waits for
+// the result panics with it again, as singleflight's Do does, so that the
+// caller can recover it.
+type syncPanic struct {
+	value any
+	stack []byte
+}
+
+func (p *syncPanic) Error() string {
+	return fmt.Sprintf("sync panic: %v\n%s", p.value, p.stack)
+}
+
+func syncResult(res singleflight.Result) error {
+	if p, ok := errors.AsType[*syncPanic](res.Err); ok {
+		panic(p)
+	}
+	return res.Err
 }
 
 // doSync performs the actual sync operation (singleflight-compatible signature).
@@ -136,6 +181,17 @@ func (sm *SyncManager) doSync(ctx context.Context) (interface{}, error) {
 		rid = sm.data.Rid
 	}
 	sm.mu.RUnlock()
+
+	// A full update can take longer than a caller with a short deadline waits.
+	// If that caller cancelled it, the rid would stay 0 and each later sync would
+	// ask for a full update again. Thus a full update runs on the timeout of the
+	// HTTP client, or DefaultTimeout if that client has none. The rid read here
+	// decides, because a sync that failed after the check in Sync resets it to 0.
+	if rid == 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(context.WithoutCancel(ctx), cmp.Or(sm.client.http.Timeout, DefaultTimeout))
+		defer cancel()
+	}
 
 	source, rawData, err := sm.client.SyncMainDataCtxWithRaw(ctx, rid)
 
