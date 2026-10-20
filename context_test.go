@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
@@ -350,13 +351,18 @@ func TestRetryDo_DoesNotReplayPostAfterConnectionReset(t *testing.T) {
 }
 
 func TestSyncManager_SharedSyncEndsWithoutClientTimeout(t *testing.T) {
-	srv, hits := newHangingServer(t, 0, nil)
+	srv, hits := newHangingServer(t, 1, nil)
 	c := newTestClient(srv.URL, 1)
 	c.http.Timeout = 0 // a custom http.Client with no timeout
 	c.timeout = 50 * time.Millisecond
 	c.retryDelay = 0
 	sm := NewSyncManager(c)
+	if err := sm.Sync(t.Context()); err != nil {
+		t.Fatalf("initial sync: %v", err)
+	}
 
+	// This sync has a rid, so it gets the shared deadline, not the
+	// shorter one of a full update.
 	start := time.Now()
 	if err := sm.Sync(t.Context()); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("expected context.DeadlineExceeded, got %v", err)
@@ -365,21 +371,41 @@ func TestSyncManager_SharedSyncEndsWithoutClientTimeout(t *testing.T) {
 	if elapsed := time.Since(start); elapsed < 90*time.Millisecond || elapsed > time.Second {
 		t.Fatalf("shared sync ran for %v, want about 100ms", elapsed)
 	}
+	if got := hits.Load(); got != 2 {
+		t.Fatalf("server got %d requests, want 2", got)
+	}
+}
+
+func TestSyncManager_FullUpdateTimeoutIsNotRetried(t *testing.T) {
+	srv, hits := newHangingServer(t, 0, nil)
+	c := newTestClient(srv.URL, 3)
+	c.http.Timeout = 50 * time.Millisecond
+	c.retryDelay = 0
+	sm := NewSyncManager(c)
+
+	if err := sm.Sync(t.Context()); err == nil {
+		t.Fatal("expected the full update to time out")
+	}
 	if got := hits.Load(); got != 1 {
-		t.Fatalf("server got %d requests, want 1", got)
+		t.Fatalf("server got %d full update requests, want 1", got)
 	}
 }
 
 func TestSyncManager_SharedSyncBudgetsLogin(t *testing.T) {
-	// Login and sync each take most of the attempt timeout, so together they
-	// run longer than one attempt timeout.
+	// After the first sync, the session cookie is gone, so the next sync logs
+	// in first. Login and sync each take most of the attempt timeout, so
+	// together they run longer than one attempt timeout.
+	var slowLogin atomic.Bool
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(70 * time.Millisecond)
 		if r.URL.Path == "/api/v2/auth/login" {
+			if slowLogin.Load() {
+				time.Sleep(70 * time.Millisecond)
+			}
 			http.SetCookie(w, &http.Cookie{Name: "SID", Value: "test", Path: "/"})
 			_, _ = w.Write([]byte("Ok."))
 			return
 		}
+		time.Sleep(70 * time.Millisecond)
 		_, _ = w.Write([]byte(syncBody))
 	}))
 	t.Cleanup(srv.Close)
@@ -387,7 +413,16 @@ func TestSyncManager_SharedSyncBudgetsLogin(t *testing.T) {
 	c.http.Timeout = 100 * time.Millisecond
 	c.retryDelay = 0
 	sm := NewSyncManager(c)
+	if err := sm.Sync(t.Context()); err != nil {
+		t.Fatalf("initial sync: %v", err)
+	}
 
+	slowLogin.Store(true)
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.http.Jar = jar
 	if err := sm.Sync(t.Context()); err != nil {
 		t.Fatalf("expected login and sync to fit the shared sync deadline, got %v", err)
 	}

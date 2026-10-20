@@ -138,6 +138,7 @@ func (sm *SyncManager) Sync(ctx context.Context) error {
 // startSync starts a shared sync, or joins the one in progress.
 // The shared sync has a deadline of retryAttempts × (2 × attempt timeout +
 // retry delay): each attempt can need a login request before the sync request.
+// A full update has a shorter deadline (see doSync).
 // Without it, an http.Client with no Timeout could hang the sync
 // forever, and every later caller would join the stuck call.
 func (sm *SyncManager) startSync(ctx context.Context) <-chan singleflight.Result {
@@ -189,6 +190,16 @@ func (sm *SyncManager) doSync(ctx context.Context) (interface{}, error) {
 		rid = sm.data.Rid
 	}
 	sm.mu.RUnlock()
+
+	// A full update is the heaviest request. When it times out, a retry sends
+	// it again to a server that is already slow. Thus a full update gets one
+	// attempt timeout, which leaves no time for a retry after a timeout. The
+	// rid read here decides, because a failed sync resets it to 0.
+	if rid == 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, sm.client.attemptTimeout())
+		defer cancel()
+	}
 
 	source, rawData, err := sm.client.SyncMainDataCtxWithRaw(ctx, rid)
 

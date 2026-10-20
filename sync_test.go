@@ -1941,6 +1941,29 @@ func TestSyncManager_CallbackPanicReachesCaller(t *testing.T) {
 	}
 }
 
+// TestSyncManager_FullUpdateUsesCustomHTTPClientTimeout checks that a full
+// update gets the timeout of a client set with WithHTTPClient, not the timeout
+// from Config.
+func TestSyncManager_FullUpdateUsesCustomHTTPClientTimeout(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v2/sync/maindata", func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-time.After(1500 * time.Millisecond):
+		}
+		_, _ = io.WriteString(w, `{"rid":5,"full_update":true,"torrents":{},"categories":{},"tags":[],"server_state":{}}`)
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	client := NewClient(Config{Host: server.URL, APIKey: "test-key", RetryAttempts: 1, Timeout: 1}).
+		WithHTTPClient(&http.Client{Timeout: 5 * time.Second})
+	if err := NewSyncManager(client).Sync(t.Context()); err != nil {
+		t.Fatalf("expected the full update to get the 5 s timeout of the custom client: %v", err)
+	}
+}
+
 // TestMainData_FailedUpdateRequestsFullUpdate checks the same rid reset for
 // callers that keep their own MainData.
 func TestMainData_FailedUpdateRequestsFullUpdate(t *testing.T) {
