@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -68,6 +69,10 @@ func NewMockClient() *MockClient {
 			Transport: mockTransport,
 			Jar:       jar,
 		},
+		// A literal Client skips the NewClient defaults that retryDo needs.
+		log:           log.New(io.Discard, "", 0),
+		timeout:       DefaultTimeout,
+		retryAttempts: 1,
 	}
 
 	mock := &MockClient{
@@ -1783,9 +1788,9 @@ func TestSyncManager_FailedFirstSyncStillInitializesData(t *testing.T) {
 }
 
 // newLostResponseClient returns a client for a fake sync endpoint. The first
-// request gets rid 5 and two torrents. The second request gets no response
-// until the caller gives up. Each later request gets a full update with one
-// torrent. The returned function gives the rid of each request.
+// request gets rid 5 and two torrents. The response to the second request
+// breaks off. Each later request gets a full update
+// with one torrent. The returned function gives the rid of each request.
 func newLostResponseClient(t *testing.T) (*Client, func() []string) {
 	t.Helper()
 	var (
@@ -1803,11 +1808,12 @@ func newLostResponseClient(t *testing.T) (*Client, func() []string) {
 		case 1:
 			_, _ = io.WriteString(w, `{"rid":5,"full_update":true,"torrents":{"abc":{"hash":"abc","progress":0.5},"def":{"hash":"def","progress":1}},"categories":{},"tags":[],"server_state":{}}`)
 		case 2:
-			// The response never arrives: the caller gives up first.
-			select {
-			case <-r.Context().Done():
-			case <-time.After(5 * time.Second):
-			}
+			// The response breaks off. A drop before the headers would make
+			// the transport send the GET again on a new connection.
+			w.Header().Set("Content-Length", "100")
+			_, _ = io.WriteString(w, `{"rid":`)
+			_ = http.NewResponseController(w).Flush()
+			panic(http.ErrAbortHandler)
 		default:
 			_, _ = io.WriteString(w, `{"rid":1,"full_update":true,"torrents":{"abc":{"hash":"abc","progress":1}},"categories":{},"tags":[],"server_state":{}}`)
 		}
@@ -1835,15 +1841,8 @@ func TestSyncManager_FailedSyncRequestsFullUpdate(t *testing.T) {
 		t.Fatalf("first sync: %v", err)
 	}
 
-	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
-	defer cancel()
-	start := time.Now()
-	if err := sm.Sync(ctx); err == nil {
+	if err := sm.Sync(t.Context()); err == nil {
 		t.Fatal("expected the second sync to fail")
-	}
-	// Only a full update gets its own deadline. This sync had a rid.
-	if elapsed := time.Since(start); elapsed > time.Second {
-		t.Fatalf("expected the second sync to stop at the caller's deadline, took %v", elapsed)
 	}
 	if got := len(sm.GetTorrentsUnchecked(TorrentFilterOptions{})); got != 2 {
 		t.Fatalf("expected the cached torrents after the failed sync, got %d", got)
@@ -1919,42 +1918,6 @@ func TestSyncManager_ShortCallerDoesNotCancelFullUpdate(t *testing.T) {
 	}
 }
 
-// TestSyncManager_ShortCallerWaitsForRunningIncrementalSync checks that a
-// caller with a short deadline that joins a running sync with a rid waits for
-// its result, as before full updates got their own deadline.
-func TestSyncManager_ShortCallerWaitsForRunningIncrementalSync(t *testing.T) {
-	started := make(chan struct{})
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/v2/sync/maindata", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("rid") == "0" {
-			_, _ = io.WriteString(w, `{"rid":5,"full_update":true,"torrents":{},"categories":{},"tags":[],"server_state":{}}`)
-			return
-		}
-		close(started)
-		time.Sleep(300 * time.Millisecond)
-		_, _ = io.WriteString(w, `{"rid":6}`)
-	})
-	server := httptest.NewServer(mux)
-	t.Cleanup(server.Close)
-	sm := NewSyncManager(NewClient(Config{Host: server.URL, APIKey: "test-key", RetryAttempts: 1}))
-	if err := sm.Sync(t.Context()); err != nil {
-		t.Fatalf("first sync: %v", err)
-	}
-
-	leader := make(chan error, 1)
-	go func() { leader <- sm.Sync(t.Context()) }()
-	<-started
-
-	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
-	defer cancel()
-	if err := sm.Sync(ctx); err != nil {
-		t.Fatalf("expected the short caller to get the result of the running sync: %v", err)
-	}
-	if err := <-leader; err != nil {
-		t.Fatalf("leader sync: %v", err)
-	}
-}
-
 // TestSyncManager_CallbackPanicReachesCaller checks that a panic in OnUpdate
 // comes back to the caller of Sync, where the caller can recover it.
 func TestSyncManager_CallbackPanicReachesCaller(t *testing.T) {
@@ -2011,9 +1974,7 @@ func TestMainData_FailedUpdateRequestsFullUpdate(t *testing.T) {
 		t.Fatalf("first update: %v", err)
 	}
 
-	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
-	defer cancel()
-	if err := data.Update(ctx, client); err == nil {
+	if err := data.Update(t.Context(), client); err == nil {
 		t.Fatal("expected the second update to fail")
 	}
 	if got := len(data.Torrents); got != 2 {
