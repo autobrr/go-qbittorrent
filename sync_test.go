@@ -2054,3 +2054,134 @@ func TestSyncManager_GetTorrentsByHashMatchesScan(t *testing.T) {
 		}
 	}
 }
+
+// applyMainDataJSON merges one sync/maindata response body into dest, as
+// MainData.Update does after the fetch.
+func applyMainDataJSON(t *testing.T, dest *MainData, body string) {
+	t.Helper()
+	var source MainData
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(body), &source); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(body), &raw); err != nil {
+		t.Fatal(err)
+	}
+	normalizeHashesRaw(raw)
+	dest.applySync(&source, raw)
+}
+
+func TestSyncManager_NoChangeSkipsOnUpdate(t *testing.T) {
+	bodies := []string{
+		`{"rid":1,"full_update":true,"torrents":{"a":{"name":"a"}},"categories":{},"tags":[],"server_state":{"dl_info_speed":1}}`,
+		`{"rid":2}`,
+		`{"rid":3,"server_state":{"dl_info_speed":2}}`,
+	}
+	call := 0
+	sm := newSyncManagerWithTransport(func(req *http.Request) (*http.Response, error) {
+		body := bodies[call]
+		call++
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
+	})
+	var rids []int64
+	sm.options.OnUpdate = func(data *MainData) { rids = append(rids, data.Rid) }
+
+	for range bodies {
+		if err := sm.Sync(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if !slices.Equal(rids, []int64{1, 3}) {
+		t.Fatalf("OnUpdate got rids %v, want [1 3]", rids)
+	}
+	if data := sm.GetDataUnchecked(); data.FullUpdate || data.Rid != 3 {
+		t.Fatalf("got rid %d, full update %v; want rid 3, no full update", data.Rid, data.FullUpdate)
+	}
+}
+
+func TestMainData_Changes(t *testing.T) {
+	const full = `{"rid":1,"full_update":true,"torrents":{"a":{"name":"a"},"b":{"name":"b"},"c":{"name":"c"}},
+		"categories":{"tv":{"name":"tv"}},"tags":["x"],"trackers":{"http://t1":["a","b"],"http://t2":["c"]},"server_state":{}}`
+
+	tests := []struct {
+		name string
+		body string
+		want MainDataChanges
+	}{
+		{name: "nothing", body: `{"rid":2}`},
+		{name: "empty sections", body: `{"rid":2,"torrents":{},"categories":{},"tags":[],"trackers":{},"server_state":{}}`},
+		{name: "torrents", body: `{"rid":2,"torrents":{"a":{"dlspeed":5},"d":{"name":"d"}}}`, want: MainDataChanges{Torrents: []string{"a", "d"}}},
+		{name: "torrent removed", body: `{"rid":2,"torrents_removed":["c"]}`, want: MainDataChanges{TorrentsRemoved: []string{"c"}, Trackers: true}},
+		{name: "category added", body: `{"rid":2,"categories":{"movies":{"name":"movies"}}}`, want: MainDataChanges{Categories: true}},
+		{name: "category removed", body: `{"rid":2,"categories_removed":["tv"]}`, want: MainDataChanges{Categories: true}},
+		{name: "tag added", body: `{"rid":2,"tags":["y"]}`, want: MainDataChanges{Tags: true}},
+		{name: "tag removed", body: `{"rid":2,"tags_removed":["x"]}`, want: MainDataChanges{Tags: true}},
+		{name: "tracker changed", body: `{"rid":2,"trackers":{"http://t3":["a"]}}`, want: MainDataChanges{Trackers: true}},
+		{name: "tracker removed", body: `{"rid":2,"trackers_removed":["http://t2"]}`, want: MainDataChanges{Trackers: true}},
+		{name: "server state", body: `{"rid":2,"server_state":{"dl_info_speed":1}}`, want: MainDataChanges{ServerState: true}},
+		{
+			name: "full update",
+			body: `{"rid":2,"full_update":true,"torrents":{"a":{"name":"a"},"d":{"name":"d"}},"categories":{},"tags":[],"server_state":{}}`,
+			want: MainDataChanges{Torrents: []string{"a", "d"}, TorrentsRemoved: []string{"b", "c"}, Categories: true, Tags: true, Trackers: true, ServerState: true},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var data MainData
+			applyMainDataJSON(t, &data, full)
+			applyMainDataJSON(t, &data, tt.body)
+
+			got := data.Changes
+			slices.Sort(got.Torrents)
+			slices.Sort(got.TorrentsRemoved)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("got %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMainData_AnnounceFlags(t *testing.T) {
+	var data MainData
+	applyMainDataJSON(t, &data, `{"rid":1,"full_update":true,"torrents":{
+		"a":{"has_tracker_warning":true,"has_tracker_error":false,"has_other_announce_error":true},
+		"b":{"has_tracker_warning":false,"has_tracker_error":true,"has_other_announce_error":false}}}`)
+
+	a, b := data.Torrents["a"], data.Torrents["b"]
+	if !a.HasTrackerWarning || a.HasTrackerError || !a.HasOtherAnnounceError {
+		t.Fatalf("full update: got torrent a %+v", a)
+	}
+	if b.HasTrackerWarning || !b.HasTrackerError || b.HasOtherAnnounceError {
+		t.Fatalf("full update: got torrent b %+v", b)
+	}
+
+	applyMainDataJSON(t, &data, `{"rid":2,"torrents":{
+		"a":{"has_tracker_warning":false,"has_tracker_error":true,"has_other_announce_error":false},
+		"b":{"has_tracker_warning":true}}}`)
+
+	a, b = data.Torrents["a"], data.Torrents["b"]
+	if a.HasTrackerWarning || !a.HasTrackerError || a.HasOtherAnnounceError {
+		t.Fatalf("partial update: got torrent a %+v", a)
+	}
+	if !b.HasTrackerWarning || !b.HasTrackerError || b.HasOtherAnnounceError {
+		t.Fatalf("partial update: got torrent b %+v", b)
+	}
+}
+
+func TestMainData_TrackersRemoved(t *testing.T) {
+	var data MainData
+	applyMainDataJSON(t, &data, `{"rid":1,"full_update":true,"torrents":{"a":{},"b":{},"c":{}},
+		"trackers":{"http://t1":["a","b"],"http://t2":["c"],"http://t3":["a"]}}`)
+	shared := data.Trackers["http://t1"]
+
+	applyMainDataJSON(t, &data, `{"rid":2,"torrents_removed":["a"],"trackers_removed":["http://t2"]}`)
+
+	want := map[string][]string{"http://t1": {"b"}}
+	if !reflect.DeepEqual(data.Trackers, want) {
+		t.Fatalf("got trackers %v, want %v", data.Trackers, want)
+	}
+	if !slices.Equal(shared, []string{"a", "b"}) {
+		t.Fatalf("a caller's copy of the hashes changed to %v", shared)
+	}
+}

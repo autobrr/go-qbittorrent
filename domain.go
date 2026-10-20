@@ -77,6 +77,9 @@ type Torrent struct {
 	ForceStart               bool             `json:"force_start"`
 	Hash                     string           `json:"hash"`
 	HasMetadata              *bool            `json:"has_metadata"`
+	HasTrackerWarning        bool             `json:"has_tracker_warning"`      // sync/maindata only, qBittorrent 5.2+
+	HasTrackerError          bool             `json:"has_tracker_error"`        // sync/maindata only, qBittorrent 5.2+
+	HasOtherAnnounceError    bool             `json:"has_other_announce_error"` // sync/maindata only, qBittorrent 5.2+
 	InfohashV1               string           `json:"infohash_v1"`
 	InfohashV2               string           `json:"infohash_v2"`
 	Popularity               float64          `json:"popularity"`
@@ -938,7 +941,27 @@ type MainData struct {
 	Tags              []string            `json:"tags"`
 	TagsRemoved       []string            `json:"tags_removed"`
 	Trackers          map[string][]string `json:"trackers"`
+	TrackersRemoved   []string            `json:"trackers_removed"`
 	ServerState       ServerState         `json:"server_state"`
+	// Changes lists what the last sync response changed.
+	Changes MainDataChanges `json:"-"`
+}
+
+// MainDataChanges lists what one sync response changed. A full update
+// changes everything: Torrents holds every hash, and TorrentsRemoved holds
+// each hash that the full update dropped.
+type MainDataChanges struct {
+	// Torrents holds the hashes of the added and changed torrents.
+	Torrents        []string
+	TorrentsRemoved []string
+	Categories      bool
+	Tags            bool
+	Trackers        bool
+	ServerState     bool
+}
+
+func (c MainDataChanges) empty() bool {
+	return len(c.Torrents) == 0 && len(c.TorrentsRemoved) == 0 && !c.Categories && !c.Tags && !c.Trackers && !c.ServerState
 }
 
 type ServerState struct {

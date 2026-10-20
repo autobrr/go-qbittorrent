@@ -161,3 +161,15 @@ func BenchmarkSyncManager_UpdateAllTorrents(b *testing.B) {
 		sm.updateAllTorrents()
 	}
 }
+
+// BenchmarkSyncManager_ApplyUnchangedSync measures a sync response that
+// changes nothing, while an OnUpdate callback is set.
+func BenchmarkSyncManager_ApplyUnchangedSync(b *testing.B) {
+	sm, _ := newLibrarySyncManager(50_000)
+	sm.options.OnUpdate = func(*MainData) {}
+	source := &MainData{Rid: 2}
+	raw := map[string]any{"rid": float64(2)}
+	for b.Loop() {
+		sm.applySyncResult(source, raw, time.Now(), nil)
+	}
+}
