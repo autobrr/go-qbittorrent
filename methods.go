@@ -233,11 +233,17 @@ func (c *Client) SendTestEmailCtx(ctx context.Context) error {
 }
 
 func (c *Client) getApiVersion() (*semver.Version, error) {
+	return c.getApiVersionCtx(context.Background())
+}
+
+// getApiVersionCtx is getApiVersion with the caller's context, which bounds
+// the version request when the version is not cached yet.
+func (c *Client) getApiVersionCtx(ctx context.Context) (*semver.Version, error) {
 	if ver := c.version.Load(); ver != nil {
 		return ver, nil
 	}
 
-	versionString, err := c.GetWebAPIVersionCtx(context.Background())
+	versionString, err := c.GetWebAPIVersionCtx(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get webapi version")
 	}
@@ -1343,16 +1349,77 @@ func (c *Client) SetLocationCtx(ctx context.Context, hashes []string, location s
 	}
 }
 
+// CategoryOptions holds the options that CreateCategoryWithOptions and
+// EditCategoryWithOptions send for a category.
+type CategoryOptions struct {
+	// SavePath is the category's save path. Empty means the default save path.
+	SavePath string
+	// DownloadPath is the category's download path option. Nil means the
+	// category inherits it. A non-nil value requires qBittorrent 4.4 and
+	// WebAPI >= 2.8.4.
+	DownloadPath *CategoryDownloadPath
+}
+
+// categoryDownloadPathMinVersion is the first WebAPI version that reads
+// downloadPathEnabled and downloadPath.
+var categoryDownloadPathMinVersion = semver.MustParse("2.8.4")
+
+// form returns the createCategory or editCategory form for category. With
+// stateInherit set, a nil DownloadPath is sent as an empty downloadPathEnabled,
+// which every qBittorrent version reads as inherit.
+func (o CategoryOptions) form(category string, stateInherit bool) map[string]string {
+	form := map[string]string{
+		"category": category,
+		"savePath": o.SavePath,
+	}
+	switch {
+	case o.DownloadPath != nil:
+		form["downloadPathEnabled"] = strconv.FormatBool(o.DownloadPath.Enabled)
+		form["downloadPath"] = o.DownloadPath.Path
+	case stateInherit:
+		form["downloadPathEnabled"] = ""
+	}
+	return form
+}
+
+// requireDownloadPathSupport fails when opts sets a download path that the
+// server would silently ignore.
+func (c *Client) requireDownloadPathSupport(ctx context.Context, opts CategoryOptions) error {
+	if opts.DownloadPath == nil {
+		return nil
+	}
+	if _, err := c.requiresMinVersionCtx(ctx, categoryDownloadPathMinVersion); err != nil {
+		return errors.Wrap(err, "category download path requires qBittorrent 4.4 and WebAPI >= 2.8.4")
+	}
+	return nil
+}
+
 func (c *Client) CreateCategory(category string, path string) error {
 	return c.CreateCategoryCtx(context.Background(), category, path)
 }
 
 func (c *Client) CreateCategoryCtx(ctx context.Context, category string, path string) error {
-	opts := map[string]string{
-		"category": category,
-		"savePath": path,
-	}
+	return c.createCategoryCtx(ctx, category, CategoryOptions{SavePath: path}.form(category, false))
+}
 
+// CreateCategoryWithOptions creates a category with a save path and, when
+// opts.DownloadPath is set, its own download path option. A nil DownloadPath
+// sends no download path, so the category inherits it.
+func (c *Client) CreateCategoryWithOptions(category string, opts CategoryOptions) error {
+	return c.CreateCategoryWithOptionsCtx(context.Background(), category, opts)
+}
+
+// CreateCategoryWithOptionsCtx creates a category with a save path and, when
+// opts.DownloadPath is set, its own download path option. A nil DownloadPath
+// sends no download path, so the category inherits it.
+func (c *Client) CreateCategoryWithOptionsCtx(ctx context.Context, category string, opts CategoryOptions) error {
+	if err := c.requireDownloadPathSupport(ctx, opts); err != nil {
+		return err
+	}
+	return c.createCategoryCtx(ctx, category, opts.form(category, false))
+}
+
+func (c *Client) createCategoryCtx(ctx context.Context, category string, opts map[string]string) error {
 	resp, err := c.postCtx(ctx, "torrents/createCategory", opts)
 	if err != nil {
 		return errors.Wrap(err, "could not create category; category: %v", category)
@@ -1378,16 +1445,46 @@ func (c *Client) CreateCategoryCtx(ctx context.Context, category string, path st
 	}
 }
 
+// EditCategory sends only the category and its save path. Up to qBittorrent
+// 5.2 the edit replaces every category option, so it resets the download path
+// to inherit. From 5.3.0 the edit keeps the download path. Use
+// EditCategoryWithOptions to set the download path the same way on every
+// version.
 func (c *Client) EditCategory(category string, path string) error {
 	return c.EditCategoryCtx(context.Background(), category, path)
 }
 
+// EditCategoryCtx sends only the category and its save path. See EditCategory
+// for what happens to the download path.
 func (c *Client) EditCategoryCtx(ctx context.Context, category string, path string) error {
-	opts := map[string]string{
-		"category": category,
-		"savePath": path,
-	}
+	return c.editCategoryCtx(ctx, category, CategoryOptions{SavePath: path}.form(category, false))
+}
 
+// EditCategoryWithOptions sets the category's save path and download path
+// option to opts. It always states the download path, and a nil DownloadPath
+// sets the option to inherit. So both options end up the same up to
+// qBittorrent 5.2, where an edit replaces every option, and from 5.3.0, where
+// an option the edit leaves out is kept. To change only the save path, pass
+// the DownloadPath the category already has. Before WebAPI 2.11.10
+// (qBittorrent 5.1 and earlier), read it with GetCategoriesCtx, because
+// maindata can still hold a path the category no longer has.
+//
+// On qBittorrent 5.2 the edit also resets the category's share limits, which
+// 5.2 cannot set through the WebAPI. From 5.3.0 they are kept.
+func (c *Client) EditCategoryWithOptions(category string, opts CategoryOptions) error {
+	return c.EditCategoryWithOptionsCtx(context.Background(), category, opts)
+}
+
+// EditCategoryWithOptionsCtx sets the category's save path and download path
+// option to opts. See EditCategoryWithOptions.
+func (c *Client) EditCategoryWithOptionsCtx(ctx context.Context, category string, opts CategoryOptions) error {
+	if err := c.requireDownloadPathSupport(ctx, opts); err != nil {
+		return err
+	}
+	return c.editCategoryCtx(ctx, category, opts.form(category, true))
+}
+
+func (c *Client) editCategoryCtx(ctx context.Context, category string, opts map[string]string) error {
 	resp, err := c.postCtx(ctx, "torrents/editCategory", opts)
 	if err != nil {
 		return errors.Wrap(err, "could not edit category; category: %v", category)
@@ -3014,7 +3111,11 @@ func (c *Client) GetFreeSpaceOnDiskCtx(ctx context.Context) (int64, error) {
 
 // RequiresMinVersion checks the current version against version X and errors if the current version is older than X
 func (c *Client) RequiresMinVersion(minVersion *semver.Version) (bool, error) {
-	version, err := c.getApiVersion()
+	return c.requiresMinVersionCtx(context.Background(), minVersion)
+}
+
+func (c *Client) requiresMinVersionCtx(ctx context.Context, minVersion *semver.Version) (bool, error) {
+	version, err := c.getApiVersionCtx(ctx)
 	if err != nil {
 		return false, errors.Wrap(err, "could not get api version")
 	}

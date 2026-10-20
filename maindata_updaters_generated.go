@@ -590,10 +590,18 @@ func updateCategorySavePath(val interface{}, obj *Category) {
 	}
 }
 
+// updateCategoryDownloadPath updates the DownloadPath field of Category
+func updateCategoryDownloadPath(val interface{}, obj *Category) {
+	if d, ok := parseCategoryDownloadPath(val); ok {
+		obj.DownloadPath = d
+	}
+}
+
 // Precomputed field updaters for Category - created once at package init
 var categoryFieldUpdaters = map[string]func(val interface{}, obj *Category){
 	"name": updateCategoryName,
 	"savePath": updateCategorySavePath,
+	"download_path": updateCategoryDownloadPath,
 }
 
 // updateCategoryFields updates only the fields that are present in the update map
