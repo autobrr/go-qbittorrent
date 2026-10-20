@@ -30,6 +30,7 @@ type SyncManager struct {
 	bgDone             chan struct{} // closed when the background sync ends; nil when none runs
 	options            SyncOptions
 	allTorrents        []Torrent
+	torrentIndex       map[string]int // position in allTorrents, keyed by hash
 	resultPool         sync.Pool
 }
 
@@ -269,7 +270,12 @@ func (sm *SyncManager) applySyncResult(source *MainData, rawData map[string]inte
 
 func (sm *SyncManager) updateAllTorrents() {
 	sm.allTorrents = sm.allTorrents[:0]
+	clear(sm.torrentIndex)
+	if sm.torrentIndex == nil {
+		sm.torrentIndex = make(map[string]int, len(sm.data.Torrents))
+	}
 	for _, torrent := range sm.data.Torrents {
+		sm.torrentIndex[torrent.Hash] = len(sm.allTorrents)
 		sm.allTorrents = append(sm.allTorrents, torrent)
 	}
 }
@@ -439,9 +445,25 @@ func (sm *SyncManager) GetTorrentsUnchecked(options TorrentFilterOptions) []Torr
 		resultBuffer = make([]Torrent, 0, length)
 	}
 
-	for _, torrent := range sm.allTorrents {
-		if matchesTorrentFilter(torrent, options) {
-			resultBuffer = append(resultBuffer, torrent)
+	if len(options.Hashes) > 0 {
+		// Visit only the requested torrents, in the order of allTorrents.
+		positions := make([]int, 0, len(options.Hashes))
+		for _, hash := range options.Hashes {
+			if i, ok := sm.torrentIndex[hash]; ok {
+				positions = append(positions, i)
+			}
+		}
+		slices.Sort(positions)
+		for _, i := range slices.Compact(positions) {
+			if matchesTorrentFilter(sm.allTorrents[i], options) {
+				resultBuffer = append(resultBuffer, sm.allTorrents[i])
+			}
+		}
+	} else {
+		for _, torrent := range sm.allTorrents {
+			if matchesTorrentFilter(torrent, options) {
+				resultBuffer = append(resultBuffer, torrent)
+			}
 		}
 	}
 

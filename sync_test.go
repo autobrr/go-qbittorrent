@@ -9,7 +9,9 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"reflect"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -1990,5 +1992,65 @@ func TestMainData_FailedUpdateRequestsFullUpdate(t *testing.T) {
 	}
 	if torrent, ok := data.Torrents["abc"]; len(data.Torrents) != 1 || !ok || torrent.Progress != 1 {
 		t.Fatalf("expected the full update to replace the torrents, got %+v", data.Torrents)
+	}
+}
+
+// TestSyncManager_GetTorrentsByHashMatchesScan checks that a filter by hash
+// gives the same torrents in the same order as a scan of the whole library.
+func TestSyncManager_GetTorrentsByHashMatchesScan(t *testing.T) {
+	t.Parallel()
+
+	sm, hashes := newLibrarySyncManager(60)
+	scan := func(options TorrentFilterOptions) []Torrent {
+		matched := []Torrent{}
+		for _, torrent := range sm.allTorrents {
+			if (len(options.Hashes) == 0 || slices.Contains(options.Hashes, torrent.Hash)) && matchesTorrentFilter(torrent, options) {
+				matched = append(matched, torrent)
+			}
+		}
+		return slices.Clone(applyTorrentFilterOptions(matched, options))
+	}
+
+	reversed := slices.Clone(hashes)
+	slices.Reverse(reversed)
+	hashSets := map[string][]string{
+		"none":                nil,
+		"one":                 {hashes[7]},
+		"missing":             {"0000000000000000000000000000000000000bad"},
+		"upper case":          {strings.ToUpper(hashes[10])},
+		"duplicates":          {hashes[3], hashes[3], hashes[9], hashes[3]},
+		"present and missing": {hashes[20], "missing", hashes[2], hashes[41]},
+		"all reversed":        reversed,
+		"all twice":           append(slices.Clone(hashes), reversed...),
+	}
+	filters := []TorrentFilterOptions{
+		{},
+		{Category: "movies"},
+		{Tag: "a"},
+		{Filter: TorrentFilterCompleted},
+		{Category: "tv", Tag: "b", Filter: TorrentFilterAll},
+	}
+	sorts := []string{"", "name", "size", "added_on"}
+	pages := [][2]int{{0, 0}, {0, 3}, {2, 0}, {2, 3}, {1000, 0}}
+
+	for name, hashSet := range hashSets {
+		for _, filter := range filters {
+			for _, sortField := range sorts {
+				for _, reverse := range []bool{false, true} {
+					for _, page := range pages {
+						options := filter
+						options.Hashes = hashSet
+						options.Sort = sortField
+						options.Reverse = reverse
+						options.Offset, options.Limit = page[0], page[1]
+
+						got := sm.GetTorrentsUnchecked(options)
+						if want := scan(options); !reflect.DeepEqual(got, want) {
+							t.Fatalf("hashes %q, options %+v: got %d torrents, want %d", name, options, len(got), len(want))
+						}
+					}
+				}
+			}
+		}
 	}
 }
