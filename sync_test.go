@@ -1919,6 +1919,42 @@ func TestSyncManager_ShortCallerDoesNotCancelFullUpdate(t *testing.T) {
 	}
 }
 
+// TestSyncManager_ShortCallerWaitsForRunningIncrementalSync checks that a
+// caller with a short deadline that joins a running sync with a rid waits for
+// its result, as before full updates got their own deadline.
+func TestSyncManager_ShortCallerWaitsForRunningIncrementalSync(t *testing.T) {
+	started := make(chan struct{})
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v2/sync/maindata", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("rid") == "0" {
+			_, _ = io.WriteString(w, `{"rid":5,"full_update":true,"torrents":{},"categories":{},"tags":[],"server_state":{}}`)
+			return
+		}
+		close(started)
+		time.Sleep(300 * time.Millisecond)
+		_, _ = io.WriteString(w, `{"rid":6}`)
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	sm := NewSyncManager(NewClient(Config{Host: server.URL, APIKey: "test-key", RetryAttempts: 1}))
+	if err := sm.Sync(t.Context()); err != nil {
+		t.Fatalf("first sync: %v", err)
+	}
+
+	leader := make(chan error, 1)
+	go func() { leader <- sm.Sync(t.Context()) }()
+	<-started
+
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+	defer cancel()
+	if err := sm.Sync(ctx); err != nil {
+		t.Fatalf("expected the short caller to get the result of the running sync: %v", err)
+	}
+	if err := <-leader; err != nil {
+		t.Fatalf("leader sync: %v", err)
+	}
+}
+
 // TestSyncManager_FullUpdateUsesCustomHTTPClientTimeout checks that a full
 // update gets the timeout of a client set with WithHTTPClient, not the timeout
 // from Config.

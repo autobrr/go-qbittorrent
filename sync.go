@@ -117,24 +117,23 @@ func (sm *SyncManager) Start(ctx context.Context) error {
 // The sync runs on the context of the caller that starts it, except a full
 // update: see doSync.
 func (sm *SyncManager) Sync(ctx context.Context) error {
+	ch := sm.syncGroup.DoChan("sync", func() (any, error) { return sm.doSync(ctx) })
+	select {
+	case res := <-ch:
+		return res.Err
+	case <-ctx.Done():
+	}
+
+	// A full update runs on its own deadline, so a caller stops waiting for it
+	// at the caller's deadline. A caller waits for a running sync with a rid,
+	// which ends with the context of the caller that started it.
 	sm.mu.RLock()
 	fullUpdate := sm.data == nil || sm.data.Rid == 0
 	sm.mu.RUnlock()
-
-	fn := func() (any, error) { return sm.doSync(ctx) }
-	if !fullUpdate {
-		_, err, _ := sm.syncGroup.Do("sync", fn)
-		return err
-	}
-
-	// A full update runs on its own deadline, so each caller stops waiting at
-	// its own deadline.
-	select {
-	case res := <-sm.syncGroup.DoChan("sync", fn):
-		return res.Err
-	case <-ctx.Done():
+	if fullUpdate {
 		return ctx.Err()
 	}
+	return (<-ch).Err
 }
 
 // doSync performs the actual sync operation (singleflight-compatible signature).
