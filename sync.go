@@ -2,8 +2,11 @@ package qbittorrent
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"maps"
 	"math/rand"
+	"runtime/debug"
 	"slices"
 	"sync"
 	"time"
@@ -16,7 +19,6 @@ import (
 type SyncManager struct {
 	mu                 sync.RWMutex
 	data               *MainData
-	rid                int64
 	lastSync           time.Time
 	lastSuccessfulSync time.Time
 	lastSyncDuration   time.Duration
@@ -119,14 +121,15 @@ func (sm *SyncManager) Start(ctx context.Context) error {
 // caller's deadline cannot fail the sync for the others. Each caller stops
 // waiting and returns ctx.Err() when its own ctx ends.
 // The shared sync runs until it ends or reaches its own deadline (see
-// startSync), so OnUpdate or OnError can run after Sync returns.
+// startSync), so OnUpdate or OnError can run after Sync returns. A panic in
+// OnUpdate or OnError comes back to each caller that still waits.
 func (sm *SyncManager) Sync(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	select {
 	case res := <-sm.startSync(ctx):
-		return res.Err
+		return syncResult(res)
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -138,12 +141,37 @@ func (sm *SyncManager) Sync(ctx context.Context) error {
 // Without it, an http.Client with no Timeout could hang the sync
 // forever, and every later caller would join the stuck call.
 func (sm *SyncManager) startSync(ctx context.Context) <-chan singleflight.Result {
-	return sm.syncGroup.DoChan("sync", func() (any, error) {
+	return sm.syncGroup.DoChan("sync", func() (_ any, err error) {
+		// On a panic, DoChan stops the process. Give the panic to the callers instead.
+		defer func() {
+			if r := recover(); r != nil {
+				err = &syncPanic{value: r, stack: debug.Stack()}
+			}
+		}()
 		c := sm.client
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Duration(c.retryAttempts)*(2*c.attemptTimeout()+c.retryDelay))
 		defer cancel()
 		return sm.doSync(ctx)
 	})
+}
+
+// syncPanic carries a panic out of the shared sync. Each caller that waits for
+// the result panics with it again, as singleflight's Do does, so that the
+// caller can recover it.
+type syncPanic struct {
+	value any
+	stack []byte
+}
+
+func (p *syncPanic) Error() string {
+	return fmt.Sprintf("sync panic: %v\n%s", p.value, p.stack)
+}
+
+func syncResult(res singleflight.Result) error {
+	if p, ok := errors.AsType[*syncPanic](res.Err); ok {
+		panic(p)
+	}
+	return res.Err
 }
 
 // doSync performs the actual sync operation (singleflight-compatible signature).
@@ -204,12 +232,16 @@ func (sm *SyncManager) applySyncResult(source *MainData, rawData map[string]inte
 	var update *MainData
 	if syncErr == nil {
 		sm.data.applySync(source, rawData)
-		sm.rid = sm.data.Rid
 		// Update cached torrent slice
 		sm.updateAllTorrents()
 		if sm.options.OnUpdate != nil {
 			update = sm.copyMainData(sm.data)
 		}
+	} else {
+		// qBittorrent can count a lost response as sent. Before 5.3.0rc1, it then
+		// drops changes when the client sends the old rid again. Thus ask for a
+		// full update. The cached data stays until the full update arrives.
+		sm.data.Rid = 0
 	}
 
 	sm.lastSyncDuration = time.Since(startTime)
@@ -291,11 +323,13 @@ func (sm *SyncManager) backgroundSync() <-chan struct{} {
 	go func() {
 		// singleflight removes the call before it sends the result, so a
 		// read after this point starts a new sync.
-		<-res
+		r := <-res
 		sm.bgMu.Lock()
 		sm.bgDone = nil
 		sm.bgMu.Unlock()
 		close(done)
+		// No caller waits for this result, so a panic in a callback stops the process.
+		_ = syncResult(r)
 	}()
 	return done
 }
@@ -479,7 +513,7 @@ func (sm *SyncManager) GetCategoriesUnchecked() map[string]Category {
 		return nil
 	}
 
-	return maps.Clone(sm.data.Categories)
+	return cloneCategories(sm.data.Categories)
 }
 
 // GetTrackers returns a copy of the tracker URL to torrent hashes map.
@@ -621,6 +655,23 @@ func (sm *SyncManager) calculateNextInterval() time.Duration {
 	return baseInterval
 }
 
+// cloneCategories copies categories along with each download path, so a
+// caller that changes the copy cannot change the cached category.
+func cloneCategories(src map[string]Category) map[string]Category {
+	if src == nil {
+		return nil
+	}
+	dst := make(map[string]Category, len(src))
+	for name, category := range src {
+		if category.DownloadPath != nil {
+			downloadPath := *category.DownloadPath
+			category.DownloadPath = &downloadPath
+		}
+		dst[name] = category
+	}
+	return dst
+}
+
 // copyMainData creates a deep copy of MainData
 func (sm *SyncManager) copyMainData(src *MainData) *MainData {
 	dst := &MainData{
@@ -628,7 +679,7 @@ func (sm *SyncManager) copyMainData(src *MainData) *MainData {
 		FullUpdate:  src.FullUpdate,
 		ServerState: src.ServerState,
 		Torrents:    maps.Clone(src.Torrents),
-		Categories:  maps.Clone(src.Categories),
+		Categories:  cloneCategories(src.Categories),
 		Trackers:    maps.Clone(src.Trackers),
 		Tags:        slices.Clone(src.Tags),
 	}
