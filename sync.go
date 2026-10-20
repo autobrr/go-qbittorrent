@@ -413,7 +413,7 @@ func (sm *SyncManager) GetCategoriesUnchecked() map[string]Category {
 		return nil
 	}
 
-	return maps.Clone(sm.data.Categories)
+	return cloneCategories(sm.data.Categories)
 }
 
 // GetTrackers returns a copy of the tracker URL to torrent hashes map.
@@ -553,6 +553,23 @@ func (sm *SyncManager) calculateNextInterval() time.Duration {
 	return baseInterval
 }
 
+// cloneCategories copies categories along with each download path, so a
+// caller that changes the copy cannot change the cached category.
+func cloneCategories(src map[string]Category) map[string]Category {
+	if src == nil {
+		return nil
+	}
+	dst := make(map[string]Category, len(src))
+	for name, category := range src {
+		if category.DownloadPath != nil {
+			downloadPath := *category.DownloadPath
+			category.DownloadPath = &downloadPath
+		}
+		dst[name] = category
+	}
+	return dst
+}
+
 // copyMainData creates a deep copy of MainData
 func (sm *SyncManager) copyMainData(src *MainData) *MainData {
 	dst := &MainData{
@@ -560,7 +577,7 @@ func (sm *SyncManager) copyMainData(src *MainData) *MainData {
 		FullUpdate:  src.FullUpdate,
 		ServerState: src.ServerState,
 		Torrents:    maps.Clone(src.Torrents),
-		Categories:  maps.Clone(src.Categories),
+		Categories:  cloneCategories(src.Categories),
 		Trackers:    maps.Clone(src.Trackers),
 		Tags:        slices.Clone(src.Tags),
 	}

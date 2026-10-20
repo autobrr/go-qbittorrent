@@ -147,9 +147,74 @@ type TorrentFile struct {
 	Size         int64   `json:"size"`
 }
 
+// Category is one category from torrents/categories or sync/maindata.
 type Category struct {
 	Name     string `json:"name"`
 	SavePath string `json:"savePath"`
+	// DownloadPath is the category's own download path option, sent as
+	// download_path from qBittorrent 4.4 (WebAPI 2.8.4). Nil means the category
+	// inherits the option, whether qBittorrent sent null or left the key out.
+	// Before WebAPI 2.11.10 (qBittorrent 5.1 and earlier) inherit leaves the key
+	// out, so a partial maindata update never reports a change from a path
+	// back to inherit. Only a full update or GetCategoriesCtx clears it there.
+	DownloadPath *CategoryDownloadPath `json:"download_path,omitempty"`
+}
+
+// CategoryDownloadPath is a category's download path option when it does not
+// inherit one. Enabled false means the category turns the download path off.
+// Enabled true means it uses Path, which may be empty or relative: qBittorrent
+// resolves those against the parent category or the global download path.
+//
+// qBittorrent encodes the option as false when it is disabled and as the path
+// string when it is enabled. UnmarshalJSON also accepts true, which qBittorrent
+// reads as enabled with an empty path.
+type CategoryDownloadPath struct {
+	Enabled bool
+	Path    string
+}
+
+// UnmarshalJSON decodes false, true or a path string. It leaves the value
+// unchanged for null, so a nil *CategoryDownloadPath field stays nil.
+func (d *CategoryDownloadPath) UnmarshalJSON(data []byte) error {
+	var value any
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	if value == nil {
+		return nil
+	}
+	parsed, ok := parseCategoryDownloadPath(value)
+	if !ok {
+		return errors.New("category download_path must be null, a bool or a string, got %s", data)
+	}
+	*d = *parsed
+	return nil
+}
+
+// MarshalJSON writes false when the option is disabled and the path string
+// when it is enabled. A nil *CategoryDownloadPath marshals as null, and a
+// Category field holding nil is left out.
+func (d CategoryDownloadPath) MarshalJSON() ([]byte, error) {
+	if !d.Enabled {
+		return []byte("false"), nil
+	}
+	return json.Marshal(d.Path)
+}
+
+// parseCategoryDownloadPath converts a decoded download_path value. It returns
+// nil and true for null, and false for a type qBittorrent never sends. The
+// generated maindata updater uses it for partial updates.
+func parseCategoryDownloadPath(value any) (*CategoryDownloadPath, bool) {
+	switch v := value.(type) {
+	case nil:
+		return nil, true
+	case bool:
+		return &CategoryDownloadPath{Enabled: v}, true
+	case string:
+		return &CategoryDownloadPath{Enabled: true, Path: v}, true
+	default:
+		return nil, false
+	}
 }
 
 type TorrentState string
