@@ -1,6 +1,7 @@
 package qbittorrent
 
 import (
+	"cmp"
 	"context"
 	"maps"
 	"math/rand"
@@ -114,30 +115,22 @@ func (sm *SyncManager) Start(ctx context.Context) error {
 // If another sync is already in progress, this method will wait for it to complete
 // and all callers will receive the same result (using singleflight pattern).
 // The sync runs on the context of the caller that starts it, except a full
-// update: see below.
+// update: see doSync.
 func (sm *SyncManager) Sync(ctx context.Context) error {
 	sm.mu.RLock()
 	fullUpdate := sm.data == nil || sm.data.Rid == 0
 	sm.mu.RUnlock()
 
+	fn := func() (any, error) { return sm.doSync(ctx) }
 	if !fullUpdate {
-		_, err, _ := sm.syncGroup.Do("sync", func() (any, error) {
-			return sm.doSync(ctx)
-		})
+		_, err, _ := sm.syncGroup.Do("sync", fn)
 		return err
 	}
 
-	// A full update can take longer than a caller with a short deadline waits.
-	// If that caller cancelled it, the rid would stay 0 and each later sync would
-	// ask for a full update again. Thus the full update runs on its own deadline,
-	// the client timeout, and each caller stops waiting at its own deadline.
-	ch := sm.syncGroup.DoChan("sync", func() (any, error) {
-		fullCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), sm.client.timeout)
-		defer cancel()
-		return sm.doSync(fullCtx)
-	})
+	// A full update runs on its own deadline, so each caller stops waiting at
+	// its own deadline.
 	select {
-	case res := <-ch:
+	case res := <-sm.syncGroup.DoChan("sync", fn):
 		return res.Err
 	case <-ctx.Done():
 		return ctx.Err()
@@ -159,6 +152,17 @@ func (sm *SyncManager) doSync(ctx context.Context) (interface{}, error) {
 		rid = sm.data.Rid
 	}
 	sm.mu.RUnlock()
+
+	// A full update can take longer than a caller with a short deadline waits.
+	// If that caller cancelled it, the rid would stay 0 and each later sync would
+	// ask for a full update again. Thus a full update runs on the timeout of the
+	// HTTP client, or DefaultTimeout if that client has none. The rid read here
+	// decides, because a sync that failed after the check in Sync resets it to 0.
+	if rid == 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(context.WithoutCancel(ctx), cmp.Or(sm.client.http.Timeout, DefaultTimeout))
+		defer cancel()
+	}
 
 	source, rawData, err := sm.client.SyncMainDataCtxWithRaw(ctx, rid)
 
