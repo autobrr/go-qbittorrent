@@ -60,3 +60,39 @@ func TestMatchesTorrentFilter_Tag(t *testing.T) {
 		})
 	}
 }
+
+func TestMatchesStateFilter_ForcedMetaDl(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		filter TorrentFilter
+		want   bool
+	}{
+		{filter: TorrentFilterAll, want: true},
+		{filter: TorrentFilterActive, want: true},
+		{filter: TorrentFilterDownloading, want: true},
+		{filter: TorrentFilterResumed, want: true},
+		{filter: TorrentFilterRunning, want: true},
+		{filter: TorrentFilterInactive, want: false},
+		{filter: TorrentFilterCompleted, want: false},
+		{filter: TorrentFilterPaused, want: false},
+		{filter: TorrentFilterStopped, want: false},
+		{filter: TorrentFilterStalled, want: false},
+		{filter: TorrentFilterStalledDownloading, want: false},
+		{filter: TorrentFilterUploading, want: false},
+		{filter: TorrentFilterError, want: false},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(string(tt.filter), func(t *testing.T) {
+			t.Parallel()
+			if got := matchesStateFilter(TorrentStateForcedMetaDl, tt.filter); got != tt.want {
+				t.Fatalf("matchesStateFilter(%q, %q) = %v, want %v", TorrentStateForcedMetaDl, tt.filter, got, tt.want)
+			}
+			if got := matchesStateFilter(TorrentStateMetaDl, tt.filter); got != tt.want {
+				t.Fatalf("matchesStateFilter(%q, %q) = %v, want %v", TorrentStateMetaDl, tt.filter, got, tt.want)
+			}
+		})
+	}
+}

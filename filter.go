@@ -154,6 +154,12 @@ var stateFilterMatches = map[TorrentState]map[TorrentFilter]struct{}{
 		TorrentFilterDownloading: struct{}{},
 		TorrentFilterResumed:     struct{}{},
 	},
+	TorrentStateForcedMetaDl: {
+		TorrentFilterAll:         struct{}{},
+		TorrentFilterActive:      struct{}{},
+		TorrentFilterDownloading: struct{}{},
+		TorrentFilterResumed:     struct{}{},
+	},
 	TorrentStatePausedDl: {
 		TorrentFilterAll:      struct{}{},
 		TorrentFilterPaused:   struct{}{},
