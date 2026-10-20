@@ -215,7 +215,7 @@ func (c *Client) SendTestEmail() error {
 // A nil error means only that qBittorrent queued the email, not that the email was sent.
 // Requires qBittorrent 5.0 and WebAPI >= 2.11.2.
 func (c *Client) SendTestEmailCtx(ctx context.Context) error {
-	if _, err := c.RequiresMinVersion(semver.MustParse("2.11.2")); err != nil {
+	if _, err := c.RequiresMinVersionCtx(ctx, semver.MustParse("2.11.2")); err != nil {
 		return err
 	}
 
@@ -232,13 +232,7 @@ func (c *Client) SendTestEmailCtx(ctx context.Context) error {
 	return nil
 }
 
-func (c *Client) getApiVersion() (*semver.Version, error) {
-	return c.getApiVersionCtx(context.Background())
-}
-
-// getApiVersionCtx is getApiVersion with the caller's context, which bounds
-// the version request when the version is not cached yet.
-func (c *Client) getApiVersionCtx(ctx context.Context) (*semver.Version, error) {
+func (c *Client) getApiVersion(ctx context.Context) (*semver.Version, error) {
 	if ver := c.version.Load(); ver != nil {
 		return ver, nil
 	}
@@ -260,9 +254,9 @@ func (c *Client) getApiVersionCtx(ctx context.Context) (*semver.Version, error) 
 
 // translateFilter translates filter names based on qBittorrent version for compatibility
 // qBittorrent 4.6.0+ changed from "paused/resumed" to "stopped/running"
-func (c *Client) translateFilter(filter TorrentFilter) string {
+func (c *Client) translateFilter(ctx context.Context, filter TorrentFilter) string {
 	// Get the API version, but don't fail if we can't get it
-	ver, err := c.getApiVersion()
+	ver, err := c.getApiVersion(ctx)
 	if err != nil {
 		// If we can't get version, just return the filter as-is
 		return string(filter)
@@ -480,7 +474,7 @@ func (c *Client) ListDirectoryCtx(ctx context.Context, dirPath string, mode Dire
 	if withMetadata {
 		minVersion = semver.MustParse("2.11.8")
 	}
-	if _, err := c.RequiresMinVersion(minVersion); err != nil {
+	if _, err := c.RequiresMinVersionCtx(ctx, minVersion); err != nil {
 		return nil, err
 	}
 
@@ -577,7 +571,7 @@ func (c *Client) GetTorrentsCtx(ctx context.Context, o TorrentFilterOptions) ([]
 
 	if o.Filter != "" {
 		// Translate filter based on qBittorrent version for compatibility
-		filter := c.translateFilter(o.Filter)
+		filter := c.translateFilter(ctx, o.Filter)
 		opts["filter"] = filter
 	}
 
@@ -1148,7 +1142,7 @@ func (c *Client) PauseCtx(ctx context.Context, hashes []string) error {
 	endpoint := "torrents/stop"
 
 	// Qbt WebAPI 2.11 changed pause with stop
-	version, err := c.getApiVersion()
+	version, err := c.getApiVersion(ctx)
 	if err != nil {
 		return errors.Wrap(err, "could not get api version")
 	}
@@ -1196,7 +1190,7 @@ func (c *Client) ResumeCtx(ctx context.Context, hashes []string) error {
 	endpoint := "torrents/start"
 
 	// Qbt WebAPI 2.11 changed resume with start
-	version, err := c.getApiVersion()
+	version, err := c.getApiVersion(ctx)
 
 	if err != nil {
 		return errors.Wrap(err, "could not get api version")
@@ -1388,7 +1382,7 @@ func (c *Client) requireDownloadPathSupport(ctx context.Context, opts CategoryOp
 	if opts.DownloadPath == nil {
 		return nil
 	}
-	if _, err := c.requiresMinVersionCtx(ctx, categoryDownloadPathMinVersion); err != nil {
+	if _, err := c.RequiresMinVersionCtx(ctx, categoryDownloadPathMinVersion); err != nil {
 		return errors.Wrap(err, "category download path requires qBittorrent 4.4 and WebAPI >= 2.8.4")
 	}
 	return nil
@@ -1576,7 +1570,7 @@ func (c *Client) SetComment(hashes []string, comment string) error {
 }
 
 func (c *Client) SetCommentCtx(ctx context.Context, hashes []string, comment string) error {
-	if ok, err := c.RequiresMinVersion(semver.MustParse("2.12.1")); !ok {
+	if ok, err := c.RequiresMinVersionCtx(ctx, semver.MustParse("2.12.1")); !ok {
 		return errors.Wrap(err, "SetComment requires qBittorrent 5.2 and WebAPI >= 2.12.1")
 	}
 
@@ -1908,7 +1902,7 @@ func (c *Client) AddTagsCtx(ctx context.Context, hashes []string, tags string) e
 // For client instances with a lot of torrents, this will benefit a lot.
 // It checks for the required min version, and if it's less than the required version, it will error, and then the caller can handle it how they want.
 func (c *Client) SetTags(ctx context.Context, hashes []string, tags string) error {
-	if ok, err := c.RequiresMinVersion(semver.MustParse("2.11.4")); !ok {
+	if ok, err := c.RequiresMinVersionCtx(ctx, semver.MustParse("2.11.4")); !ok {
 		return errors.Wrap(err, "SetTags requires qBittorrent 5.1 and WebAPI >= 2.11.4")
 	}
 
@@ -3111,11 +3105,13 @@ func (c *Client) GetFreeSpaceOnDiskCtx(ctx context.Context) (int64, error) {
 
 // RequiresMinVersion checks the current version against version X and errors if the current version is older than X
 func (c *Client) RequiresMinVersion(minVersion *semver.Version) (bool, error) {
-	return c.requiresMinVersionCtx(context.Background(), minVersion)
+	return c.RequiresMinVersionCtx(context.Background(), minVersion)
 }
 
-func (c *Client) requiresMinVersionCtx(ctx context.Context, minVersion *semver.Version) (bool, error) {
-	version, err := c.getApiVersionCtx(ctx)
+// RequiresMinVersionCtx checks the current version against version X and errors if the current version is older than X.
+// ctx applies to the WebAPI version request when the client has no version in its cache.
+func (c *Client) RequiresMinVersionCtx(ctx context.Context, minVersion *semver.Version) (bool, error) {
+	version, err := c.getApiVersion(ctx)
 	if err != nil {
 		return false, errors.Wrap(err, "could not get api version")
 	}
@@ -3292,7 +3288,7 @@ func (c *Client) CreateTorrent(params TorrentCreationParams) (*TorrentCreationTa
 func (c *Client) CreateTorrentCtx(ctx context.Context, params TorrentCreationParams) (*TorrentCreationTaskResponse, error) {
 	// Check version requirement
 	minVersion, _ := semver.NewVersion("2.11.2")
-	if _, err := c.RequiresMinVersion(minVersion); err != nil {
+	if _, err := c.RequiresMinVersionCtx(ctx, minVersion); err != nil {
 		return nil, err
 	}
 
@@ -3386,7 +3382,7 @@ func (c *Client) GetTorrentCreationStatus(taskID string) ([]TorrentCreationTask,
 func (c *Client) GetTorrentCreationStatusCtx(ctx context.Context, taskID string) ([]TorrentCreationTask, error) {
 	// Check version requirement
 	minVersion, _ := semver.NewVersion("2.11.2")
-	if _, err := c.RequiresMinVersion(minVersion); err != nil {
+	if _, err := c.RequiresMinVersionCtx(ctx, minVersion); err != nil {
 		return nil, err
 	}
 
@@ -3429,7 +3425,7 @@ func (c *Client) GetTorrentFile(taskID string) ([]byte, error) {
 func (c *Client) GetTorrentFileCtx(ctx context.Context, taskID string) ([]byte, error) {
 	// Check version requirement
 	minVersion, _ := semver.NewVersion("2.11.2")
-	if _, err := c.RequiresMinVersion(minVersion); err != nil {
+	if _, err := c.RequiresMinVersionCtx(ctx, minVersion); err != nil {
 		return nil, err
 	}
 
@@ -3482,7 +3478,7 @@ func (c *Client) DeleteTorrentCreationTask(taskID string) error {
 func (c *Client) DeleteTorrentCreationTaskCtx(ctx context.Context, taskID string) error {
 	// Check version requirement
 	minVersion, _ := semver.NewVersion("2.11.2")
-	if _, err := c.RequiresMinVersion(minVersion); err != nil {
+	if _, err := c.RequiresMinVersionCtx(ctx, minVersion); err != nil {
 		return err
 	}
 
