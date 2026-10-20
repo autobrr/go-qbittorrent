@@ -233,11 +233,17 @@ func (c *Client) SendTestEmailCtx(ctx context.Context) error {
 }
 
 func (c *Client) getApiVersion() (*semver.Version, error) {
+	return c.getApiVersionCtx(context.Background())
+}
+
+// getApiVersionCtx is getApiVersion with the caller's context, which bounds
+// the version request when the version is not cached yet.
+func (c *Client) getApiVersionCtx(ctx context.Context) (*semver.Version, error) {
 	if ver := c.version.Load(); ver != nil {
 		return ver, nil
 	}
 
-	versionString, err := c.GetWebAPIVersionCtx(context.Background())
+	versionString, err := c.GetWebAPIVersionCtx(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get webapi version")
 	}
@@ -1378,11 +1384,11 @@ func (o CategoryOptions) form(category string, stateInherit bool) map[string]str
 
 // requireDownloadPathSupport fails when opts sets a download path that the
 // server would silently ignore.
-func (c *Client) requireDownloadPathSupport(opts CategoryOptions) error {
+func (c *Client) requireDownloadPathSupport(ctx context.Context, opts CategoryOptions) error {
 	if opts.DownloadPath == nil {
 		return nil
 	}
-	if _, err := c.RequiresMinVersion(categoryDownloadPathMinVersion); err != nil {
+	if _, err := c.requiresMinVersionCtx(ctx, categoryDownloadPathMinVersion); err != nil {
 		return errors.Wrap(err, "category download path requires qBittorrent 4.4 and WebAPI >= 2.8.4")
 	}
 	return nil
@@ -1407,7 +1413,7 @@ func (c *Client) CreateCategoryWithOptions(category string, opts CategoryOptions
 // opts.DownloadPath is set, its own download path option. A nil DownloadPath
 // sends no download path, so the category inherits it.
 func (c *Client) CreateCategoryWithOptionsCtx(ctx context.Context, category string, opts CategoryOptions) error {
-	if err := c.requireDownloadPathSupport(opts); err != nil {
+	if err := c.requireDownloadPathSupport(ctx, opts); err != nil {
 		return err
 	}
 	return c.createCategoryCtx(ctx, category, opts.form(category, false))
@@ -1472,7 +1478,7 @@ func (c *Client) EditCategoryWithOptions(category string, opts CategoryOptions) 
 // EditCategoryWithOptionsCtx sets the category's save path and download path
 // option to opts. See EditCategoryWithOptions.
 func (c *Client) EditCategoryWithOptionsCtx(ctx context.Context, category string, opts CategoryOptions) error {
-	if err := c.requireDownloadPathSupport(opts); err != nil {
+	if err := c.requireDownloadPathSupport(ctx, opts); err != nil {
 		return err
 	}
 	return c.editCategoryCtx(ctx, category, opts.form(category, true))
@@ -3105,7 +3111,11 @@ func (c *Client) GetFreeSpaceOnDiskCtx(ctx context.Context) (int64, error) {
 
 // RequiresMinVersion checks the current version against version X and errors if the current version is older than X
 func (c *Client) RequiresMinVersion(minVersion *semver.Version) (bool, error) {
-	version, err := c.getApiVersion()
+	return c.requiresMinVersionCtx(context.Background(), minVersion)
+}
+
+func (c *Client) requiresMinVersionCtx(ctx context.Context, minVersion *semver.Version) (bool, error) {
+	version, err := c.getApiVersionCtx(ctx)
 	if err != nil {
 		return false, errors.Wrap(err, "could not get api version")
 	}

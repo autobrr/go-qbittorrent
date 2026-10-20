@@ -347,3 +347,32 @@ func TestSyncSnapshotsCopyCategoryDownloadPath(t *testing.T) {
 	data.Categories["movies"].DownloadPath.Path = "/changed"
 	require.Equal(t, "/dl/movies", sm.data.Categories["movies"].DownloadPath.Path)
 }
+
+func TestCategoryWithOptionsVersionGateUsesCallerContext(t *testing.T) {
+	// The version request behind the gate must carry the caller's context, so
+	// a deadline or cancel bounds it too.
+	type marker struct{}
+	for _, call := range []struct {
+		name string
+		fn   func(*Client, context.Context, string, CategoryOptions) error
+	}{
+		{"create", (*Client).CreateCategoryWithOptionsCtx},
+		{"edit", (*Client).EditCategoryWithOptionsCtx},
+	} {
+		t.Run(call.name, func(t *testing.T) {
+			var sawMarker bool
+			mux := http.NewServeMux()
+			mux.HandleFunc("/api/v2/app/webapiVersion", func(w http.ResponseWriter, r *http.Request) {
+				sawMarker = r.Context().Value(marker{}) != nil
+				_, _ = w.Write([]byte("2.8.4"))
+			})
+			mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+			client := newCompatibilityClient(mux.ServeHTTP)
+			ctx := context.WithValue(context.Background(), marker{}, true)
+			set := CategoryOptions{SavePath: "/s", DownloadPath: &CategoryDownloadPath{Enabled: true, Path: "/dl"}}
+
+			require.NoError(t, call.fn(client, ctx, "c", set))
+			require.True(t, sawMarker, "the version request did not use the caller's context")
+		})
+	}
+}
