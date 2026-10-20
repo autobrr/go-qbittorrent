@@ -6,10 +6,8 @@ import (
 	"io"
 	"maps"
 	"net/http"
-	"net/http/httptrace"
 	"strconv"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/Masterminds/semver/v3"
@@ -1080,15 +1078,6 @@ func (c *Client) SyncMainDataCtxWithRaw(ctx context.Context, rid int64) (*MainDa
 		"rid": strconv.FormatInt(rid, 10),
 	}
 
-	// Go's transport and the retry loop can send the request again with the
-	// same rid. Count the requests that go out with this context and get no
-	// reply. A redirect hop or a login gets a reply, so it does not count.
-	var unanswered atomic.Int32
-	ctx = httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{
-		WroteRequest:         func(httptrace.WroteRequestInfo) { unanswered.Add(1) },
-		GotFirstResponseByte: func() { unanswered.Add(-1) },
-	})
-
 	resp, err := c.getCtx(ctx, "/sync/maindata", opts)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "could not get main data")
@@ -1124,14 +1113,6 @@ func (c *Client) SyncMainDataCtxWithRaw(ctx context.Context, rid int64) (*MainDa
 
 	if mapErr != nil {
 		return nil, nil, errors.Wrap(mapErr, "could not unmarshal body to map")
-	}
-
-	// A request that went out again sends the old rid again, so the reply can
-	// miss changes. SyncManager.applySyncResult tells why. Thus return rid 0,
-	// so the next sync is a full update.
-	if unanswered.Load() > 0 && !info.FullUpdate {
-		info.Rid = 0
-		rawData["rid"] = float64(0)
 	}
 
 	normalizeHashes(info.Torrents)
