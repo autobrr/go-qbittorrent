@@ -1126,9 +1126,9 @@ func (c *Client) SyncMainDataCtxWithRaw(ctx context.Context, rid int64) (*MainDa
 		return nil, nil, errors.Wrap(mapErr, "could not unmarshal body to map")
 	}
 
-	// qBittorrent can count the lost reply to an earlier request as sent.
-	// Before 5.3.0rc1, the reply to a later request with the same rid can
-	// then miss changes. Thus return rid 0, so the next sync is a full update.
+	// A request that went out again sends the old rid again, so the reply can
+	// miss changes. SyncManager.applySyncResult tells why. Thus return rid 0,
+	// so the next sync is a full update.
 	if unanswered.Load() > 0 && !info.FullUpdate {
 		info.Rid = 0
 		rawData["rid"] = float64(0)
