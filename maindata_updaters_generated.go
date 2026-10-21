@@ -143,6 +143,27 @@ func updateTorrentHasMetadata(val interface{}, obj *Torrent) {
 	}
 }
 
+// updateTorrentHasTrackerWarning updates the HasTrackerWarning field of Torrent
+func updateTorrentHasTrackerWarning(val interface{}, obj *Torrent) {
+	if h, ok := val.(bool); ok {
+		obj.HasTrackerWarning = h
+	}
+}
+
+// updateTorrentHasTrackerError updates the HasTrackerError field of Torrent
+func updateTorrentHasTrackerError(val interface{}, obj *Torrent) {
+	if h, ok := val.(bool); ok {
+		obj.HasTrackerError = h
+	}
+}
+
+// updateTorrentHasOtherAnnounceError updates the HasOtherAnnounceError field of Torrent
+func updateTorrentHasOtherAnnounceError(val interface{}, obj *Torrent) {
+	if h, ok := val.(bool); ok {
+		obj.HasOtherAnnounceError = h
+	}
+}
+
 // updateTorrentInfohashV1 updates the InfohashV1 field of Torrent
 func updateTorrentInfohashV1(val interface{}, obj *Torrent) {
 	if i, ok := val.(string); ok {
@@ -454,6 +475,9 @@ var torrentFieldUpdaters = map[string]func(val interface{}, obj *Torrent){
 	"force_start": updateTorrentForceStart,
 	"hash": updateTorrentHash,
 	"has_metadata": updateTorrentHasMetadata,
+	"has_tracker_warning": updateTorrentHasTrackerWarning,
+	"has_tracker_error": updateTorrentHasTrackerError,
+	"has_other_announce_error": updateTorrentHasOtherAnnounceError,
 	"infohash_v1": updateTorrentInfohashV1,
 	"infohash_v2": updateTorrentInfohashV2,
 	"popularity": updateTorrentPopularity,
@@ -590,10 +614,18 @@ func updateCategorySavePath(val interface{}, obj *Category) {
 	}
 }
 
+// updateCategoryDownloadPath updates the DownloadPath field of Category
+func updateCategoryDownloadPath(val interface{}, obj *Category) {
+	if d, ok := parseCategoryDownloadPath(val); ok {
+		obj.DownloadPath = d
+	}
+}
+
 // Precomputed field updaters for Category - created once at package init
 var categoryFieldUpdaters = map[string]func(val interface{}, obj *Category){
 	"name": updateCategoryName,
 	"savePath": updateCategorySavePath,
+	"download_path": updateCategoryDownloadPath,
 }
 
 // updateCategoryFields updates only the fields that are present in the update map

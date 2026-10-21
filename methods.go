@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"maps"
 	"net/http"
 	"strconv"
 	"strings"
@@ -151,12 +152,92 @@ func (c *Client) ShutdownCtx(ctx context.Context) error {
 	return nil
 }
 
-func (c *Client) getApiVersion() (*semver.Version, error) {
+// GetNetworkInterfaces lists the network interfaces that have an address.
+func (c *Client) GetNetworkInterfaces() ([]NetworkInterface, error) {
+	return c.GetNetworkInterfacesCtx(context.Background())
+}
+
+// GetNetworkInterfacesCtx lists the network interfaces that have an address.
+func (c *Client) GetNetworkInterfacesCtx(ctx context.Context) ([]NetworkInterface, error) {
+	resp, err := c.getCtx(ctx, "app/networkInterfaceList", nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get network interfaces")
+	}
+	defer drainAndClose(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get network interfaces; status code: %d", resp.StatusCode)
+	}
+
+	var ifaces []NetworkInterface
+	if err := json.NewDecoder(resp.Body).Decode(&ifaces); err != nil {
+		return nil, errors.Wrap(err, "could not unmarshal body")
+	}
+
+	return ifaces, nil
+}
+
+// GetNetworkInterfaceAddresses lists the IP addresses of the interface iface,
+// where iface is a NetworkInterface Value. An empty iface lists the addresses of all interfaces.
+func (c *Client) GetNetworkInterfaceAddresses(iface string) ([]string, error) {
+	return c.GetNetworkInterfaceAddressesCtx(context.Background(), iface)
+}
+
+// GetNetworkInterfaceAddressesCtx lists the IP addresses of the interface iface,
+// where iface is a NetworkInterface Value. An empty iface lists the addresses of all interfaces.
+func (c *Client) GetNetworkInterfaceAddressesCtx(ctx context.Context, iface string) ([]string, error) {
+	resp, err := c.getCtx(ctx, "app/networkInterfaceAddressList", map[string]string{"iface": iface})
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get network interface addresses; iface: %s", iface)
+	}
+	defer drainAndClose(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get network interface addresses; iface: %s | status code: %d", iface, resp.StatusCode)
+	}
+
+	var addrs []string
+	if err := json.NewDecoder(resp.Body).Decode(&addrs); err != nil {
+		return nil, errors.Wrap(err, "could not unmarshal body")
+	}
+
+	return addrs, nil
+}
+
+// SendTestEmail asks qBittorrent to send a test email with its email notification settings.
+// A nil error means only that qBittorrent queued the email, not that the email was sent.
+// Requires qBittorrent 5.0 and WebAPI >= 2.11.2.
+func (c *Client) SendTestEmail() error {
+	return c.SendTestEmailCtx(context.Background())
+}
+
+// SendTestEmailCtx asks qBittorrent to send a test email with its email notification settings.
+// A nil error means only that qBittorrent queued the email, not that the email was sent.
+// Requires qBittorrent 5.0 and WebAPI >= 2.11.2.
+func (c *Client) SendTestEmailCtx(ctx context.Context) error {
+	if _, err := c.RequiresMinVersionCtx(ctx, semver.MustParse("2.11.2")); err != nil {
+		return err
+	}
+
+	resp, err := c.postCtx(ctx, "app/sendTestEmail", nil)
+	if err != nil {
+		return errors.Wrap(err, "could not send test email")
+	}
+	defer drainAndClose(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return errors.Wrap(ErrUnexpectedStatus, "could not send test email; status code: %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
+func (c *Client) getApiVersion(ctx context.Context) (*semver.Version, error) {
 	if ver := c.version.Load(); ver != nil {
 		return ver, nil
 	}
 
-	versionString, err := c.GetWebAPIVersionCtx(context.Background())
+	versionString, err := c.GetWebAPIVersionCtx(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get webapi version")
 	}
@@ -174,13 +255,13 @@ func (c *Client) getApiVersion() (*semver.Version, error) {
 // translateFilter translates filter names to the ones the server's qBittorrent version accepts.
 // qBittorrent 5.0.0 (WebAPI 2.11) renamed "paused"/"resumed" to "stopped"/"running"; the seeding
 // filter has always been "seeding".
-func (c *Client) translateFilter(filter TorrentFilter) string {
+func (c *Client) translateFilter(ctx context.Context, filter TorrentFilter) string {
 	if filter == TorrentFilterUploading {
 		return "seeding"
 	}
 
 	// Get the API version, but don't fail if we can't get it
-	ver, err := c.getApiVersion()
+	ver, err := c.getApiVersion(ctx)
 	if err != nil {
 		// If we can't get version, just return the filter as-is
 		return string(filter)
@@ -396,7 +477,7 @@ func (c *Client) ListDirectoryCtx(ctx context.Context, dirPath string, mode Dire
 	if withMetadata {
 		minVersion = semver.MustParse("2.11.8")
 	}
-	if _, err := c.RequiresMinVersion(minVersion); err != nil {
+	if _, err := c.RequiresMinVersionCtx(ctx, minVersion); err != nil {
 		return nil, err
 	}
 
@@ -493,7 +574,7 @@ func (c *Client) GetTorrentsCtx(ctx context.Context, o TorrentFilterOptions) ([]
 
 	if o.Filter != "" {
 		// Translate filter based on qBittorrent version for compatibility
-		filter := c.translateFilter(o.Filter)
+		filter := c.translateFilter(ctx, o.Filter)
 		opts["filter"] = filter
 	}
 
@@ -792,9 +873,11 @@ func (c *Client) AddTorrentFromUrlCtx(ctx context.Context, url string, options m
 		return nil, ErrNoTorrentURLProvided
 	}
 
-	options["urls"] = url
+	form := make(map[string]string, len(options)+1)
+	maps.Copy(form, options)
+	form["urls"] = url
 
-	resp, err := c.postCtx(ctx, "torrents/add", options)
+	resp, err := c.postCtx(ctx, "torrents/add", form)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not add torrent; url: %v", url)
 	}
@@ -835,9 +918,11 @@ func (c *Client) AddTorrentsFromUrlsCtx(ctx context.Context, urls []string, opti
 		return nil, ErrNoTorrentURLProvided
 	}
 
-	options["urls"] = strings.Join(urls, "\n")
+	form := make(map[string]string, len(options)+1)
+	maps.Copy(form, options)
+	form["urls"] = strings.Join(urls, "\n")
 
-	resp, err := c.postCtx(ctx, "torrents/add", options)
+	resp, err := c.postCtx(ctx, "torrents/add", form)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not add torrents; urls: %v", urls)
 	}
@@ -1060,7 +1145,7 @@ func (c *Client) PauseCtx(ctx context.Context, hashes []string) error {
 	endpoint := "torrents/stop"
 
 	// Qbt WebAPI 2.11 changed pause with stop
-	version, err := c.getApiVersion()
+	version, err := c.getApiVersion(ctx)
 	if err != nil {
 		return errors.Wrap(err, "could not get api version")
 	}
@@ -1108,7 +1193,7 @@ func (c *Client) ResumeCtx(ctx context.Context, hashes []string) error {
 	endpoint := "torrents/start"
 
 	// Qbt WebAPI 2.11 changed resume with start
-	version, err := c.getApiVersion()
+	version, err := c.getApiVersion(ctx)
 
 	if err != nil {
 		return errors.Wrap(err, "could not get api version")
@@ -1261,16 +1346,77 @@ func (c *Client) SetLocationCtx(ctx context.Context, hashes []string, location s
 	}
 }
 
+// CategoryOptions holds the options that CreateCategoryWithOptions and
+// EditCategoryWithOptions send for a category.
+type CategoryOptions struct {
+	// SavePath is the category's save path. Empty means the default save path.
+	SavePath string
+	// DownloadPath is the category's download path option. Nil means the
+	// category inherits it. A non-nil value requires qBittorrent 4.4 and
+	// WebAPI >= 2.8.4.
+	DownloadPath *CategoryDownloadPath
+}
+
+// categoryDownloadPathMinVersion is the first WebAPI version that reads
+// downloadPathEnabled and downloadPath.
+var categoryDownloadPathMinVersion = semver.MustParse("2.8.4")
+
+// form returns the createCategory or editCategory form for category. With
+// stateInherit set, a nil DownloadPath is sent as an empty downloadPathEnabled,
+// which every qBittorrent version reads as inherit.
+func (o CategoryOptions) form(category string, stateInherit bool) map[string]string {
+	form := map[string]string{
+		"category": category,
+		"savePath": o.SavePath,
+	}
+	switch {
+	case o.DownloadPath != nil:
+		form["downloadPathEnabled"] = strconv.FormatBool(o.DownloadPath.Enabled)
+		form["downloadPath"] = o.DownloadPath.Path
+	case stateInherit:
+		form["downloadPathEnabled"] = ""
+	}
+	return form
+}
+
+// requireDownloadPathSupport fails when opts sets a download path that the
+// server would silently ignore.
+func (c *Client) requireDownloadPathSupport(ctx context.Context, opts CategoryOptions) error {
+	if opts.DownloadPath == nil {
+		return nil
+	}
+	if _, err := c.RequiresMinVersionCtx(ctx, categoryDownloadPathMinVersion); err != nil {
+		return errors.Wrap(err, "category download path requires qBittorrent 4.4 and WebAPI >= 2.8.4")
+	}
+	return nil
+}
+
 func (c *Client) CreateCategory(category string, path string) error {
 	return c.CreateCategoryCtx(context.Background(), category, path)
 }
 
 func (c *Client) CreateCategoryCtx(ctx context.Context, category string, path string) error {
-	opts := map[string]string{
-		"category": category,
-		"savePath": path,
-	}
+	return c.createCategoryCtx(ctx, category, CategoryOptions{SavePath: path}.form(category, false))
+}
 
+// CreateCategoryWithOptions creates a category with a save path and, when
+// opts.DownloadPath is set, its own download path option. A nil DownloadPath
+// sends no download path, so the category inherits it.
+func (c *Client) CreateCategoryWithOptions(category string, opts CategoryOptions) error {
+	return c.CreateCategoryWithOptionsCtx(context.Background(), category, opts)
+}
+
+// CreateCategoryWithOptionsCtx creates a category with a save path and, when
+// opts.DownloadPath is set, its own download path option. A nil DownloadPath
+// sends no download path, so the category inherits it.
+func (c *Client) CreateCategoryWithOptionsCtx(ctx context.Context, category string, opts CategoryOptions) error {
+	if err := c.requireDownloadPathSupport(ctx, opts); err != nil {
+		return err
+	}
+	return c.createCategoryCtx(ctx, category, opts.form(category, false))
+}
+
+func (c *Client) createCategoryCtx(ctx context.Context, category string, opts map[string]string) error {
 	resp, err := c.postCtx(ctx, "torrents/createCategory", opts)
 	if err != nil {
 		return errors.Wrap(err, "could not create category; category: %v", category)
@@ -1296,16 +1442,46 @@ func (c *Client) CreateCategoryCtx(ctx context.Context, category string, path st
 	}
 }
 
+// EditCategory sends only the category and its save path. Up to qBittorrent
+// 5.2 the edit replaces every category option, so it resets the download path
+// to inherit. From 5.3.0 the edit keeps the download path. Use
+// EditCategoryWithOptions to set the download path the same way on every
+// version.
 func (c *Client) EditCategory(category string, path string) error {
 	return c.EditCategoryCtx(context.Background(), category, path)
 }
 
+// EditCategoryCtx sends only the category and its save path. See EditCategory
+// for what happens to the download path.
 func (c *Client) EditCategoryCtx(ctx context.Context, category string, path string) error {
-	opts := map[string]string{
-		"category": category,
-		"savePath": path,
-	}
+	return c.editCategoryCtx(ctx, category, CategoryOptions{SavePath: path}.form(category, false))
+}
 
+// EditCategoryWithOptions sets the category's save path and download path
+// option to opts. It always states the download path, and a nil DownloadPath
+// sets the option to inherit. So both options end up the same up to
+// qBittorrent 5.2, where an edit replaces every option, and from 5.3.0, where
+// an option the edit leaves out is kept. To change only the save path, pass
+// the DownloadPath the category already has. Before WebAPI 2.11.10
+// (qBittorrent 5.1 and earlier), read it with GetCategoriesCtx, because
+// maindata can still hold a path the category no longer has.
+//
+// On qBittorrent 5.2 the edit also resets the category's share limits, which
+// 5.2 cannot set through the WebAPI. From 5.3.0 they are kept.
+func (c *Client) EditCategoryWithOptions(category string, opts CategoryOptions) error {
+	return c.EditCategoryWithOptionsCtx(context.Background(), category, opts)
+}
+
+// EditCategoryWithOptionsCtx sets the category's save path and download path
+// option to opts. See EditCategoryWithOptions.
+func (c *Client) EditCategoryWithOptionsCtx(ctx context.Context, category string, opts CategoryOptions) error {
+	if err := c.requireDownloadPathSupport(ctx, opts); err != nil {
+		return err
+	}
+	return c.editCategoryCtx(ctx, category, opts.form(category, true))
+}
+
+func (c *Client) editCategoryCtx(ctx context.Context, category string, opts map[string]string) error {
 	resp, err := c.postCtx(ctx, "torrents/editCategory", opts)
 	if err != nil {
 		return errors.Wrap(err, "could not edit category; category: %v", category)
@@ -1397,7 +1573,7 @@ func (c *Client) SetComment(hashes []string, comment string) error {
 }
 
 func (c *Client) SetCommentCtx(ctx context.Context, hashes []string, comment string) error {
-	if ok, err := c.RequiresMinVersion(semver.MustParse("2.12.1")); !ok {
+	if ok, err := c.RequiresMinVersionCtx(ctx, semver.MustParse("2.12.1")); !ok {
 		return errors.Wrap(err, "SetComment requires qBittorrent 5.2 and WebAPI >= 2.12.1")
 	}
 
@@ -1729,7 +1905,7 @@ func (c *Client) AddTagsCtx(ctx context.Context, hashes []string, tags string) e
 // For client instances with a lot of torrents, this will benefit a lot.
 // It checks for the required min version, and if it's less than the required version, it will error, and then the caller can handle it how they want.
 func (c *Client) SetTags(ctx context.Context, hashes []string, tags string) error {
-	if ok, err := c.RequiresMinVersion(semver.MustParse("2.11.4")); !ok {
+	if ok, err := c.RequiresMinVersionCtx(ctx, semver.MustParse("2.11.4")); !ok {
 		return errors.Wrap(err, "SetTags requires qBittorrent 5.1 and WebAPI >= 2.11.4")
 	}
 
@@ -2537,7 +2713,9 @@ func (c *Client) SetTorrentSuperSeedingCtx(ctx context.Context, hashes []string,
 }
 
 // ShareLimitOptions defines share limit settings for torrents.
-// ShareLimitAction and ShareLimitsMode were added in webapi 2.12.
+// ShareLimitAction requires WebAPI 2.12. ShareLimitsMode requires WebAPI 2.15.3.
+// From WebAPI 2.15.2, time limits use signed 32-bit minutes, at most 2147483647.
+// Use -2 for the global limit and -1 for no limit.
 //
 // ShareLimitAction and ShareLimitsMode must be Qt meta enum key names as used
 // by the WebUI (see Utils::String::toEnum in qBittorrent). Numeric strings such
@@ -2552,11 +2730,11 @@ type ShareLimitOptions struct {
 
 // Share limit action names for SetTorrentShareLimit (BitTorrent::ShareLimitAction).
 const (
-	ShareLimitActionDefault             = "Default"
-	ShareLimitActionStop                = "Stop"
-	ShareLimitActionRemove              = "Remove"
-	ShareLimitActionEnableSuperSeeding  = "EnableSuperSeeding"
-	ShareLimitActionRemoveWithContent   = "RemoveWithContent"
+	ShareLimitActionDefault            = "Default"
+	ShareLimitActionStop               = "Stop"
+	ShareLimitActionRemove             = "Remove"
+	ShareLimitActionEnableSuperSeeding = "EnableSuperSeeding"
+	ShareLimitActionRemoveWithContent  = "RemoveWithContent"
 )
 
 // Share limits mode names for SetTorrentShareLimit (BitTorrent::ShareLimitsMode).
@@ -2930,7 +3108,13 @@ func (c *Client) GetFreeSpaceOnDiskCtx(ctx context.Context) (int64, error) {
 
 // RequiresMinVersion checks the current version against version X and errors if the current version is older than X
 func (c *Client) RequiresMinVersion(minVersion *semver.Version) (bool, error) {
-	version, err := c.getApiVersion()
+	return c.RequiresMinVersionCtx(context.Background(), minVersion)
+}
+
+// RequiresMinVersionCtx checks the current version against version X and errors if the current version is older than X.
+// ctx applies to the WebAPI version request when the client has no version in its cache.
+func (c *Client) RequiresMinVersionCtx(ctx context.Context, minVersion *semver.Version) (bool, error) {
+	version, err := c.getApiVersion(ctx)
 	if err != nil {
 		return false, errors.Wrap(err, "could not get api version")
 	}
@@ -3107,7 +3291,7 @@ func (c *Client) CreateTorrent(params TorrentCreationParams) (*TorrentCreationTa
 func (c *Client) CreateTorrentCtx(ctx context.Context, params TorrentCreationParams) (*TorrentCreationTaskResponse, error) {
 	// Check version requirement
 	minVersion, _ := semver.NewVersion("2.11.2")
-	if _, err := c.RequiresMinVersion(minVersion); err != nil {
+	if _, err := c.RequiresMinVersionCtx(ctx, minVersion); err != nil {
 		return nil, err
 	}
 
@@ -3201,7 +3385,7 @@ func (c *Client) GetTorrentCreationStatus(taskID string) ([]TorrentCreationTask,
 func (c *Client) GetTorrentCreationStatusCtx(ctx context.Context, taskID string) ([]TorrentCreationTask, error) {
 	// Check version requirement
 	minVersion, _ := semver.NewVersion("2.11.2")
-	if _, err := c.RequiresMinVersion(minVersion); err != nil {
+	if _, err := c.RequiresMinVersionCtx(ctx, minVersion); err != nil {
 		return nil, err
 	}
 
@@ -3244,7 +3428,7 @@ func (c *Client) GetTorrentFile(taskID string) ([]byte, error) {
 func (c *Client) GetTorrentFileCtx(ctx context.Context, taskID string) ([]byte, error) {
 	// Check version requirement
 	minVersion, _ := semver.NewVersion("2.11.2")
-	if _, err := c.RequiresMinVersion(minVersion); err != nil {
+	if _, err := c.RequiresMinVersionCtx(ctx, minVersion); err != nil {
 		return nil, err
 	}
 
@@ -3297,7 +3481,7 @@ func (c *Client) DeleteTorrentCreationTask(taskID string) error {
 func (c *Client) DeleteTorrentCreationTaskCtx(ctx context.Context, taskID string) error {
 	// Check version requirement
 	minVersion, _ := semver.NewVersion("2.11.2")
-	if _, err := c.RequiresMinVersion(minVersion); err != nil {
+	if _, err := c.RequiresMinVersionCtx(ctx, minVersion); err != nil {
 		return err
 	}
 
