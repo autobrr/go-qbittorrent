@@ -3,9 +3,12 @@ package qbittorrent
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
+	"maps"
 	"math/rand"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -27,12 +30,14 @@ func (c *Client) getCtx(ctx context.Context, endpoint string, opts map[string]st
 	if c.cfg.BasicUser != "" && c.cfg.BasicPass != "" {
 		req.SetBasicAuth(c.cfg.BasicUser, c.cfg.BasicPass)
 	}
-
-	cookieURL, _ := url.Parse(c.buildUrl("/", nil))
-
-	if len(c.http.Jar.Cookies(cookieURL)) == 0 {
-		if err := c.LoginCtx(ctx); err != nil {
-			return nil, errors.Wrap(err, "qbit re-login failed")
+	if c.usingAPIKeyAuth() {
+		c.setAPIKeyAuthHeader(req)
+	} else {
+		cookieURL, _ := url.Parse(c.buildUrl("/", nil))
+		if len(c.http.Jar.Cookies(cookieURL)) == 0 {
+			if err := c.LoginCtx(ctx); err != nil {
+				return nil, errors.Wrap(err, "qbit re-login failed")
+			}
 		}
 	}
 
@@ -46,6 +51,7 @@ func (c *Client) getCtx(ctx context.Context, endpoint string, opts map[string]st
 }
 
 func (c *Client) postCtx(ctx context.Context, endpoint string, opts map[string]string) (*http.Response, error) {
+	opts = normalizeAddOptions(endpoint, opts)
 	// add optional parameters that the user wants
 	form := url.Values{}
 	for k, v := range opts {
@@ -62,16 +68,19 @@ func (c *Client) postCtx(ctx context.Context, endpoint string, opts map[string]s
 	if c.cfg.BasicUser != "" && c.cfg.BasicPass != "" {
 		req.SetBasicAuth(c.cfg.BasicUser, c.cfg.BasicPass)
 	}
+	if c.usingAPIKeyAuth() {
+		c.setAPIKeyAuthHeader(req)
+	} else {
+		cookieURL, _ := url.Parse(c.buildUrl("/", nil))
+		if len(c.http.Jar.Cookies(cookieURL)) == 0 {
+			if err := c.LoginCtx(ctx); err != nil {
+				return nil, errors.Wrap(err, "qbit re-login failed")
+			}
+		}
+	}
 
 	// add the content-type so qbittorrent knows what to expect
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-
-	cookieURL, _ := url.Parse(c.buildUrl("/", nil))
-	if len(c.http.Jar.Cookies(cookieURL)) == 0 {
-		if err := c.LoginCtx(ctx); err != nil {
-			return nil, errors.Wrap(err, "qbit re-login failed")
-		}
-	}
 
 	// try request and if fail run 10 retries
 	resp, err := c.retryDo(ctx, req)
@@ -82,14 +91,13 @@ func (c *Client) postCtx(ctx context.Context, endpoint string, opts map[string]s
 	return resp, nil
 }
 
+// postBasicCtx should only be used for auth/login because it skips session cookie checks.
 func (c *Client) postBasicCtx(ctx context.Context, endpoint string, opts map[string]string) (*http.Response, error) {
 	// add optional parameters that the user wants
 	form := url.Values{}
 	for k, v := range opts {
 		form.Add(k, v)
 	}
-
-	var resp *http.Response
 
 	reqUrl := c.buildUrl(endpoint, nil)
 
@@ -102,10 +110,12 @@ func (c *Client) postBasicCtx(ctx context.Context, endpoint string, opts map[str
 		req.SetBasicAuth(c.cfg.BasicUser, c.cfg.BasicPass)
 	}
 
+	c.setAPIKeyAuthHeader(req)
+
 	// add the content-type so qbittorrent knows what to expect
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 
-	resp, err = c.http.Do(req)
+	resp, err := c.http.Do(req)
 	if err != nil {
 		return nil, errors.Wrap(err, "error making post request: %v", reqUrl)
 	}
@@ -127,7 +137,74 @@ func (c *Client) postMemoryCtx(ctx context.Context, endpoint string, buf []byte,
 	return c.postReaderCtx(ctx, endpoint, bytes.NewReader(buf), opts)
 }
 
+// buildMultiFileForm creates a multipart form with multiple torrent files and options.
+func buildMultiFileForm(files [][]byte, opts map[string]string) (*bytes.Buffer, string, error) {
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+
+	for _, fileContent := range files {
+		fw, err := writer.CreateFormFile("torrents", generateTorrentName())
+		if err != nil {
+			return nil, "", errors.Wrap(err, "error initializing file field")
+		}
+		if _, err := fw.Write(fileContent); err != nil {
+			return nil, "", errors.Wrap(err, "error writing file contents")
+		}
+	}
+
+	for key, val := range opts {
+		if err := writer.WriteField(key, val); err != nil {
+			return nil, "", errors.Wrap(err, "error writing field %v", key)
+		}
+	}
+
+	contentType := writer.FormDataContentType()
+	writer.Close()
+
+	return &body, contentType, nil
+}
+
+// postMultiMemoryCtx sends multiple torrent files in a single multipart request.
+// qBittorrent supports multiple "torrents" form fields in one request.
+func (c *Client) postMultiMemoryCtx(ctx context.Context, endpoint string, files [][]byte, opts map[string]string) (*http.Response, error) {
+	opts = normalizeAddOptions(endpoint, opts)
+	body, contentType, err := buildMultiFileForm(files, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	reqUrl := c.buildUrl(endpoint, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqUrl, body)
+	if err != nil {
+		return nil, errors.Wrap(err, "error creating request")
+	}
+
+	if c.cfg.BasicUser != "" && c.cfg.BasicPass != "" {
+		req.SetBasicAuth(c.cfg.BasicUser, c.cfg.BasicPass)
+	}
+	if c.usingAPIKeyAuth() {
+		c.setAPIKeyAuthHeader(req)
+	} else {
+		cookieURL, _ := url.Parse(c.buildUrl("/", nil)) //nolint:errcheck // buildUrl returns valid URL
+		if len(c.http.Jar.Cookies(cookieURL)) == 0 {
+			if loginErr := c.LoginCtx(ctx); loginErr != nil {
+				return nil, errors.Wrap(loginErr, "qbit re-login failed")
+			}
+		}
+	}
+
+	req.Header.Set("Content-Type", contentType)
+
+	resp, err := c.retryDo(ctx, req)
+	if err != nil {
+		return nil, errors.Wrap(err, "error making post multi-file request")
+	}
+
+	return resp, nil
+}
+
 func (c *Client) postReaderCtx(ctx context.Context, endpoint string, reader io.Reader, opts map[string]string) (*http.Response, error) {
+	opts = normalizeAddOptions(endpoint, opts)
 	// Buffer to store our request body as bytes
 	var requestBody bytes.Buffer
 
@@ -171,16 +248,19 @@ func (c *Client) postReaderCtx(ctx context.Context, endpoint string, reader io.R
 	if c.cfg.BasicUser != "" && c.cfg.BasicPass != "" {
 		req.SetBasicAuth(c.cfg.BasicUser, c.cfg.BasicPass)
 	}
+	if c.usingAPIKeyAuth() {
+		c.setAPIKeyAuthHeader(req)
+	} else {
+		cookieURL, _ := url.Parse(c.buildUrl("/", nil))
+		if len(c.http.Jar.Cookies(cookieURL)) == 0 {
+			if err := c.LoginCtx(ctx); err != nil {
+				return nil, errors.Wrap(err, "qbit re-login failed")
+			}
+		}
+	}
 
 	// Set correct content type
 	req.Header.Set("Content-Type", contentType)
-
-	cookieURL, _ := url.Parse(c.buildUrl("/", nil))
-	if len(c.http.Jar.Cookies(cookieURL)) == 0 {
-		if err := c.LoginCtx(ctx); err != nil {
-			return nil, errors.Wrap(err, "qbit re-login failed")
-		}
-	}
 
 	resp, err := c.retryDo(ctx, req)
 	if err != nil {
@@ -188,6 +268,24 @@ func (c *Client) postReaderCtx(ctx context.Context, endpoint string, reader io.R
 	}
 
 	return resp, nil
+}
+
+// normalizeAddOptions sends matching seed-mode aliases for old and new servers.
+func normalizeAddOptions(endpoint string, opts map[string]string) map[string]string {
+	if endpoint != "torrents/add" {
+		return opts
+	}
+	seedMode, ok := opts["seedMode"]
+	if !ok {
+		seedMode, ok = opts["skip_checking"]
+	}
+	if !ok {
+		return opts
+	}
+	opts = maps.Clone(opts)
+	opts["seedMode"] = seedMode
+	opts["skip_checking"] = seedMode
+	return opts
 }
 
 func generateTorrentName() string {
@@ -207,6 +305,16 @@ func (c *Client) setCookies(cookies []*http.Cookie) {
 	cookieURL, _ := url.Parse(c.buildUrl("/", nil))
 
 	c.http.Jar.SetCookies(cookieURL, cookies)
+}
+
+func (c *Client) usingAPIKeyAuth() bool {
+	return c.cfg.APIKey != ""
+}
+
+func (c *Client) setAPIKeyAuthHeader(req *http.Request) {
+	if c.cfg.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.cfg.APIKey)
+	}
 }
 
 func (c *Client) buildUrl(endpoint string, params map[string]string) string {
@@ -250,6 +358,40 @@ func drainAndClose(resp *http.Response) {
 	}
 }
 
+func isClosedConnectionError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// Check for unexpected EOF during request (not response body read)
+	// http.Do can return this if connection dies during headers
+	if errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+
+	// Check for common connection error strings
+	errStr := err.Error()
+	connectionErrors := []string{
+		"use of closed network connection",
+		"broken pipe",
+		"connection reset by peer",
+	}
+
+	for _, connErr := range connectionErrors {
+		if strings.Contains(errStr, connErr) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// isDialError reports whether err came from the dial, before the request was sent.
+func isDialError(err error) bool {
+	var opErr *net.OpError
+	return errors.As(err, &opErr) && opErr.Op == "dial"
+}
+
 func (c *Client) retryDo(ctx context.Context, req *http.Request) (*http.Response, error) {
 	var (
 		originalBody []byte
@@ -264,7 +406,10 @@ func (c *Client) retryDo(ctx context.Context, req *http.Request) (*http.Response
 		return nil, err
 	}
 
-	var resp *http.Response
+	var (
+		resp    *http.Response
+		lastErr error
+	)
 
 	// try request and if fail run 10 retries
 	err = retry.Do(func() error {
@@ -275,19 +420,38 @@ func (c *Client) retryDo(ctx context.Context, req *http.Request) (*http.Response
 		resp, err = c.http.Do(req)
 
 		if err != nil {
-			if err == context.DeadlineExceeded || err == context.Canceled {
+			// Stop when the caller's context ends. An http.Client.Timeout
+			// error leaves ctx intact, so that attempt is retried unless
+			// it is a POST (see below).
+			if ctx.Err() != nil {
 				return retry.Unrecoverable(err)
 			}
-			retry.Delay(c.retryDelay)
+
+			// Retry a POST only when the dial failed. Any other error may
+			// come after the server got the request, and a replay could
+			// apply a toggle or a priority change twice. An http.Client.Timeout
+			// error hides the dial error, so a POST that times out is never
+			// retried. The transport already resends a POST it did not write.
+			if req.Method == http.MethodPost && !isDialError(err) {
+				return retry.Unrecoverable(err)
+			}
+
+			// Drop the other pooled connections, which may be dead too.
+			if isClosedConnectionError(err) {
+				c.http.CloseIdleConnections()
+			}
+
 			return err
 		}
 
 		if resp.StatusCode == http.StatusForbidden {
 			drainAndClose(resp)
+			if c.usingAPIKeyAuth() {
+				return nil
+			}
 			if err := c.LoginCtx(ctx); err != nil {
 				return errors.Wrap(err, "qbit re-login failed")
 			}
-			retry.Delay(100 * time.Millisecond)
 			return errors.New("qbit re-login")
 		} else if resp.StatusCode < 500 {
 			return nil
@@ -298,10 +462,30 @@ func (c *Client) retryDo(ctx context.Context, req *http.Request) (*http.Response
 
 		return nil
 	},
-		retry.OnRetry(func(n uint, err error) { c.log.Printf("%q: attempt %d - %v\n", err, n, req.URL.String()) }),
+		retry.OnRetry(func(n uint, err error) {
+			lastErr = err
+			c.log.Printf("%q: attempt %d - %v\n", err, n, req.URL.String())
+		}),
 		retry.Attempts(uint(c.retryAttempts)),
-		retry.MaxJitter(time.Second*1),
+		retry.Context(ctx),
+		retry.Delay(c.retryDelay),
+		retry.DelayType(func(n uint, err error, config *retry.Config) time.Duration {
+			// Retry a reset, broken pipe or unexpected EOF at once, on a pooled
+			// or a new connection. Other errors, such as a failed dial, wait
+			// the retry delay.
+			if isClosedConnectionError(err) {
+				return 0
+			}
+			return retry.FixedDelay(n, err, config)
+		}),
+		retry.LastErrorOnly(true),
 	)
+
+	// retry-go returns only ctx.Err() when ctx ends during the retry delay,
+	// so keep the cause of the last attempt.
+	if err != nil && err == ctx.Err() && lastErr != nil {
+		err = fmt.Errorf("%w (last attempt: %w)", err, lastErr)
+	}
 
 	if err != nil {
 		return nil, errors.Wrap(err, "error making request")

@@ -4,15 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"maps"
 	"net/http"
-	"net/http/httputil"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/autobrr/go-qbittorrent/errors"
+	"github.com/Masterminds/semver/v3"
 
-	"github.com/Masterminds/semver"
+	"github.com/autobrr/go-qbittorrent/errors"
 )
 
 // Login https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-4.1)#authentication
@@ -21,6 +21,10 @@ func (c *Client) Login() error {
 }
 
 func (c *Client) LoginCtx(ctx context.Context) error {
+	if c.usingAPIKeyAuth() {
+		return nil
+	}
+
 	if c.cfg.Username == "" && c.cfg.Password == "" {
 		return nil
 	}
@@ -40,7 +44,7 @@ func (c *Client) LoginCtx(ctx context.Context) error {
 	switch resp.StatusCode {
 	case http.StatusForbidden:
 		return ErrIPBanned
-	case http.StatusOK:
+	case http.StatusOK, http.StatusNoContent:
 		break
 	default:
 		return errors.Wrap(ErrUnexpectedStatus, "login error; status code: %d", resp.StatusCode)
@@ -86,11 +90,44 @@ func (c *Client) GetBuildInfoCtx(ctx context.Context) (BuildInfo, error) {
 
 	defer drainAndClose(resp)
 
+	switch resp.StatusCode {
+	case http.StatusOK:
+		break
+	default:
+		return bi, errors.Wrap(ErrUnexpectedStatus, "could not get app build info; status code: %d", resp.StatusCode)
+	}
+
 	if err = json.NewDecoder(resp.Body).Decode(&bi); err != nil {
 		return bi, errors.Wrap(err, "could not unmarshal body")
 	}
 
 	return bi, nil
+}
+
+// GetProcessInfo get qBittorrent process information.
+func (c *Client) GetProcessInfo() (ProcessInfo, error) {
+	return c.GetProcessInfoCtx(context.Background())
+}
+
+// GetProcessInfoCtx get qBittorrent process information.
+func (c *Client) GetProcessInfoCtx(ctx context.Context) (ProcessInfo, error) {
+	var info ProcessInfo
+	resp, err := c.getCtx(ctx, "app/processInfo", nil)
+	if err != nil {
+		return info, errors.Wrap(err, "could not get app process info")
+	}
+
+	defer drainAndClose(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return info, errors.Wrap(ErrUnexpectedStatus, "could not get app process info; status code: %d", resp.StatusCode)
+	}
+
+	if err = json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		return info, errors.Wrap(err, "could not unmarshal body")
+	}
+
+	return info, nil
 }
 
 // Shutdown  Shuts down the qBittorrent client
@@ -105,47 +142,121 @@ func (c *Client) ShutdownCtx(ctx context.Context) error {
 	}
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not trigger shutdown; status code: %d", resp.StatusCode)
 	}
 
 	return nil
 }
 
-func (c *Client) setApiVersion() error {
-	versionString, err := c.GetWebAPIVersionCtx(context.Background())
+// GetNetworkInterfaces lists the network interfaces that have an address.
+func (c *Client) GetNetworkInterfaces() ([]NetworkInterface, error) {
+	return c.GetNetworkInterfacesCtx(context.Background())
+}
+
+// GetNetworkInterfacesCtx lists the network interfaces that have an address.
+func (c *Client) GetNetworkInterfacesCtx(ctx context.Context) ([]NetworkInterface, error) {
+	resp, err := c.getCtx(ctx, "app/networkInterfaceList", nil)
 	if err != nil {
-		return errors.Wrap(err, "could not get webapi version")
+		return nil, errors.Wrap(err, "could not get network interfaces")
+	}
+	defer drainAndClose(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get network interfaces; status code: %d", resp.StatusCode)
 	}
 
-	c.log.Printf("webapi version: %v", versionString)
-
-	ver, err := semver.NewVersion(versionString)
-	if err != nil {
-		return errors.Wrap(err, "could not parse webapi version")
+	var ifaces []NetworkInterface
+	if err := json.NewDecoder(resp.Body).Decode(&ifaces); err != nil {
+		return nil, errors.Wrap(err, "could not unmarshal body")
 	}
 
-	c.version = ver
+	return ifaces, nil
+}
+
+// GetNetworkInterfaceAddresses lists the IP addresses of the interface iface,
+// where iface is a NetworkInterface Value. An empty iface lists the addresses of all interfaces.
+func (c *Client) GetNetworkInterfaceAddresses(iface string) ([]string, error) {
+	return c.GetNetworkInterfaceAddressesCtx(context.Background(), iface)
+}
+
+// GetNetworkInterfaceAddressesCtx lists the IP addresses of the interface iface,
+// where iface is a NetworkInterface Value. An empty iface lists the addresses of all interfaces.
+func (c *Client) GetNetworkInterfaceAddressesCtx(ctx context.Context, iface string) ([]string, error) {
+	resp, err := c.getCtx(ctx, "app/networkInterfaceAddressList", map[string]string{"iface": iface})
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get network interface addresses; iface: %s", iface)
+	}
+	defer drainAndClose(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get network interface addresses; iface: %s | status code: %d", iface, resp.StatusCode)
+	}
+
+	var addrs []string
+	if err := json.NewDecoder(resp.Body).Decode(&addrs); err != nil {
+		return nil, errors.Wrap(err, "could not unmarshal body")
+	}
+
+	return addrs, nil
+}
+
+// SendTestEmail asks qBittorrent to send a test email with its email notification settings.
+// A nil error means only that qBittorrent queued the email, not that the email was sent.
+// Requires qBittorrent 5.0 and WebAPI >= 2.11.2.
+func (c *Client) SendTestEmail() error {
+	return c.SendTestEmailCtx(context.Background())
+}
+
+// SendTestEmailCtx asks qBittorrent to send a test email with its email notification settings.
+// A nil error means only that qBittorrent queued the email, not that the email was sent.
+// Requires qBittorrent 5.0 and WebAPI >= 2.11.2.
+func (c *Client) SendTestEmailCtx(ctx context.Context) error {
+	if _, err := c.RequiresMinVersionCtx(ctx, semver.MustParse("2.11.2")); err != nil {
+		return err
+	}
+
+	resp, err := c.postCtx(ctx, "app/sendTestEmail", nil)
+	if err != nil {
+		return errors.Wrap(err, "could not send test email")
+	}
+	defer drainAndClose(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return errors.Wrap(ErrUnexpectedStatus, "could not send test email; status code: %d", resp.StatusCode)
+	}
 
 	return nil
 }
 
-func (c *Client) getApiVersion() (*semver.Version, error) {
-	if c.version == nil || (c.version.Major() == 0 && c.version.Minor() == 0 && c.version.Patch() == 0) {
-		err := c.setApiVersion()
-		if err != nil {
-			return nil, err
-		}
+func (c *Client) getApiVersion(ctx context.Context) (*semver.Version, error) {
+	if ver := c.version.Load(); ver != nil {
+		return ver, nil
 	}
 
-	return c.version, nil
+	versionString, err := c.GetWebAPIVersionCtx(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get webapi version")
+	}
+
+	c.log.Printf("webapi version: %v", versionString)
+
+	ver := c.version.Load()
+	if ver == nil {
+		return nil, errors.New("could not parse webapi version %q", versionString)
+	}
+
+	return ver, nil
 }
 
 // translateFilter translates filter names based on qBittorrent version for compatibility
 // qBittorrent 4.6.0+ changed from "paused/resumed" to "stopped/running"
-func (c *Client) translateFilter(filter TorrentFilter) string {
+func (c *Client) translateFilter(ctx context.Context, filter TorrentFilter) string {
 	// Get the API version, but don't fail if we can't get it
-	ver, err := c.getApiVersion()
+	ver, err := c.getApiVersion(ctx)
 	if err != nil {
 		// If we can't get version, just return the filter as-is
 		return string(filter)
@@ -208,6 +319,13 @@ func (c *Client) GetAppPreferencesCtx(ctx context.Context) (AppPreferences, erro
 
 	defer drainAndClose(resp)
 
+	switch resp.StatusCode {
+	case http.StatusOK:
+		break
+	default:
+		return app, errors.Wrap(ErrUnexpectedStatus, "could not get app preferences; status code: %d", resp.StatusCode)
+	}
+
 	if err := json.NewDecoder(resp.Body).Decode(&app); err != nil {
 		return app, errors.Wrap(err, "could not unmarshal body")
 	}
@@ -235,11 +353,167 @@ func (c *Client) SetPreferencesCtx(ctx context.Context, prefs map[string]interfa
 	}
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not set preferences; status code: %d", resp.StatusCode)
 	}
 
 	return nil
+}
+
+// MonitoredFolderMode describes where torrents discovered in a monitored folder should be downloaded.
+type MonitoredFolderMode int
+
+const (
+	// MonitoredFolderModeMonitoredFolder means download to the monitored folder itself.
+	MonitoredFolderModeMonitoredFolder MonitoredFolderMode = 0
+	// MonitoredFolderModeDefaultSavePath means download to qBittorrent's default save path.
+	MonitoredFolderModeDefaultSavePath MonitoredFolderMode = 1
+	// MonitoredFolderModeCustomPath means download to a custom path.
+	MonitoredFolderModeCustomPath MonitoredFolderMode = 2
+)
+
+// MonitoredFolderTarget represents one qBittorrent scan_dirs target value.
+// The Web API accepts either integer values (0, 1) or a custom path string.
+type MonitoredFolderTarget struct {
+	mode       MonitoredFolderMode
+	customPath string
+}
+
+// NewMonitoredFolderTarget creates an int-based monitored folder target (0 or 1).
+func NewMonitoredFolderTarget(mode MonitoredFolderMode) MonitoredFolderTarget {
+	return MonitoredFolderTarget{mode: mode}
+}
+
+// NewMonitoredFolderCustomPath creates a custom-path monitored folder target.
+func NewMonitoredFolderCustomPath(path string) MonitoredFolderTarget {
+	return MonitoredFolderTarget{
+		mode:       MonitoredFolderModeCustomPath,
+		customPath: path,
+	}
+}
+
+// Mode returns the target mode.
+func (d MonitoredFolderTarget) Mode() MonitoredFolderMode {
+	return d.mode
+}
+
+// CustomPath returns the custom path, if Mode() is MonitoredFolderModeCustomPath.
+func (d MonitoredFolderTarget) CustomPath() string {
+	return d.customPath
+}
+
+func (d MonitoredFolderTarget) MarshalJSON() ([]byte, error) {
+	switch d.mode {
+	case MonitoredFolderModeMonitoredFolder, MonitoredFolderModeDefaultSavePath:
+		return json.Marshal(int(d.mode))
+	case MonitoredFolderModeCustomPath:
+		return json.Marshal(d.customPath)
+	default:
+		return nil, errors.Wrap(ErrInvalidMonitoredFolderTarget, "invalid target mode: %d", d.mode)
+	}
+}
+
+func (d *MonitoredFolderTarget) UnmarshalJSON(data []byte) error {
+	var intValue int
+	if err := json.Unmarshal(data, &intValue); err == nil {
+		switch MonitoredFolderMode(intValue) {
+		case MonitoredFolderModeMonitoredFolder, MonitoredFolderModeDefaultSavePath:
+			d.mode = MonitoredFolderMode(intValue)
+			d.customPath = ""
+			return nil
+		default:
+			return errors.Wrap(ErrInvalidMonitoredFolderTarget, "invalid target integer value: %d", intValue)
+		}
+	}
+
+	var stringValue string
+	if err := json.Unmarshal(data, &stringValue); err == nil {
+		d.mode = MonitoredFolderModeCustomPath
+		d.customPath = stringValue
+		return nil
+	}
+
+	return errors.Wrap(ErrInvalidMonitoredFolderTarget, "invalid target value: %s", string(data))
+}
+
+// MonitoredFolders is the typed representation of qBittorrent's scan_dirs setting.
+// Key: monitored folder path, Value: target where discovered torrents should be saved.
+type MonitoredFolders map[string]MonitoredFolderTarget
+
+// GetDirectoryContent lists folders inside a directory (for autocomplete).
+func (c *Client) GetDirectoryContent(dirPath string, withMetadata bool) (any, error) {
+	return c.GetDirectoryContentCtx(context.Background(), dirPath, withMetadata)
+}
+
+// GetDirectoryContentCtx lists folders inside a directory (for autocomplete).
+// Requires qBittorrent 5.0 and WebAPI >= 2.11.2.
+// Note: withMetadata requires WebAPI >= 2.11.8 (qBittorrent 5.2).
+// When false, returns []string; when true, returns []PathMetadata.
+func (c *Client) GetDirectoryContentCtx(ctx context.Context, dirPath string, withMetadata bool) (any, error) {
+	return c.ListDirectoryCtx(ctx, dirPath, DirectoryContentDirs, withMetadata)
+}
+
+// ListDirectory lists the entries inside a directory that match mode.
+// Requires qBittorrent 5.0 and WebAPI >= 2.11.2.
+func (c *Client) ListDirectory(dirPath string, mode DirectoryContentMode, withMetadata bool) (any, error) {
+	return c.ListDirectoryCtx(context.Background(), dirPath, mode, withMetadata)
+}
+
+// ListDirectoryCtx lists the entries inside a directory that match mode.
+// The zero mode lists directories and files, like DirectoryContentAll.
+// Requires qBittorrent 5.0 and WebAPI >= 2.11.2.
+// Note: withMetadata requires WebAPI >= 2.11.8 (qBittorrent 5.2).
+// When false, returns []string; when true, returns []PathMetadata.
+func (c *Client) ListDirectoryCtx(ctx context.Context, dirPath string, mode DirectoryContentMode, withMetadata bool) (any, error) {
+	// An older server ignores withMetadata and answers with the string list,
+	// which would not decode as []PathMetadata.
+	minVersion := semver.MustParse("2.11.2")
+	if withMetadata {
+		minVersion = semver.MustParse("2.11.8")
+	}
+	if _, err := c.RequiresMinVersionCtx(ctx, minVersion); err != nil {
+		return nil, err
+	}
+
+	opts := map[string]string{
+		"dirPath":      dirPath,
+		"withMetadata": strconv.FormatBool(withMetadata),
+	}
+	// An empty mode is rejected by qBittorrent; omit it and let the server default to all.
+	if mode != "" {
+		opts["mode"] = string(mode)
+	}
+	resp, err := c.getCtx(ctx, "app/getDirectoryContent", opts)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get directory content")
+	}
+	defer drainAndClose(resp)
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+		break
+	default:
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get directory content; status code: %d", resp.StatusCode)
+	}
+
+	decoder := json.NewDecoder(resp.Body)
+
+	if withMetadata {
+		var result []PathMetadata
+		if err := decoder.Decode(&result); err != nil {
+			return nil, errors.Wrap(err, "could not unmarshal body")
+		}
+		return result, nil
+	}
+
+	var paths []string
+	if err := decoder.Decode(&paths); err != nil {
+		return nil, errors.Wrap(err, "could not unmarshal body")
+	}
+	return paths, nil
 }
 
 // GetDefaultSavePath get default save path.
@@ -257,7 +531,10 @@ func (c *Client) GetDefaultSavePathCtx(ctx context.Context) (string, error) {
 	}
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK:
+		break
+	default:
 		return "", errors.Wrap(ErrUnexpectedStatus, "could not get default save path; status code: %d", resp.StatusCode)
 	}
 
@@ -294,7 +571,7 @@ func (c *Client) GetTorrentsCtx(ctx context.Context, o TorrentFilterOptions) ([]
 
 	if o.Filter != "" {
 		// Translate filter based on qBittorrent version for compatibility
-		filter := c.translateFilter(o.Filter)
+		filter := c.translateFilter(ctx, o.Filter)
 		opts["filter"] = filter
 	}
 
@@ -321,6 +598,13 @@ func (c *Client) GetTorrentsCtx(ctx context.Context, o TorrentFilterOptions) ([]
 	}
 
 	defer drainAndClose(resp)
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+		break
+	default:
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get torrents; status code: %d", resp.StatusCode)
+	}
 
 	var torrents []Torrent
 	if err := json.NewDecoder(resp.Body).Decode(&torrents); err != nil {
@@ -364,10 +648,22 @@ func (c *Client) GetTorrentPropertiesCtx(ctx context.Context, hash string) (Torr
 	var prop TorrentProperties
 	resp, err := c.getCtx(ctx, "torrents/properties", opts)
 	if err != nil {
-		return prop, errors.Wrap(err, "could not get app preferences")
+		return prop, errors.Wrap(err, "could not get torrent properties")
 	}
 
 	defer drainAndClose(resp)
+
+	// HTTP Status Code	Scenario
+	// 404	Torrent hash was not found
+	// 200	All other scenarios
+	switch resp.StatusCode {
+	case http.StatusOK:
+		break
+	case http.StatusNotFound:
+		return prop, errors.Wrap(ErrTorrentNotFound, "could not get torrent properties; torrent hash '%s' was not found", hash)
+	default:
+		return prop, errors.Wrap(ErrUnexpectedStatus, "could not get torrent properties; status code: %d", resp.StatusCode)
+	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&prop); err != nil {
 		return prop, errors.Wrap(err, "could not unmarshal body")
@@ -387,6 +683,10 @@ func (c *Client) GetTorrentsRawCtx(ctx context.Context) (string, error) {
 	}
 
 	defer drainAndClose(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return "", errors.Wrap(ErrUnexpectedStatus, "could not get torrents raw; status code: %d", resp.StatusCode)
+	}
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -412,19 +712,15 @@ func (c *Client) GetTorrentTrackersCtx(ctx context.Context, hash string) ([]Torr
 
 	defer drainAndClose(resp)
 
-	dump, err := httputil.DumpResponse(resp, true)
-	if err != nil {
-		// c.log.Printf("get torrent trackers error dump response: %v\n", string(dump))
-		return nil, errors.Wrap(err, "could not dump response for hash: %v", hash)
-	}
-
-	c.log.Printf("get torrent trackers response dump: %q", dump)
-
 	switch resp.StatusCode {
+	case http.StatusOK:
+		break
 	case http.StatusNotFound:
 		return nil, nil
 	case http.StatusForbidden:
 		return nil, nil
+	default:
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get torrent trackers; status code: %d", resp.StatusCode)
 	}
 
 	var trackers []TorrentTracker
@@ -435,71 +731,227 @@ func (c *Client) GetTorrentTrackersCtx(ctx context.Context, hash string) ([]Torr
 	return trackers, nil
 }
 
-func (c *Client) AddTorrentFromMemory(buf []byte, options map[string]string) error {
+func (c *Client) AddTorrentFromMemory(buf []byte, options map[string]string) (*TorrentAddResponse, error) {
 	return c.AddTorrentFromMemoryCtx(context.Background(), buf, options)
 }
 
-func (c *Client) AddTorrentFromMemoryCtx(ctx context.Context, buf []byte, options map[string]string) error {
-
+func (c *Client) AddTorrentFromMemoryCtx(ctx context.Context, buf []byte, options map[string]string) (*TorrentAddResponse, error) {
 	resp, err := c.postMemoryCtx(ctx, "torrents/add", buf, options)
 	if err != nil {
-		return errors.Wrap(err, "could not add torrent")
+		return nil, errors.Wrap(err, "could not add torrent")
 	}
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
-		return errors.Wrap(ErrUnexpectedStatus, "could not add torrent; status code: %d", resp.StatusCode)
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusAccepted, http.StatusNoContent:
+		if strings.HasPrefix(resp.Header.Get("Content-Type"), "application/json") {
+			var res TorrentAddResponse
+			if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+				return nil, errors.Wrap(err, "could not unmarshal body")
+			}
+			return &res, nil
+		}
+
+		break
+	case http.StatusConflict:
+		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrent | conflicts detected")
+	case http.StatusUnsupportedMediaType:
+		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrent | torrent file not valid")
+	default:
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not add torrent | unexpected status code: %d", resp.StatusCode)
 	}
 
-	return nil
+	if !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/plain") {
+		return nil, errors.Wrap(ErrUnexpectedContentType, "could not add torrent | unexpected content-type: %s", resp.Header.Get("Content-Type"))
+	}
+
+	res := TorrentAddResponse{SuccessCount: 1}
+
+	return &res, nil
+}
+
+// AddTorrentsFromMemory adds multiple torrents from memory in a single request.
+// This is more efficient than calling AddTorrentFromMemory multiple times.
+func (c *Client) AddTorrentsFromMemory(files [][]byte, options map[string]string) (*TorrentAddResponse, error) {
+	return c.AddTorrentsFromMemoryCtx(context.Background(), files, options)
+}
+
+// AddTorrentsFromMemoryCtx adds multiple torrents from memory in a single request.
+// qBittorrent's API accepts multiple "torrents" form fields, allowing batch uploads.
+func (c *Client) AddTorrentsFromMemoryCtx(ctx context.Context, files [][]byte, options map[string]string) (*TorrentAddResponse, error) {
+	if len(files) == 0 {
+		return nil, ErrEmptyInput
+	}
+
+	resp, err := c.postMultiMemoryCtx(ctx, "torrents/add", files, options)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not add torrents")
+	}
+
+	defer drainAndClose(resp)
+
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusAccepted, http.StatusNoContent:
+		if strings.HasPrefix(resp.Header.Get("Content-Type"), "application/json") {
+			var res TorrentAddResponse
+			if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+				return nil, errors.Wrap(err, "could not unmarshal body")
+			}
+			return &res, nil
+		}
+
+		break
+	case http.StatusConflict:
+		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrents | conflicts detected")
+	case http.StatusUnsupportedMediaType:
+		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrents | torrent file not valid")
+	default:
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not add torrents | unexpected status code: %d", resp.StatusCode)
+	}
+
+	if !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/plain") {
+		return nil, errors.Wrap(ErrUnexpectedContentType, "could not add torrents | unexpected content-type: %s", resp.Header.Get("Content-Type"))
+	}
+
+	res := TorrentAddResponse{SuccessCount: 1}
+
+	return &res, nil
 }
 
 // AddTorrentFromFile add new torrent from torrent file
-func (c *Client) AddTorrentFromFile(filePath string, options map[string]string) error {
+func (c *Client) AddTorrentFromFile(filePath string, options map[string]string) (*TorrentAddResponse, error) {
 	return c.AddTorrentFromFileCtx(context.Background(), filePath, options)
 }
 
-func (c *Client) AddTorrentFromFileCtx(ctx context.Context, filePath string, options map[string]string) error {
-
+func (c *Client) AddTorrentFromFileCtx(ctx context.Context, filePath string, options map[string]string) (*TorrentAddResponse, error) {
 	resp, err := c.postFileCtx(ctx, "torrents/add", filePath, options)
 	if err != nil {
-		return errors.Wrap(err, "could not add torrent; filePath: %v", filePath)
+		return nil, errors.Wrap(err, "could not add torrent; filePath: %s", filePath)
 	}
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
-		return errors.Wrap(ErrUnexpectedStatus, "could not add torrent; filePath: %v | status code: %d", filePath, resp.StatusCode)
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusAccepted, http.StatusNoContent:
+		if strings.HasPrefix(resp.Header.Get("Content-Type"), "application/json") {
+			var res TorrentAddResponse
+			if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+				return nil, errors.Wrap(err, "could not unmarshal body")
+			}
+			return &res, nil
+		}
+
+		break
+	case http.StatusConflict:
+		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrent: file: %s | conflicts detected", filePath)
+	case http.StatusUnsupportedMediaType:
+		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrent: file: %s | torrent file not valid", filePath)
+	default:
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not add torrent: file: %s | unexpected status code: %d", filePath, resp.StatusCode)
 	}
 
-	return nil
+	if !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/plain") {
+		return nil, errors.Wrap(ErrUnexpectedContentType, "could not add torrent: file: %s | unexpected content-type: %s", filePath, resp.Header.Get("Content-Type"))
+	}
+
+	res := TorrentAddResponse{SuccessCount: 1}
+
+	return &res, nil
 }
 
 // AddTorrentFromUrl add new torrent from torrent file
-func (c *Client) AddTorrentFromUrl(url string, options map[string]string) error {
+func (c *Client) AddTorrentFromUrl(url string, options map[string]string) (*TorrentAddResponse, error) {
 	return c.AddTorrentFromUrlCtx(context.Background(), url, options)
 }
 
-func (c *Client) AddTorrentFromUrlCtx(ctx context.Context, url string, options map[string]string) error {
+func (c *Client) AddTorrentFromUrlCtx(ctx context.Context, url string, options map[string]string) (*TorrentAddResponse, error) {
 	if url == "" {
-		return ErrNoTorrentURLProvided
+		return nil, ErrNoTorrentURLProvided
 	}
 
-	options["urls"] = url
+	form := make(map[string]string, len(options)+1)
+	maps.Copy(form, options)
+	form["urls"] = url
 
-	resp, err := c.postCtx(ctx, "torrents/add", options)
+	resp, err := c.postCtx(ctx, "torrents/add", form)
 	if err != nil {
-		return errors.Wrap(err, "could not add torrent; url: %v", url)
+		return nil, errors.Wrap(err, "could not add torrent; url: %v", url)
 	}
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
-		return errors.Wrap(ErrUnexpectedStatus, "could not add torrent: url: %v | status code: %d", url, resp.StatusCode)
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusAccepted, http.StatusNoContent:
+		if strings.HasPrefix(resp.Header.Get("Content-Type"), "application/json") {
+			var res TorrentAddResponse
+			if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+				return nil, errors.Wrap(err, "could not unmarshal body")
+			}
+			return &res, nil
+		}
+
+		break
+	case http.StatusConflict:
+		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrent: url: %s | conflicts detected", url)
+	case http.StatusUnsupportedMediaType:
+		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrent: url: %s | torrent file not valid", url)
+	default:
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not add torrent: url: %s | unexpected status code: %d", url, resp.StatusCode)
 	}
 
-	return nil
+	if !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/plain") {
+		return nil, errors.Wrap(ErrUnexpectedContentType, "could not add torrent: url: %s | unexpected content-type: %s", url, resp.Header.Get("Content-Type"))
+	}
+
+	res := TorrentAddResponse{SuccessCount: 1}
+
+	return &res, nil
+}
+
+// AddTorrentsFromUrlsCtx add multiple new torrents from urls
+func (c *Client) AddTorrentsFromUrlsCtx(ctx context.Context, urls []string, options map[string]string) (*TorrentAddResponse, error) {
+	if len(urls) == 0 {
+		return nil, ErrNoTorrentURLProvided
+	}
+
+	form := make(map[string]string, len(options)+1)
+	maps.Copy(form, options)
+	form["urls"] = strings.Join(urls, "\n")
+
+	resp, err := c.postCtx(ctx, "torrents/add", form)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not add torrents; urls: %v", urls)
+	}
+
+	defer drainAndClose(resp)
+
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusAccepted, http.StatusNoContent:
+		if strings.HasPrefix(resp.Header.Get("Content-Type"), "application/json") {
+			var res TorrentAddResponse
+			if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+				return nil, errors.Wrap(err, "could not unmarshal body")
+			}
+			return &res, nil
+		}
+
+		break
+	case http.StatusConflict:
+		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrents: urls: %v | conflicts detected", urls)
+	case http.StatusUnsupportedMediaType:
+		return nil, errors.Wrap(ErrTorrentAddFailed, "could not add torrents: urls: %v | torrent file not valid", urls)
+	default:
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not add torrents: urls: %v | unexpected status code: %d", urls, resp.StatusCode)
+	}
+
+	if !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/plain") {
+		return nil, errors.Wrap(ErrUnexpectedContentType, "could not add torrents: urls: %v | unexpected content-type: %s", urls, resp.Header.Get("Content-Type"))
+	}
+
+	res := TorrentAddResponse{SuccessCount: 1}
+
+	return &res, nil
 }
 
 func (c *Client) DeleteTorrents(hashes []string, deleteFiles bool) error {
@@ -522,7 +974,10 @@ func (c *Client) DeleteTorrentsCtx(ctx context.Context, hashes []string, deleteF
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not delete torrents; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
@@ -547,7 +1002,10 @@ func (c *Client) ReAnnounceTorrentsCtx(ctx context.Context, hashes []string) err
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not re-announce torrents; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
@@ -565,6 +1023,10 @@ func (c *Client) GetTransferInfoCtx(ctx context.Context) (*TransferInfo, error) 
 	}
 
 	defer drainAndClose(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get transfer info; status code: %d", resp.StatusCode)
+	}
 
 	var info TransferInfo
 	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
@@ -593,7 +1055,10 @@ func (c *Client) BanPeersCtx(ctx context.Context, peers []string) error {
 	}
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not ban peers; peers: %v | status code: %d", peers, resp.StatusCode)
 	}
 
@@ -619,6 +1084,13 @@ func (c *Client) SyncMainDataCtxWithRaw(ctx context.Context, rid int64) (*MainDa
 	}
 
 	defer drainAndClose(resp)
+
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
+		return nil, nil, errors.Wrap(ErrUnexpectedStatus, "could not get main data; status code: %d", resp.StatusCode)
+	}
 
 	rp, wp := io.Pipe()
 	var rawData map[string]interface{}
@@ -670,7 +1142,7 @@ func (c *Client) PauseCtx(ctx context.Context, hashes []string) error {
 	endpoint := "torrents/stop"
 
 	// Qbt WebAPI 2.11 changed pause with stop
-	version, err := c.getApiVersion()
+	version, err := c.getApiVersion(ctx)
 	if err != nil {
 		return errors.Wrap(err, "could not get api version")
 	}
@@ -686,7 +1158,10 @@ func (c *Client) PauseCtx(ctx context.Context, hashes []string) error {
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not pause torrents; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
@@ -715,7 +1190,7 @@ func (c *Client) ResumeCtx(ctx context.Context, hashes []string) error {
 	endpoint := "torrents/start"
 
 	// Qbt WebAPI 2.11 changed resume with start
-	version, err := c.getApiVersion()
+	version, err := c.getApiVersion(ctx)
 
 	if err != nil {
 		return errors.Wrap(err, "could not get api version")
@@ -732,7 +1207,10 @@ func (c *Client) ResumeCtx(ctx context.Context, hashes []string) error {
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not resume torrents; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
@@ -758,7 +1236,10 @@ func (c *Client) SetForceStartCtx(ctx context.Context, hashes []string, value bo
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not set force start torrents; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
@@ -783,7 +1264,10 @@ func (c *Client) RecheckCtx(ctx context.Context, hashes []string) error {
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not recheck torrents; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
@@ -809,7 +1293,10 @@ func (c *Client) SetAutoManagementCtx(ctx context.Context, hashes []string, enab
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not set auto management; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
@@ -843,7 +1330,7 @@ func (c *Client) SetLocationCtx(ctx context.Context, hashes []string, location s
 		200 	All other scenarios
 	*/
 	switch sc := resp.StatusCode; sc {
-	case http.StatusOK:
+	case http.StatusOK, http.StatusNoContent:
 		return nil
 	case http.StatusBadRequest:
 		return errors.Wrap(ErrEmptySavePath, "save path: %s", location)
@@ -856,16 +1343,77 @@ func (c *Client) SetLocationCtx(ctx context.Context, hashes []string, location s
 	}
 }
 
+// CategoryOptions holds the options that CreateCategoryWithOptions and
+// EditCategoryWithOptions send for a category.
+type CategoryOptions struct {
+	// SavePath is the category's save path. Empty means the default save path.
+	SavePath string
+	// DownloadPath is the category's download path option. Nil means the
+	// category inherits it. A non-nil value requires qBittorrent 4.4 and
+	// WebAPI >= 2.8.4.
+	DownloadPath *CategoryDownloadPath
+}
+
+// categoryDownloadPathMinVersion is the first WebAPI version that reads
+// downloadPathEnabled and downloadPath.
+var categoryDownloadPathMinVersion = semver.MustParse("2.8.4")
+
+// form returns the createCategory or editCategory form for category. With
+// stateInherit set, a nil DownloadPath is sent as an empty downloadPathEnabled,
+// which every qBittorrent version reads as inherit.
+func (o CategoryOptions) form(category string, stateInherit bool) map[string]string {
+	form := map[string]string{
+		"category": category,
+		"savePath": o.SavePath,
+	}
+	switch {
+	case o.DownloadPath != nil:
+		form["downloadPathEnabled"] = strconv.FormatBool(o.DownloadPath.Enabled)
+		form["downloadPath"] = o.DownloadPath.Path
+	case stateInherit:
+		form["downloadPathEnabled"] = ""
+	}
+	return form
+}
+
+// requireDownloadPathSupport fails when opts sets a download path that the
+// server would silently ignore.
+func (c *Client) requireDownloadPathSupport(ctx context.Context, opts CategoryOptions) error {
+	if opts.DownloadPath == nil {
+		return nil
+	}
+	if _, err := c.RequiresMinVersionCtx(ctx, categoryDownloadPathMinVersion); err != nil {
+		return errors.Wrap(err, "category download path requires qBittorrent 4.4 and WebAPI >= 2.8.4")
+	}
+	return nil
+}
+
 func (c *Client) CreateCategory(category string, path string) error {
 	return c.CreateCategoryCtx(context.Background(), category, path)
 }
 
 func (c *Client) CreateCategoryCtx(ctx context.Context, category string, path string) error {
-	opts := map[string]string{
-		"category": category,
-		"savePath": path,
-	}
+	return c.createCategoryCtx(ctx, category, CategoryOptions{SavePath: path}.form(category, false))
+}
 
+// CreateCategoryWithOptions creates a category with a save path and, when
+// opts.DownloadPath is set, its own download path option. A nil DownloadPath
+// sends no download path, so the category inherits it.
+func (c *Client) CreateCategoryWithOptions(category string, opts CategoryOptions) error {
+	return c.CreateCategoryWithOptionsCtx(context.Background(), category, opts)
+}
+
+// CreateCategoryWithOptionsCtx creates a category with a save path and, when
+// opts.DownloadPath is set, its own download path option. A nil DownloadPath
+// sends no download path, so the category inherits it.
+func (c *Client) CreateCategoryWithOptionsCtx(ctx context.Context, category string, opts CategoryOptions) error {
+	if err := c.requireDownloadPathSupport(ctx, opts); err != nil {
+		return err
+	}
+	return c.createCategoryCtx(ctx, category, opts.form(category, false))
+}
+
+func (c *Client) createCategoryCtx(ctx context.Context, category string, opts map[string]string) error {
 	resp, err := c.postCtx(ctx, "torrents/createCategory", opts)
 	if err != nil {
 		return errors.Wrap(err, "could not create category; category: %v", category)
@@ -880,7 +1428,7 @@ func (c *Client) CreateCategoryCtx(ctx context.Context, category string, path st
 		200 	All other scenarios
 	*/
 	switch resp.StatusCode {
-	case http.StatusOK:
+	case http.StatusOK, http.StatusNoContent:
 		return nil
 	case http.StatusBadRequest:
 		return errors.Wrap(ErrEmptyCategoryName, "category name: %s", category)
@@ -891,16 +1439,46 @@ func (c *Client) CreateCategoryCtx(ctx context.Context, category string, path st
 	}
 }
 
+// EditCategory sends only the category and its save path. Up to qBittorrent
+// 5.2 the edit replaces every category option, so it resets the download path
+// to inherit. From 5.3.0 the edit keeps the download path. Use
+// EditCategoryWithOptions to set the download path the same way on every
+// version.
 func (c *Client) EditCategory(category string, path string) error {
 	return c.EditCategoryCtx(context.Background(), category, path)
 }
 
+// EditCategoryCtx sends only the category and its save path. See EditCategory
+// for what happens to the download path.
 func (c *Client) EditCategoryCtx(ctx context.Context, category string, path string) error {
-	opts := map[string]string{
-		"category": category,
-		"savePath": path,
-	}
+	return c.editCategoryCtx(ctx, category, CategoryOptions{SavePath: path}.form(category, false))
+}
 
+// EditCategoryWithOptions sets the category's save path and download path
+// option to opts. It always states the download path, and a nil DownloadPath
+// sets the option to inherit. So both options end up the same up to
+// qBittorrent 5.2, where an edit replaces every option, and from 5.3.0, where
+// an option the edit leaves out is kept. To change only the save path, pass
+// the DownloadPath the category already has. Before WebAPI 2.11.10
+// (qBittorrent 5.1 and earlier), read it with GetCategoriesCtx, because
+// maindata can still hold a path the category no longer has.
+//
+// On qBittorrent 5.2 the edit also resets the category's share limits, which
+// 5.2 cannot set through the WebAPI. From 5.3.0 they are kept.
+func (c *Client) EditCategoryWithOptions(category string, opts CategoryOptions) error {
+	return c.EditCategoryWithOptionsCtx(context.Background(), category, opts)
+}
+
+// EditCategoryWithOptionsCtx sets the category's save path and download path
+// option to opts. See EditCategoryWithOptions.
+func (c *Client) EditCategoryWithOptionsCtx(ctx context.Context, category string, opts CategoryOptions) error {
+	if err := c.requireDownloadPathSupport(ctx, opts); err != nil {
+		return err
+	}
+	return c.editCategoryCtx(ctx, category, opts.form(category, true))
+}
+
+func (c *Client) editCategoryCtx(ctx context.Context, category string, opts map[string]string) error {
 	resp, err := c.postCtx(ctx, "torrents/editCategory", opts)
 	if err != nil {
 		return errors.Wrap(err, "could not edit category; category: %v", category)
@@ -915,7 +1493,7 @@ func (c *Client) EditCategoryCtx(ctx context.Context, category string, path stri
 		200 	All other scenarios
 	*/
 	switch resp.StatusCode {
-	case http.StatusOK:
+	case http.StatusOK, http.StatusNoContent:
 		return nil
 	case http.StatusBadRequest:
 		return errors.Wrap(ErrEmptyCategoryName, "category name: %s", category)
@@ -942,7 +1520,10 @@ func (c *Client) RemoveCategoriesCtx(ctx context.Context, categories []string) e
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not remove categories; categories: %v | status code: %d", opts["categories"], resp.StatusCode)
 	}
 
@@ -974,12 +1555,43 @@ func (c *Client) SetCategoryCtx(ctx context.Context, hashes []string, category s
 		200 	All other scenarios
 	*/
 	switch resp.StatusCode {
-	case http.StatusOK:
+	case http.StatusOK, http.StatusNoContent:
 		return nil
 	case http.StatusConflict:
 		return errors.Wrap(ErrCategoryDoesNotExist, "category name: %s", category)
 	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not set category; hashes: %v | cateogry: %s | status code: %d", hashes, category, resp.StatusCode)
+	}
+}
+
+// Requires qBittorrent 5.2 and WebAPI >= 2.12.1.
+func (c *Client) SetComment(hashes []string, comment string) error {
+	return c.SetCommentCtx(context.Background(), hashes, comment)
+}
+
+func (c *Client) SetCommentCtx(ctx context.Context, hashes []string, comment string) error {
+	if ok, err := c.RequiresMinVersionCtx(ctx, semver.MustParse("2.12.1")); !ok {
+		return errors.Wrap(err, "SetComment requires qBittorrent 5.2 and WebAPI >= 2.12.1")
+	}
+
+	hv := strings.Join(hashes, "|")
+	opts := map[string]string{
+		"hashes":  hv,
+		"comment": comment,
+	}
+
+	resp, err := c.postCtx(ctx, "torrents/setComment", opts)
+	if err != nil {
+		return errors.Wrap(err, "could not set comment; hashes: %v", hashes)
+	}
+
+	defer drainAndClose(resp)
+
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		return nil
+	default:
+		return errors.Wrap(ErrUnexpectedStatus, "could not set comment; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 }
 
@@ -994,6 +1606,10 @@ func (c *Client) GetCategoriesCtx(ctx context.Context) (map[string]Category, err
 	}
 
 	defer drainAndClose(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get categories; status code: %d", resp.StatusCode)
+	}
 
 	m := make(map[string]Category)
 	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
@@ -1017,6 +1633,15 @@ func (c *Client) GetFilesInformationCtx(ctx context.Context, hash string) (*Torr
 	}
 
 	defer drainAndClose(resp)
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+		break
+	case http.StatusNotFound:
+		return nil, errors.Wrap(ErrTorrentNotFound, "could not get files info; torrent hash not found: %s", hash)
+	default:
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get files info; torrent hash: %s, status code: %d", hash, resp.StatusCode)
+	}
 
 	var info TorrentFiles
 	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
@@ -1060,8 +1685,8 @@ func (c *Client) SetFilePriorityCtx(ctx context.Context, hash string, IDs string
 	case http.StatusNotFound:
 		return errors.Wrap(ErrTorrentNotFound, "hash: %s", hash)
 	case http.StatusConflict:
-		return ErrTorrentMetdataNotDownloadedYet
-	case http.StatusOK:
+		return ErrTorrentMetadataNotDownloadedYet
+	case http.StatusOK, http.StatusNoContent:
 		return nil
 	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not set file priority; hash: %v | priority: %d | status code: %d", hash, priority, resp.StatusCode)
@@ -1083,6 +1708,15 @@ func (c *Client) ExportTorrentCtx(ctx context.Context, hash string) ([]byte, err
 	}
 
 	defer drainAndClose(resp)
+
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	case http.StatusNotFound:
+		return nil, errors.Wrap(ErrTorrentNotFound, "could not get export; torrent hash not found: %v", hash)
+	default:
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get export; torrent hash: %v | status code: %d", hash, resp.StatusCode)
+	}
 
 	return io.ReadAll(resp.Body)
 }
@@ -1116,7 +1750,7 @@ func (c *Client) RenameFileCtx(ctx context.Context, hash, oldPath, newPath strin
 		return errors.Wrap(ErrMissingNewPathParameter, "newPath: %v", newPath)
 	case http.StatusConflict:
 		return errors.Wrap(ErrInvalidPathParameter, "oldPath: %v | newPath: %v", oldPath, newPath)
-	case http.StatusOK:
+	case http.StatusOK, http.StatusNoContent:
 		return nil
 	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not rename file; hash %v | oldPath: %v | newPath: %v | status code: %d", hash, oldPath, newPath, resp.StatusCode)
@@ -1148,7 +1782,7 @@ func (c *Client) RenameFolderCtx(ctx context.Context, hash, oldPath, newPath str
 		return errors.Wrap(ErrMissingNewPathParameter, "newPath: %v", newPath)
 	case http.StatusConflict:
 		return errors.Wrap(ErrInvalidPathParameter, "oldPath: %v | newPath: %v", oldPath, newPath)
-	case http.StatusOK:
+	case http.StatusOK, http.StatusNoContent:
 		return nil
 	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not rename folder; hash %v | oldPath: %v | newPath: %v | status code: %d", hash, oldPath, newPath, resp.StatusCode)
@@ -1175,7 +1809,7 @@ func (c *Client) SetTorrentNameCtx(ctx context.Context, hash string, name string
 	defer drainAndClose(resp)
 
 	switch sc := resp.StatusCode; sc {
-	case http.StatusOK:
+	case http.StatusOK, http.StatusNoContent:
 		return nil
 	case http.StatusNotFound:
 		return errors.Wrap(ErrInvalidTorrentHash, "torrent hash: %v", hash)
@@ -1197,6 +1831,10 @@ func (c *Client) GetTagsCtx(ctx context.Context) ([]string, error) {
 	}
 
 	defer drainAndClose(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get tags; status code: %d", resp.StatusCode)
+	}
 
 	var m []string
 	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
@@ -1221,7 +1859,10 @@ func (c *Client) CreateTagsCtx(ctx context.Context, tags []string) error {
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not create tags; tags: %v | status code: %d", strings.Join(tags, ","), resp.StatusCode)
 	}
 
@@ -1247,7 +1888,10 @@ func (c *Client) AddTagsCtx(ctx context.Context, hashes []string, tags string) e
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not add tags; hashes: %v | tags: %v | status code: %d", hashes, tags, resp.StatusCode)
 	}
 
@@ -1258,7 +1902,7 @@ func (c *Client) AddTagsCtx(ctx context.Context, hashes []string, tags string) e
 // For client instances with a lot of torrents, this will benefit a lot.
 // It checks for the required min version, and if it's less than the required version, it will error, and then the caller can handle it how they want.
 func (c *Client) SetTags(ctx context.Context, hashes []string, tags string) error {
-	if ok, err := c.RequiresMinVersion(semver.MustParse("2.11.4")); !ok {
+	if ok, err := c.RequiresMinVersionCtx(ctx, semver.MustParse("2.11.4")); !ok {
 		return errors.Wrap(err, "SetTags requires qBittorrent 5.1 and WebAPI >= 2.11.4")
 	}
 
@@ -1276,7 +1920,10 @@ func (c *Client) SetTags(ctx context.Context, hashes []string, tags string) erro
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not set tags; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
@@ -1303,7 +1950,10 @@ func (c *Client) DeleteTagsCtx(ctx context.Context, tags []string) error {
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not delete tags; tags: %s | status code: %d", t, resp.StatusCode)
 	}
 
@@ -1335,7 +1985,10 @@ func (c *Client) RemoveTagsCtx(ctx context.Context, hashes []string, tags string
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not remove tags; hashes: %v | tags: %s | status code: %d", hashes, tags, resp.StatusCode)
 	}
 
@@ -1372,7 +2025,7 @@ func (c *Client) RemoveTrackersCtx(ctx context.Context, hash string, urls string
 		return errors.Wrap(ErrTorrentNotFound, "torrent hash: %v", hash)
 	case http.StatusConflict:
 		return errors.Wrap(ErrAllURLsNotFound, "urls: %v", urls)
-	case http.StatusOK:
+	case http.StatusOK, http.StatusNoContent:
 		return nil
 	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not remove trackers; hash: %s | urls: %s | status code: %d", hash, urls, resp.StatusCode)
@@ -1387,8 +2040,10 @@ func (c *Client) EditTracker(hash string, old, new string) error {
 // EditTrackerCtx edit tracker of torrent
 func (c *Client) EditTrackerCtx(ctx context.Context, hash string, old, new string) error {
 	opts := map[string]string{
-		"hash":    hash,
+		"hash": hash,
+		// WebAPI 2.13.0 renamed origUrl to url; send both.
 		"origUrl": old,
+		"url":     old,
 		"newUrl":  new,
 	}
 
@@ -1414,7 +2069,7 @@ func (c *Client) EditTrackerCtx(ctx context.Context, hash string, old, new strin
 		return errors.Wrap(ErrTorrentNotFound, "torrent hash: %v", hash)
 	case http.StatusConflict:
 		return nil
-	case http.StatusOK:
+	case http.StatusOK, http.StatusNoContent:
 		return nil
 	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not edit tracker; hash: %s | old: %s | new: %s | status code: %d", hash, old, new, resp.StatusCode)
@@ -1448,7 +2103,7 @@ func (c *Client) AddTrackersCtx(ctx context.Context, hash string, urls string) e
 	switch resp.StatusCode {
 	case http.StatusNotFound:
 		return errors.Wrap(ErrTorrentNotFound, "torrent hash: %v", hash)
-	case http.StatusOK:
+	case http.StatusOK, http.StatusNoContent:
 		return nil
 	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not add trackers; hash: %s | urls: %s | status code: %d", hash, urls, resp.StatusCode)
@@ -1475,6 +2130,60 @@ func (c *Client) SetPreferencesMaxActiveUploads(max int) error {
 	return c.SetPreferences(map[string]interface{}{"max_active_uploads": max})
 }
 
+// SetPreferencesSubcategoriesEnabled enable/disable subcategories
+func (c *Client) SetPreferencesSubcategoriesEnabled(enabled bool) error {
+	return c.SetPreferences(map[string]interface{}{"use_subcategories": enabled})
+}
+
+// GetMonitoredFolders returns configured folders watched for torrent files.
+func (c *Client) GetMonitoredFolders() (MonitoredFolders, error) {
+	return c.GetMonitoredFoldersCtx(context.Background())
+}
+
+// GetMonitoredFoldersCtx returns configured folders watched for torrent files.
+func (c *Client) GetMonitoredFoldersCtx(ctx context.Context) (MonitoredFolders, error) {
+	prefs, err := c.GetAppPreferencesCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if prefs.ScanDirs == nil {
+		return MonitoredFolders{}, nil
+	}
+
+	return prefs.ScanDirs, nil
+}
+
+// SetMonitoredFolders updates folders watched for torrent files via app/setPreferences scan_dirs.
+func (c *Client) SetMonitoredFolders(scanDirs MonitoredFolders) error {
+	return c.SetMonitoredFoldersCtx(context.Background(), scanDirs)
+}
+
+// SetMonitoredFoldersCtx updates folders watched for torrent files via app/setPreferences scan_dirs.
+func (c *Client) SetMonitoredFoldersCtx(ctx context.Context, scanDirs MonitoredFolders) error {
+	return c.SetPreferencesCtx(ctx, map[string]interface{}{"scan_dirs": scanDirs})
+}
+
+// SetRSSAutoDownloadingEnabled enable/disable RSS auto-downloading
+func (c *Client) SetRSSAutoDownloadingEnabled(enabled bool) error {
+	return c.SetRSSAutoDownloadingEnabledCtx(context.Background(), enabled)
+}
+
+// SetRSSAutoDownloadingEnabledCtx enable/disable RSS auto-downloading
+func (c *Client) SetRSSAutoDownloadingEnabledCtx(ctx context.Context, enabled bool) error {
+	return c.SetPreferencesCtx(ctx, map[string]interface{}{"rss_auto_downloading_enabled": enabled})
+}
+
+// SetRSSProcessingEnabled enable/disable RSS processing
+func (c *Client) SetRSSProcessingEnabled(enabled bool) error {
+	return c.SetRSSProcessingEnabledCtx(context.Background(), enabled)
+}
+
+// SetRSSProcessingEnabledCtx enable/disable RSS processing
+func (c *Client) SetRSSProcessingEnabledCtx(ctx context.Context, enabled bool) error {
+	return c.SetPreferencesCtx(ctx, map[string]interface{}{"rss_processing_enabled": enabled})
+}
+
 // SetMaxPriority set torrents to max priority specified by hashes
 func (c *Client) SetMaxPriority(hashes []string) error {
 	return c.SetMaxPriorityCtx(context.Background(), hashes)
@@ -1496,9 +2205,12 @@ func (c *Client) SetMaxPriorityCtx(ctx context.Context, hashes []string) error {
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode == http.StatusConflict {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	case http.StatusConflict:
 		return errors.Wrap(ErrTorrentQueueingNotEnabled, "hashes: %v", hashes)
-	} else if resp.StatusCode != http.StatusOK {
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not set maximum priority; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
@@ -1526,9 +2238,12 @@ func (c *Client) SetMinPriorityCtx(ctx context.Context, hashes []string) error {
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode == http.StatusConflict {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	case http.StatusConflict:
 		return errors.Wrap(ErrTorrentQueueingNotEnabled, "hashes: %v", hashes)
-	} else if resp.StatusCode != http.StatusOK {
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not set minimum priority; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
@@ -1556,9 +2271,12 @@ func (c *Client) DecreasePriorityCtx(ctx context.Context, hashes []string) error
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode == http.StatusConflict {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	case http.StatusConflict:
 		return errors.Wrap(ErrTorrentQueueingNotEnabled, "hashes: %v", hashes)
-	} else if resp.StatusCode != http.StatusOK {
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not decrease priority; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
@@ -1586,9 +2304,12 @@ func (c *Client) IncreasePriorityCtx(ctx context.Context, hashes []string) error
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode == http.StatusConflict {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	case http.StatusConflict:
 		return errors.Wrap(ErrTorrentQueueingNotEnabled, "hashes: %v", hashes)
-	} else if resp.StatusCode != http.StatusOK {
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not increase priority; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
@@ -1615,7 +2336,10 @@ func (c *Client) ToggleFirstLastPiecePrioCtx(ctx context.Context, hashes []strin
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not toggle first/last piece priority; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
@@ -1636,7 +2360,10 @@ func (c *Client) ToggleAlternativeSpeedLimitsCtx(ctx context.Context) error {
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not stoggle alternative speed limits; status code: %d", resp.StatusCode)
 	}
 
@@ -1657,6 +2384,10 @@ func (c *Client) GetAlternativeSpeedLimitsModeCtx(ctx context.Context) (bool, er
 	}
 
 	defer drainAndClose(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return m, errors.Wrap(ErrUnexpectedStatus, "could not get alternative speed limits mode; status code: %d", resp.StatusCode)
+	}
 
 	var d int64
 	if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
@@ -1684,7 +2415,10 @@ func (c *Client) SetGlobalDownloadLimitCtx(ctx context.Context, limit int64) err
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not set global download limit; limit: %d | status code: %d", limit, resp.StatusCode)
 	}
 
@@ -1705,6 +2439,10 @@ func (c *Client) GetGlobalDownloadLimitCtx(ctx context.Context) (int64, error) {
 	}
 
 	defer drainAndClose(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return m, errors.Wrap(ErrUnexpectedStatus, "could not get global download limit; status code: %d", resp.StatusCode)
+	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
 		return m, errors.Wrap(err, "could not unmarshal body")
@@ -1730,7 +2468,10 @@ func (c *Client) SetGlobalUploadLimitCtx(ctx context.Context, limit int64) error
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not set global upload limit; limit %d | status code: %d", limit, resp.StatusCode)
 	}
 
@@ -1751,6 +2492,10 @@ func (c *Client) GetGlobalUploadLimitCtx(ctx context.Context) (int64, error) {
 	}
 
 	defer drainAndClose(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return m, errors.Wrap(ErrUnexpectedStatus, "could not get global upload limit; status code: %d", resp.StatusCode)
+	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
 		return m, errors.Wrap(err, "could not unmarshal body")
@@ -1881,7 +2626,10 @@ func (c *Client) SetTorrentDownloadLimitCtx(ctx context.Context, hashes []string
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not set download limit; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
@@ -1912,7 +2660,10 @@ func (c *Client) ToggleTorrentSequentialDownloadCtx(ctx context.Context, hashes 
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not toggle sequential download mode; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
@@ -1948,30 +2699,82 @@ func (c *Client) SetTorrentSuperSeedingCtx(ctx context.Context, hashes []string,
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not set super seeding mode; hashes: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
 	return nil
 }
 
-// SetTorrentShareLimit set share limits for torrents specified by hashes
-func (c *Client) SetTorrentShareLimit(hashes []string, ratioLimit float64, seedingTimeLimit int64, inactiveSeedingTimeLimit int64) error {
-	return c.SetTorrentShareLimitCtx(context.Background(), hashes, ratioLimit, seedingTimeLimit, inactiveSeedingTimeLimit)
+// ShareLimitOptions defines share limit settings for torrents.
+// ShareLimitAction requires WebAPI 2.12. ShareLimitsMode requires WebAPI 2.15.3.
+// From WebAPI 2.15.2, time limits use signed 32-bit minutes, at most 2147483647.
+// Use -2 for the global limit and -1 for no limit.
+//
+// ShareLimitAction and ShareLimitsMode must be Qt meta enum key names as used
+// by the WebUI (see Utils::String::toEnum in qBittorrent). Numeric strings such
+// as "0" are not recognized and are treated as Default by the server.
+type ShareLimitOptions struct {
+	RatioLimit               float64
+	SeedingTimeLimit         int64
+	InactiveSeedingTimeLimit int64
+	ShareLimitAction         string
+	ShareLimitsMode          string
 }
 
-// SetTorrentShareLimitCtx set share limits for torrents specified by hashes
-func (c *Client) SetTorrentShareLimitCtx(ctx context.Context, hashes []string, ratioLimit float64, seedingTimeLimit int64, inactiveSeedingTimeLimit int64) error {
-	opts := map[string]string{
-		"hashes":                   strings.Join(hashes, "|"),
-		"ratioLimit":               strconv.FormatFloat(ratioLimit, 'f', 2, 64),
-		"seedingTimeLimit":         strconv.FormatInt(seedingTimeLimit, 10),
-		"inactiveSeedingTimeLimit": strconv.FormatInt(inactiveSeedingTimeLimit, 10),
+// Share limit action names for SetTorrentShareLimit (BitTorrent::ShareLimitAction).
+const (
+	ShareLimitActionDefault            = "Default"
+	ShareLimitActionStop               = "Stop"
+	ShareLimitActionRemove             = "Remove"
+	ShareLimitActionEnableSuperSeeding = "EnableSuperSeeding"
+	ShareLimitActionRemoveWithContent  = "RemoveWithContent"
+)
+
+// Share limits mode names for SetTorrentShareLimit (BitTorrent::ShareLimitsMode).
+const (
+	ShareLimitsModeDefault  = "Default"
+	ShareLimitsModeMatchAny = "MatchAny"
+	ShareLimitsModeMatchAll = "MatchAll"
+)
+
+const (
+	shareLimitActionDefault = ShareLimitActionDefault
+	shareLimitsModeDefault  = ShareLimitsModeDefault
+)
+
+// SetTorrentShareLimit set share limits for torrents specified by hashes.
+func (c *Client) SetTorrentShareLimit(hashes []string, opts ShareLimitOptions) error {
+	return c.SetTorrentShareLimitCtx(context.Background(), hashes, opts)
+}
+
+// SetTorrentShareLimitCtx set share limits for torrents specified by hashes.
+func (c *Client) SetTorrentShareLimitCtx(ctx context.Context, hashes []string, opts ShareLimitOptions) error {
+	shareLimitAction := opts.ShareLimitAction
+	if shareLimitAction == "" {
+		shareLimitAction = shareLimitActionDefault
 	}
 
-	resp, err := c.postCtx(ctx, "torrents/setShareLimits", opts)
+	shareLimitsMode := opts.ShareLimitsMode
+	if shareLimitsMode == "" {
+		shareLimitsMode = shareLimitsModeDefault
+	}
+
+	form := map[string]string{
+		"hashes":                   strings.Join(hashes, "|"),
+		"ratioLimit":               strconv.FormatFloat(opts.RatioLimit, 'f', 2, 64),
+		"seedingTimeLimit":         strconv.FormatInt(opts.SeedingTimeLimit, 10),
+		"inactiveSeedingTimeLimit": strconv.FormatInt(opts.InactiveSeedingTimeLimit, 10),
+		"shareLimitAction":         shareLimitAction,
+		"shareLimitsMode":          shareLimitsMode,
+	}
+
+	resp, err := c.postCtx(ctx, "torrents/setShareLimits", form)
 	if err != nil {
-		return errors.Wrap(err, "could not set share limits; hashes: %v | ratioLimit: %v | seedingTimeLimit: %v | inactiveSeedingTimeLimit %v", hashes, ratioLimit, seedingTimeLimit, inactiveSeedingTimeLimit)
+		return errors.Wrap(err, "could not set share limits; hashes: %v | ratioLimit: %v | seedingTimeLimit: %v | inactiveSeedingTimeLimit %v | shareLimitAction: %v | shareLimitsMode: %v", hashes, opts.RatioLimit, opts.SeedingTimeLimit, opts.InactiveSeedingTimeLimit, shareLimitAction, shareLimitsMode)
 	}
 
 	defer drainAndClose(resp)
@@ -1982,15 +2785,13 @@ func (c *Client) SetTorrentShareLimitCtx(ctx context.Context, hashes []string, r
 		200 	All other scenarios
 	*/
 	switch sc := resp.StatusCode; sc {
-	case http.StatusOK:
+	case http.StatusOK, http.StatusNoContent:
 		return nil
 	case http.StatusBadRequest:
 		return ErrInvalidShareLimit
 	default:
-		errors.Wrap(ErrUnexpectedStatus, "could not set share limits; hashes: %v | ratioLimit: %v | seedingTimeLimit: %v | inactiveSeedingTimeLimit %v | status code: %d", hashes, ratioLimit, seedingTimeLimit, inactiveSeedingTimeLimit, resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not set share limits; hashes: %v | ratioLimit: %v | seedingTimeLimit: %v | inactiveSeedingTimeLimit %v | shareLimitAction: %v | shareLimitsMode: %v | status code: %d", hashes, opts.RatioLimit, opts.SeedingTimeLimit, opts.InactiveSeedingTimeLimit, shareLimitAction, shareLimitsMode, resp.StatusCode)
 	}
-
-	return nil
 }
 
 // SetTorrentUploadLimit set upload limit for torrent specified by hashes
@@ -2012,7 +2813,10 @@ func (c *Client) SetTorrentUploadLimitCtx(ctx context.Context, hashes []string, 
 
 	defer drainAndClose(resp)
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not set upload limit; hahses: %v | status code: %d", hashes, resp.StatusCode)
 	}
 
@@ -2030,6 +2834,13 @@ func (c *Client) GetAppVersionCtx(ctx context.Context) (string, error) {
 	}
 
 	defer drainAndClose(resp)
+
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	default:
+		return "", errors.Wrap(ErrUnexpectedStatus, "could not get app version; status code: %d", resp.StatusCode)
+	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -2094,7 +2905,7 @@ func (c *Client) SetAppCookiesCtx(ctx context.Context, cookies []Cookie) error {
 	switch resp.StatusCode {
 	case http.StatusBadRequest:
 		return ErrInvalidCookies
-	case http.StatusOK:
+	case http.StatusOK, http.StatusNoContent:
 		return nil
 	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not set app cookies; status code: %d", resp.StatusCode)
@@ -2189,7 +3000,7 @@ func (c *Client) AddPeersForTorrentsCtx(ctx context.Context, hashes, peers []str
 	switch resp.StatusCode {
 	case http.StatusBadRequest:
 		return errors.Wrap(ErrInvalidPeers, "hashes: %v, peers: %v", hashes, peers)
-	case http.StatusOK:
+	case http.StatusOK, http.StatusNoContent:
 		return nil
 	default:
 		return errors.Wrap(ErrUnexpectedStatus, "could not add peers; hashes %v | peers: %v | status code: %d", hashes, peers, resp.StatusCode)
@@ -2208,12 +3019,24 @@ func (c *Client) GetWebAPIVersionCtx(ctx context.Context) (string, error) {
 
 	defer drainAndClose(resp)
 
+	// HTTP Status Code 	Scenario
+	// 200 	All scenarios
+	// Non-200 response codes are expected when a reverse proxy is used in front of qBittorrent API.
+	if resp.StatusCode != http.StatusOK {
+		return "", errors.Wrap(ErrUnexpectedStatus, "could not get webapi version; status code: %d", resp.StatusCode)
+	}
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", errors.Wrap(err, "could not read body")
 	}
 
-	return string(body), nil
+	versionString := string(body)
+	if ver, err := semver.NewVersion(versionString); err == nil {
+		c.version.Store(ver)
+	}
+
+	return versionString, nil
 }
 
 // GetLogs get main client logs
@@ -2229,6 +3052,10 @@ func (c *Client) GetLogsCtx(ctx context.Context) ([]Log, error) {
 	}
 
 	defer drainAndClose(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get main client logs; status code: %d", resp.StatusCode)
+	}
 
 	var m []Log
 	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
@@ -2250,6 +3077,10 @@ func (c *Client) GetPeerLogsCtx(ctx context.Context) ([]PeerLog, error) {
 	}
 
 	defer drainAndClose(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get peer logs; status code: %d", resp.StatusCode)
+	}
 
 	var m []PeerLog
 	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
@@ -2274,7 +3105,13 @@ func (c *Client) GetFreeSpaceOnDiskCtx(ctx context.Context) (int64, error) {
 
 // RequiresMinVersion checks the current version against version X and errors if the current version is older than X
 func (c *Client) RequiresMinVersion(minVersion *semver.Version) (bool, error) {
-	version, err := c.getApiVersion()
+	return c.RequiresMinVersionCtx(context.Background(), minVersion)
+}
+
+// RequiresMinVersionCtx checks the current version against version X and errors if the current version is older than X.
+// ctx applies to the WebAPI version request when the client has no version in its cache.
+func (c *Client) RequiresMinVersionCtx(ctx context.Context, minVersion *semver.Version) (bool, error) {
+	version, err := c.getApiVersion(ctx)
 	if err != nil {
 		return false, errors.Wrap(err, "could not get api version")
 	}
@@ -2441,14 +3278,235 @@ func (c *Client) GetTorrentPeersCtx(ctx context.Context, hash string, rid int64)
 	return &peersResp, nil
 }
 
-// Check if status not working or something else
-// https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-4.1)#get-torrent-trackers
+// CreateTorrent creates a new torrent creation task
+func (c *Client) CreateTorrent(params TorrentCreationParams) (*TorrentCreationTaskResponse, error) {
+	return c.CreateTorrentCtx(context.Background(), params)
+}
+
+// CreateTorrentCtx creates a new torrent creation task with context
+// Requires qBittorrent v5.0.0+ (WebAPI v2.11.2+)
+func (c *Client) CreateTorrentCtx(ctx context.Context, params TorrentCreationParams) (*TorrentCreationTaskResponse, error) {
+	// Check version requirement
+	minVersion, _ := semver.NewVersion("2.11.2")
+	if _, err := c.RequiresMinVersionCtx(ctx, minVersion); err != nil {
+		return nil, err
+	}
+
+	opts := map[string]string{
+		"sourcePath": params.SourcePath,
+	}
+
+	if params.TorrentFilePath != "" {
+		opts["torrentFilePath"] = params.TorrentFilePath
+	}
+
+	if params.Private {
+		opts["private"] = "true"
+	}
+
+	if params.Format != "" {
+		opts["format"] = string(params.Format)
+	}
+
+	if params.OptimizeAlignment {
+		opts["optimizeAlignment"] = "true"
+	}
+
+	if params.PaddedFileSizeLimit > 0 {
+		opts["paddedFileSizeLimit"] = strconv.Itoa(params.PaddedFileSizeLimit)
+	}
+
+	if params.PieceSize > 0 {
+		opts["pieceSize"] = strconv.Itoa(params.PieceSize)
+	}
+
+	if params.Comment != "" {
+		opts["comment"] = params.Comment
+	}
+
+	if params.Source != "" {
+		opts["source"] = params.Source
+	}
+
+	if len(params.Trackers) > 0 {
+		opts["trackers"] = strings.Join(params.Trackers, "|")
+	}
+
+	if len(params.URLSeeds) > 0 {
+		opts["urlSeeds"] = strings.Join(params.URLSeeds, "|")
+	}
+
+	if params.StartSeeding != nil {
+		if *params.StartSeeding {
+			opts["startSeeding"] = "true"
+		} else {
+			opts["startSeeding"] = "false"
+		}
+	} else {
+		opts["startSeeding"] = "true"
+	}
+
+	resp, err := c.postCtx(ctx, "torrentcreator/addTask", opts)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not create torrent task")
+	}
+
+	defer drainAndClose(resp)
+
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		break
+	case http.StatusConflict:
+		return nil, ErrTorrentCreationTooManyActiveTasks
+	default:
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not create torrent task; status code: %d", resp.StatusCode)
+	}
+
+	var taskResp TorrentCreationTaskResponse
+	if err = json.NewDecoder(resp.Body).Decode(&taskResp); err != nil {
+		return nil, errors.Wrap(err, "could not decode response")
+	}
+
+	return &taskResp, nil
+}
+
+// GetTorrentCreationStatus retrieves the status of torrent creation tasks
+// If taskID is empty, returns all tasks
+func (c *Client) GetTorrentCreationStatus(taskID string) ([]TorrentCreationTask, error) {
+	return c.GetTorrentCreationStatusCtx(context.Background(), taskID)
+}
+
+// GetTorrentCreationStatusCtx retrieves the status of torrent creation tasks with context
+// If taskID is empty, returns all tasks
+// Requires qBittorrent v5.0.0+ (WebAPI v2.11.2+)
+func (c *Client) GetTorrentCreationStatusCtx(ctx context.Context, taskID string) ([]TorrentCreationTask, error) {
+	// Check version requirement
+	minVersion, _ := semver.NewVersion("2.11.2")
+	if _, err := c.RequiresMinVersionCtx(ctx, minVersion); err != nil {
+		return nil, err
+	}
+
+	opts := map[string]string{}
+	if taskID != "" {
+		opts["taskID"] = taskID
+	}
+
+	resp, err := c.getCtx(ctx, "torrentcreator/status", opts)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get torrent creation status")
+	}
+
+	defer drainAndClose(resp)
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+		break
+	case http.StatusNotFound:
+		return nil, ErrTorrentCreationTaskNotFound
+	default:
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get torrent creation status; status code: %d", resp.StatusCode)
+	}
+
+	var tasks []TorrentCreationTask
+	if err = json.NewDecoder(resp.Body).Decode(&tasks); err != nil {
+		return nil, errors.Wrap(err, "could not decode response")
+	}
+
+	return tasks, nil
+}
+
+// GetTorrentFile downloads the torrent file for a completed torrent creation task
+func (c *Client) GetTorrentFile(taskID string) ([]byte, error) {
+	return c.GetTorrentFileCtx(context.Background(), taskID)
+}
+
+// GetTorrentFileCtx downloads the torrent file for a completed torrent creation task with context
+// Requires qBittorrent v5.0.0+ (WebAPI v2.11.2+)
+func (c *Client) GetTorrentFileCtx(ctx context.Context, taskID string) ([]byte, error) {
+	// Check version requirement
+	minVersion, _ := semver.NewVersion("2.11.2")
+	if _, err := c.RequiresMinVersionCtx(ctx, minVersion); err != nil {
+		return nil, err
+	}
+
+	opts := map[string]string{
+		"taskID": taskID,
+	}
+
+	resp, err := c.getCtx(ctx, "torrentcreator/torrentFile", opts)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get torrent file; taskID: %s", taskID)
+	}
+
+	defer drainAndClose(resp)
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+		break
+	case http.StatusNotFound:
+		return nil, ErrTorrentCreationTaskNotFound
+	case http.StatusConflict:
+		// Check if unfinished or failed based on response body
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		bodyString := string(bodyBytes)
+		if strings.Contains(bodyString, "unfinished") {
+			return nil, ErrTorrentCreationUnfinished
+		}
+		if strings.Contains(bodyString, "failed") {
+			return nil, ErrTorrentCreationFailed
+		}
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get torrent file; taskID: %s, status code: %d", taskID, resp.StatusCode)
+	default:
+		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get torrent file; taskID: %s, status code: %d", taskID, resp.StatusCode)
+	}
+
+	torrentData, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not read torrent file data")
+	}
+
+	return torrentData, nil
+}
+
+// DeleteTorrentCreationTask deletes a torrent creation task
+func (c *Client) DeleteTorrentCreationTask(taskID string) error {
+	return c.DeleteTorrentCreationTaskCtx(context.Background(), taskID)
+}
+
+// DeleteTorrentCreationTaskCtx deletes a torrent creation task with context
+// Requires qBittorrent v5.0.0+ (WebAPI v2.11.2+)
+func (c *Client) DeleteTorrentCreationTaskCtx(ctx context.Context, taskID string) error {
+	// Check version requirement
+	minVersion, _ := semver.NewVersion("2.11.2")
+	if _, err := c.RequiresMinVersionCtx(ctx, minVersion); err != nil {
+		return err
+	}
+
+	opts := map[string]string{
+		"taskID": taskID,
+	}
+
+	resp, err := c.postCtx(ctx, "torrentcreator/deleteTask", opts)
+	if err != nil {
+		return errors.Wrap(err, "could not delete torrent creation task; taskID: %s", taskID)
+	}
+
+	defer drainAndClose(resp)
+
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		return nil
+	case http.StatusNotFound:
+		return ErrTorrentCreationTaskNotFound
+	default:
+		return errors.Wrap(ErrUnexpectedStatus, "could not delete torrent creation task; taskID: %s, status code: %d", taskID, resp.StatusCode)
+	}
+}
+
+// Check if at least one non-disabled tracker reports status OK (2). Status values are
+// TrackerStatus* in domain.go (inline comments on 4-6 describe how they differ).
 //
-//	0 Tracker is disabled (used for DHT, PeX, and LSD)
-//	1 Tracker has not been contacted yet
-//	2 Tracker has been contacted and is working
-//	3 Tracker is updating
-//	4 Tracker has been contacted, but it is not working (or doesn't send proper replies)
+// https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-4.1)#get-torrent-trackers
 func isTrackerStatusOK(trackers []TorrentTracker) bool {
 	for _, tracker := range trackers {
 		if tracker.Status == TrackerStatusDisabled {

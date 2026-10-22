@@ -18,3 +18,4 @@ eb/build
 bin/
 log/
 dist/
+.env

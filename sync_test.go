@@ -5,8 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 	"net/http/cookiejar"
+	"net/http/httptest"
+	"reflect"
+	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -48,6 +53,13 @@ func (m *mockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 	}, nil
 }
 
+// roundTripFunc adapts a function into an http.RoundTripper so a test can drive
+// a real Client's request path (login skipped via API key auth) to a
+// deterministic success or failure without touching the network.
+type roundTripFunc func(req *http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
+
 func NewMockClient() *MockClient {
 	// Create a mock transport that returns mock responses
 	mockTransport := &mockRoundTripper{}
@@ -59,6 +71,10 @@ func NewMockClient() *MockClient {
 			Transport: mockTransport,
 			Jar:       jar,
 		},
+		// A literal Client skips the NewClient defaults that retryDo needs.
+		log:           log.New(io.Discard, "", 0),
+		timeout:       DefaultTimeout,
+		retryAttempts: 1,
 	}
 
 	mock := &MockClient{
@@ -140,7 +156,6 @@ func createMockSyncManager() (*SyncManager, *MockClient) {
 		client:  mockClient.Client,
 		options: DefaultSyncOptions(),
 	}
-	sm.syncCond = sync.NewCond(&sm.syncMu)
 
 	return sm, mockClient
 }
@@ -209,6 +224,8 @@ func TestSyncManager_GetDataWhenEmpty(t *testing.T) {
 
 func TestSyncManager_InitializeData(t *testing.T) {
 	syncManager, _ := createMockSyncManager()
+	// Disable dynamic sync for this test to prevent automatic syncing
+	syncManager.options.DynamicSync = false
 
 	// Manually initialize data to test getter methods
 	syncManager.data = &MainData{
@@ -241,6 +258,8 @@ func TestSyncManager_InitializeData(t *testing.T) {
 			UpInfoSpeed:      50000,
 		},
 	}
+
+	syncManager.updateAllTorrents()
 
 	// Test GetData returns a copy
 	data := syncManager.GetData()
@@ -341,13 +360,14 @@ func TestMergeTorrents(t *testing.T) {
 
 	// Add an existing torrent
 	existing := Torrent{
-		Hash:     "abc123",
-		Name:     "Test Torrent",
-		Progress: 0.5,
-		DlSpeed:  1000,
-		UpSpeed:  500,
-		State:    "downloading",
-		Category: "test",
+		Hash:        "abc123",
+		HasMetadata: ptr(true),
+		Name:        "Test Torrent",
+		Progress:    0.5,
+		DlSpeed:     1000,
+		UpSpeed:     500,
+		State:       "downloading",
+		Category:    "test",
 	}
 	sm.data.Torrents["abc123"] = existing
 
@@ -355,9 +375,10 @@ func TestMergeTorrents(t *testing.T) {
 	rawData := map[string]interface{}{
 		"torrents": map[string]interface{}{
 			"abc123": map[string]interface{}{
-				"progress": 0.75,
-				"dlspeed":  float64(1500),
-				"state":    "downloading",
+				"progress":     0.75,
+				"dlspeed":      float64(1500),
+				"state":        "downloading",
+				"has_metadata": false,
 				// Note: upspeed, category, etc. are NOT present in this update
 			},
 		},
@@ -394,6 +415,9 @@ func TestMergeTorrents(t *testing.T) {
 
 	if merged.Category != "test" {
 		t.Errorf("Expected category preserved, got %s", merged.Category)
+	}
+	if merged.HasMetadata == nil || *merged.HasMetadata {
+		t.Fatalf("Expected has_metadata false, got %v", merged.HasMetadata)
 	}
 }
 
@@ -623,6 +647,27 @@ func TestSyncManager_CopyMainData(t *testing.T) {
 	copy.Tags = append(copy.Tags, "new_tag")
 	if len(original.Tags) != 2 {
 		t.Error("Modifying copy tags affected original")
+	}
+}
+
+func TestSyncManager_GetTrackersUnchecked(t *testing.T) {
+	sm := &SyncManager{}
+
+	if trackers := sm.GetTrackersUnchecked(); trackers != nil {
+		t.Error("Expected nil trackers when not initialized")
+	}
+
+	sm.data = &MainData{
+		Trackers: map[string][]string{
+			"http://tracker.example.invalid/announce": {"abc123"},
+		},
+	}
+
+	// Mutating the result must not reach sm.data, which the sync loop writes.
+	trackers := sm.GetTrackersUnchecked()
+	trackers["http://other.example.invalid/announce"] = []string{"def456"}
+	if len(sm.data.Trackers) != 1 {
+		t.Error("Modifying returned map affected cached data")
 	}
 }
 
@@ -870,6 +915,72 @@ func TestSyncManager_LastError(t *testing.T) {
 	err = syncManager.LastError()
 	if err != context.DeadlineExceeded {
 		t.Errorf("Expected DeadlineExceeded, got %v", err)
+	}
+}
+
+// newSyncManagerWithTransport builds a SyncManager whose client uses API key
+// auth (so the request path skips login) and a single attempt (so a failing
+// request returns immediately instead of retrying), with its transport driven
+// by rt. This lets the tests exercise the real doSync path deterministically.
+func newSyncManagerWithTransport(rt roundTripFunc) *SyncManager {
+	client := NewClient(Config{Host: "http://qbit.test", APIKey: "test-key", RetryAttempts: 1})
+	client.http.Transport = rt
+	return NewSyncManager(client)
+}
+
+func TestSyncManager_LastSuccessfulSyncTimeAdvancesOnSuccess(t *testing.T) {
+	body := []byte(`{"rid":1,"full_update":true,"torrents":{},"categories":{},"tags":[],"server_state":{}}`)
+	sm := newSyncManagerWithTransport(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewReader(body)),
+			Header:     make(http.Header),
+		}, nil
+	})
+
+	before := time.Now()
+	if err := sm.Sync(context.Background()); err != nil {
+		t.Fatalf("expected a successful sync, got error: %v", err)
+	}
+
+	if got := sm.LastSuccessfulSyncTime(); got.Before(before) {
+		t.Errorf("LastSuccessfulSyncTime should advance on a successful sync: got %v, before %v", got, before)
+	}
+	if err := sm.LastError(); err != nil {
+		t.Errorf("expected no LastError after a successful sync, got %v", err)
+	}
+}
+
+// TestSyncManager_LastSuccessfulSyncTimeUnchangedOnFailure is the regression
+// guard for the bug this change fixes: lastSync is stamped on every attempt, so
+// a failed sync makes LastSyncTime() report "fresh" even though the cached data
+// did not update. LastSuccessfulSyncTime() must stay put across a failed sync so
+// callers can derive an honest data age.
+func TestSyncManager_LastSuccessfulSyncTimeUnchangedOnFailure(t *testing.T) {
+	sm := newSyncManagerWithTransport(func(req *http.Request) (*http.Response, error) {
+		return nil, context.DeadlineExceeded
+	})
+
+	// Seed a prior successful sync at a clearly-old time.
+	priorSuccess := time.Now().Add(-time.Hour)
+	sm.lastSync = priorSuccess
+	sm.lastSuccessfulSync = priorSuccess
+
+	if err := sm.Sync(context.Background()); err == nil {
+		t.Fatal("expected the sync to fail")
+	}
+
+	if sm.LastError() == nil {
+		t.Error("expected LastError to be set after a failed sync")
+	}
+	// The attempt clock still advances; that is existing behavior we preserve.
+	if !sm.LastSyncTime().After(priorSuccess) {
+		t.Error("LastSyncTime (last attempted sync) should advance on a failed sync")
+	}
+	// The success clock must not move: this is the actual fix.
+	if !sm.LastSuccessfulSyncTime().Equal(priorSuccess) {
+		t.Errorf("LastSuccessfulSyncTime must not advance on a failed sync: got %v, want %v",
+			sm.LastSuccessfulSyncTime(), priorSuccess)
 	}
 }
 
@@ -1522,5 +1633,555 @@ func TestPeerSyncManager_ZeroSyncInterval(t *testing.T) {
 
 	if psm.options.SyncInterval != 5*time.Second {
 		t.Errorf("Expected SyncInterval to default to 5s when zero, got %v", psm.options.SyncInterval)
+	}
+}
+
+// TestSyncManager_ReadersNotBlockedDuringSlowSync is the regression test for
+// holding the SyncManager mutex across the maindata network round-trip: with a
+// slow qBittorrent, every getter (including the *Unchecked ones) parked behind
+// the in-flight request for its full duration, so one saturated instance
+// stalled every consumer reading through the manager.
+func TestSyncManager_ReadersNotBlockedDuringSlowSync(t *testing.T) {
+	release := make(chan struct{})
+	fetchStarted := make(chan struct{})
+	var startedOnce sync.Once
+
+	body := []byte(`{"rid":2,"full_update":true,"torrents":{},"categories":{},"tags":[],"server_state":{}}`)
+	sm := newSyncManagerWithTransport(func(req *http.Request) (*http.Response, error) {
+		startedOnce.Do(func() { close(fetchStarted) })
+		<-release // a saturated instance: the request parks until released
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewReader(body)),
+			Header:     make(http.Header),
+		}, nil
+	})
+
+	// Seed cached data so readers have something to return while the sync is in flight.
+	sm.data = &MainData{Rid: 1, Torrents: map[string]Torrent{"abc": {Hash: "abc"}}}
+	sm.updateAllTorrents()
+
+	syncDone := make(chan error, 1)
+	go func() { syncDone <- sm.Sync(context.Background()) }()
+	<-fetchStarted
+
+	readersDone := make(chan struct{})
+	go func() {
+		defer close(readersDone)
+		if got := sm.GetTorrentsUnchecked(TorrentFilterOptions{}); len(got) != 1 {
+			t.Errorf("expected the cached torrent while the sync is in flight, got %d", len(got))
+		}
+		if data := sm.GetDataUnchecked(); data == nil || data.Rid != 1 {
+			t.Error("expected the cached MainData while the sync is in flight")
+		}
+		_ = sm.LastSuccessfulSyncTime()
+	}()
+
+	select {
+	case <-readersDone:
+		// Readers returned while the network round-trip was still parked: the
+		// mutex is no longer held across the fetch.
+	case <-time.After(2 * time.Second):
+		t.Fatal("readers blocked behind an in-flight sync network round-trip")
+	}
+
+	close(release)
+	if err := <-syncDone; err != nil {
+		t.Fatalf("expected the released sync to succeed, got %v", err)
+	}
+	if data := sm.GetDataUnchecked(); data == nil || data.Rid != 2 {
+		t.Error("expected the merged sync result after release")
+	}
+}
+
+// TestSyncManager_CallbacksMayReenterSyncManager guards the callback locking
+// contract: OnUpdate and OnError run outside the manager's mutex, so a
+// callback may read back from the manager (LastSuccessfulSyncTime, getters)
+// without self-deadlocking on the non-reentrant RWMutex.
+func TestSyncManager_CallbacksMayReenterSyncManager(t *testing.T) {
+	successBody := `{"rid":1,"full_update":true,"torrents":{},"categories":{},"tags":[],"server_state":{}}`
+	var calls int
+	client := NewClient(Config{Host: "http://qbit.test", APIKey: "test-key", RetryAttempts: 1})
+	client.http.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		calls++
+		if calls == 1 {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewReader([]byte(successBody))),
+				Header:     make(http.Header),
+			}, nil
+		}
+		return nil, context.DeadlineExceeded
+	})
+
+	var sm *SyncManager
+	reentered := make(chan string, 2)
+	opts := DefaultSyncOptions()
+	opts.OnUpdate = func(*MainData) {
+		_ = sm.LastSuccessfulSyncTime() // re-enters the manager's mutex
+		_ = sm.GetTorrentsUnchecked(TorrentFilterOptions{})
+		reentered <- "update"
+	}
+	opts.OnError = func(error) {
+		_ = sm.LastError() // re-enters the manager's mutex
+		reentered <- "error"
+	}
+	sm = NewSyncManager(client, opts)
+
+	runSync := func(wantErr bool) {
+		t.Helper()
+		errCh := make(chan error, 1)
+		go func() { errCh <- sm.Sync(context.Background()) }()
+		select {
+		case err := <-errCh:
+			if wantErr && err == nil {
+				t.Fatal("expected the sync to fail")
+			}
+			if !wantErr && err != nil {
+				t.Fatalf("expected the sync to succeed, got %v", err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("Sync deadlocked: a callback re-entered the mutex while doSync held it")
+		}
+	}
+
+	runSync(false)
+	runSync(true)
+
+	if got := len(reentered); got != 2 {
+		t.Fatalf("expected both callbacks to have run and re-entered safely, got %d", got)
+	}
+	if first := <-reentered; first != "update" {
+		t.Errorf("expected OnUpdate to fire for the successful sync first, got %q", first)
+	}
+	if second := <-reentered; second != "error" {
+		t.Errorf("expected OnError to fire for the failed sync, got %q", second)
+	}
+}
+
+// TestSyncManager_FailedFirstSyncStillInitializesData pins failure-state
+// parity: even when the first sync fails, sm.data must be initialized so
+// (a) GetDataUnchecked returns an empty MainData rather than nil, and
+// (b) ensureFreshData paces retries by staleness instead of treating every
+// checked-getter call as a cold cache that fires an unpaced blocking sync.
+func TestSyncManager_FailedFirstSyncStillInitializesData(t *testing.T) {
+	var calls int
+	sm := newSyncManagerWithTransport(func(req *http.Request) (*http.Response, error) {
+		calls++
+		return nil, context.DeadlineExceeded
+	})
+
+	if err := sm.Sync(context.Background()); err == nil {
+		t.Fatal("expected the first sync to fail")
+	}
+
+	if data := sm.GetDataUnchecked(); data == nil {
+		t.Fatal("expected empty MainData after a failed first sync, got nil")
+	}
+
+	// Within the stale threshold (SyncInterval, default 2s) checked getters
+	// must serve the cached-empty state without firing another network sync.
+	callsAfterFailure := calls
+	_ = sm.GetTorrents(TorrentFilterOptions{})
+	_ = sm.GetData()
+	if calls != callsAfterFailure {
+		t.Fatalf("checked getters fired %d unpaced sync(s) right after a failed sync", calls-callsAfterFailure)
+	}
+}
+
+// newLostResponseClient returns a client for a fake sync endpoint. The first
+// request gets rid 5 and two torrents. The response to the second request
+// breaks off. Each later request gets a full update
+// with one torrent. The returned function gives the rid of each request.
+func newLostResponseClient(t *testing.T) (*Client, func() []string) {
+	t.Helper()
+	var (
+		mu   sync.Mutex
+		rids []string
+	)
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v2/sync/maindata", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		rids = append(rids, r.URL.Query().Get("rid"))
+		call := len(rids)
+		mu.Unlock()
+
+		switch call {
+		case 1:
+			_, _ = io.WriteString(w, `{"rid":5,"full_update":true,"torrents":{"abc":{"hash":"abc","progress":0.5},"def":{"hash":"def","progress":1}},"categories":{},"tags":[],"server_state":{}}`)
+		case 2:
+			// The response breaks off. A drop before the headers would make
+			// the transport send the GET again on a new connection.
+			w.Header().Set("Content-Length", "100")
+			_, _ = io.WriteString(w, `{"rid":`)
+			_ = http.NewResponseController(w).Flush()
+			panic(http.ErrAbortHandler)
+		default:
+			_, _ = io.WriteString(w, `{"rid":1,"full_update":true,"torrents":{"abc":{"hash":"abc","progress":1}},"categories":{},"tags":[],"server_state":{}}`)
+		}
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	client := NewClient(Config{Host: server.URL, APIKey: "test-key", RetryAttempts: 1})
+	return client, func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.Clone(rids)
+	}
+}
+
+// TestSyncManager_FailedSyncRequestsFullUpdate checks the rid reset after a
+// failed sync. qBittorrent before 5.3.0rc1 can drop changes when a client
+// sends a rid again after it lost the response for that rid. A full update
+// brings back every value that the lost response carried.
+func TestSyncManager_FailedSyncRequestsFullUpdate(t *testing.T) {
+	client, rids := newLostResponseClient(t)
+	sm := NewSyncManager(client)
+
+	if err := sm.Sync(t.Context()); err != nil {
+		t.Fatalf("first sync: %v", err)
+	}
+
+	if err := sm.Sync(t.Context()); err == nil {
+		t.Fatal("expected the second sync to fail")
+	}
+	if got := len(sm.GetTorrentsUnchecked(TorrentFilterOptions{})); got != 2 {
+		t.Fatalf("expected the cached torrents after the failed sync, got %d", got)
+	}
+
+	if err := sm.Sync(t.Context()); err != nil {
+		t.Fatalf("third sync: %v", err)
+	}
+
+	if want, got := []string{"0", "5", "0"}, rids(); !slices.Equal(got, want) {
+		t.Fatalf("expected rids %v, got %v", want, got)
+	}
+
+	torrents := sm.GetTorrentsUnchecked(TorrentFilterOptions{})
+	if len(torrents) != 1 || torrents[0].Hash != "abc" || torrents[0].Progress != 1 {
+		t.Fatalf("expected the full update to replace the cached torrents, got %+v", torrents)
+	}
+}
+
+// TestSyncManager_ShortCallerDoesNotCancelFullUpdate checks that a caller with a
+// short deadline stops waiting at that deadline, but the full update goes on and
+// lands for the next caller. If the short caller cancelled it, each later sync
+// would ask for a full update again.
+func TestSyncManager_ShortCallerDoesNotCancelFullUpdate(t *testing.T) {
+	var (
+		mu   sync.Mutex
+		rids []string
+	)
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v2/sync/maindata", func(w http.ResponseWriter, r *http.Request) {
+		rid := r.URL.Query().Get("rid")
+		mu.Lock()
+		rids = append(rids, rid)
+		mu.Unlock()
+
+		if rid != "0" {
+			_, _ = io.WriteString(w, `{"rid":6}`)
+			return
+		}
+		select {
+		case <-r.Context().Done():
+			return
+		case <-time.After(300 * time.Millisecond):
+		}
+		_, _ = io.WriteString(w, `{"rid":5,"full_update":true,"torrents":{"abc":{"hash":"abc"}},"categories":{},"tags":[],"server_state":{}}`)
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	sm := NewSyncManager(NewClient(Config{Host: server.URL, APIKey: "test-key", RetryAttempts: 1}))
+
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	if err := sm.Sync(ctx); err == nil {
+		t.Fatal("expected the short caller to stop at its deadline")
+	}
+	if elapsed := time.Since(start); elapsed > 200*time.Millisecond {
+		t.Fatalf("expected the short caller to return at its deadline, took %v", elapsed)
+	}
+
+	// This call joins the full update that is still in flight.
+	if err := sm.Sync(t.Context()); err != nil {
+		t.Fatalf("second sync: %v", err)
+	}
+	if err := sm.Sync(t.Context()); err != nil {
+		t.Fatalf("third sync: %v", err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if want := []string{"0", "5"}; !slices.Equal(rids, want) {
+		t.Fatalf("expected rids %v, got %v", want, rids)
+	}
+}
+
+// TestSyncManager_CallbackPanicReachesCaller checks that a panic in OnUpdate
+// comes back to the caller of Sync, where the caller can recover it.
+func TestSyncManager_CallbackPanicReachesCaller(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v2/sync/maindata", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, `{"rid":5,"full_update":true,"torrents":{},"categories":{},"tags":[],"server_state":{}}`)
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	options := DefaultSyncOptions()
+	options.OnUpdate = func(*MainData) { panic("callback failed") }
+	sm := NewSyncManager(NewClient(Config{Host: server.URL, APIKey: "test-key", RetryAttempts: 1}), options)
+
+	recovered := func() (r any) {
+		defer func() { r = recover() }()
+		_ = sm.Sync(t.Context())
+		return nil
+	}()
+	if recovered == nil {
+		t.Fatal("expected the callback panic to reach the caller of Sync")
+	}
+}
+
+// TestSyncManager_FullUpdateUsesCustomHTTPClientTimeout checks that a full
+// update gets the timeout of a client set with WithHTTPClient, not the timeout
+// from Config.
+func TestSyncManager_FullUpdateUsesCustomHTTPClientTimeout(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v2/sync/maindata", func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-time.After(1500 * time.Millisecond):
+		}
+		_, _ = io.WriteString(w, `{"rid":5,"full_update":true,"torrents":{},"categories":{},"tags":[],"server_state":{}}`)
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	client := NewClient(Config{Host: server.URL, APIKey: "test-key", RetryAttempts: 1, Timeout: 1}).
+		WithHTTPClient(&http.Client{Timeout: 5 * time.Second})
+	if err := NewSyncManager(client).Sync(t.Context()); err != nil {
+		t.Fatalf("expected the full update to get the 5 s timeout of the custom client: %v", err)
+	}
+}
+
+// TestMainData_FailedUpdateRequestsFullUpdate checks the same rid reset for
+// callers that keep their own MainData.
+func TestMainData_FailedUpdateRequestsFullUpdate(t *testing.T) {
+	client, rids := newLostResponseClient(t)
+	var data MainData
+
+	if err := data.Update(t.Context(), client); err != nil {
+		t.Fatalf("first update: %v", err)
+	}
+
+	if err := data.Update(t.Context(), client); err == nil {
+		t.Fatal("expected the second update to fail")
+	}
+	if got := len(data.Torrents); got != 2 {
+		t.Fatalf("expected the torrents after the failed update, got %d", got)
+	}
+
+	if err := data.Update(t.Context(), client); err != nil {
+		t.Fatalf("third update: %v", err)
+	}
+
+	if want, got := []string{"0", "5", "0"}, rids(); !slices.Equal(got, want) {
+		t.Fatalf("expected rids %v, got %v", want, got)
+	}
+	if torrent, ok := data.Torrents["abc"]; len(data.Torrents) != 1 || !ok || torrent.Progress != 1 {
+		t.Fatalf("expected the full update to replace the torrents, got %+v", data.Torrents)
+	}
+}
+
+// TestSyncManager_GetTorrentsByHashMatchesScan checks that a filter by hash
+// gives the same torrents in the same order as a scan of the whole library.
+func TestSyncManager_GetTorrentsByHashMatchesScan(t *testing.T) {
+	t.Parallel()
+
+	sm, hashes := newLibrarySyncManager(60)
+	scan := func(options TorrentFilterOptions) []Torrent {
+		matched := []Torrent{}
+		for _, torrent := range sm.allTorrents {
+			if (len(options.Hashes) == 0 || slices.Contains(options.Hashes, torrent.Hash)) && matchesTorrentFilter(torrent, options) {
+				matched = append(matched, torrent)
+			}
+		}
+		return slices.Clone(applyTorrentFilterOptions(matched, options))
+	}
+
+	reversed := slices.Clone(hashes)
+	slices.Reverse(reversed)
+	hashSets := map[string][]string{
+		"none":                nil,
+		"one":                 {hashes[7]},
+		"missing":             {"0000000000000000000000000000000000000bad"},
+		"upper case":          {strings.ToUpper(hashes[10])},
+		"duplicates":          {hashes[3], hashes[3], hashes[9], hashes[3]},
+		"present and missing": {hashes[20], "missing", hashes[2], hashes[41]},
+		"all reversed":        reversed,
+		"all twice":           append(slices.Clone(hashes), reversed...),
+	}
+	filters := []TorrentFilterOptions{
+		{},
+		{Category: "movies"},
+		{Tag: "a"},
+		{Filter: TorrentFilterCompleted},
+		{Category: "tv", Tag: "b", Filter: TorrentFilterAll},
+	}
+	sorts := []string{"", "name", "size", "added_on"}
+	pages := [][2]int{{0, 0}, {0, 3}, {2, 0}, {2, 3}, {1000, 0}}
+
+	for name, hashSet := range hashSets {
+		for _, filter := range filters {
+			for _, sortField := range sorts {
+				for _, reverse := range []bool{false, true} {
+					for _, page := range pages {
+						options := filter
+						options.Hashes = hashSet
+						options.Sort = sortField
+						options.Reverse = reverse
+						options.Offset, options.Limit = page[0], page[1]
+
+						got := sm.GetTorrentsUnchecked(options)
+						if want := scan(options); !reflect.DeepEqual(got, want) {
+							t.Fatalf("hashes %q, options %+v: got %d torrents, want %d", name, options, len(got), len(want))
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+// applyMainDataJSON merges one sync/maindata response body into dest, as
+// MainData.Update does after the fetch.
+func applyMainDataJSON(t *testing.T, dest *MainData, body string) {
+	t.Helper()
+	var source MainData
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(body), &source); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(body), &raw); err != nil {
+		t.Fatal(err)
+	}
+	normalizeHashesRaw(raw)
+	dest.applySync(&source, raw)
+}
+
+func TestSyncManager_NoChangeSkipsOnUpdate(t *testing.T) {
+	bodies := []string{
+		`{"rid":1,"full_update":true,"torrents":{"a":{"name":"a"}},"categories":{},"tags":[],"server_state":{"dl_info_speed":1}}`,
+		`{"rid":2}`,
+		`{"rid":3,"server_state":{"dl_info_speed":2}}`,
+	}
+	call := 0
+	sm := newSyncManagerWithTransport(func(req *http.Request) (*http.Response, error) {
+		body := bodies[call]
+		call++
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
+	})
+	var rids []int64
+	sm.options.OnUpdate = func(data *MainData) { rids = append(rids, data.Rid) }
+
+	for range bodies {
+		if err := sm.Sync(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if !slices.Equal(rids, []int64{1, 3}) {
+		t.Fatalf("OnUpdate got rids %v, want [1 3]", rids)
+	}
+	if data := sm.GetDataUnchecked(); data.FullUpdate || data.Rid != 3 {
+		t.Fatalf("got rid %d, full update %v; want rid 3, no full update", data.Rid, data.FullUpdate)
+	}
+}
+
+func TestMainData_Changes(t *testing.T) {
+	const full = `{"rid":1,"full_update":true,"torrents":{"a":{"name":"a"},"b":{"name":"b"},"c":{"name":"c"}},
+		"categories":{"tv":{"name":"tv"}},"tags":["x"],"trackers":{"http://t1":["a","b"],"http://t2":["c"]},"server_state":{}}`
+
+	tests := []struct {
+		name string
+		body string
+		want MainDataChanges
+	}{
+		{name: "nothing", body: `{"rid":2}`},
+		{name: "empty sections", body: `{"rid":2,"torrents":{},"categories":{},"tags":[],"trackers":{},"server_state":{}}`},
+		{name: "torrents", body: `{"rid":2,"torrents":{"a":{"dlspeed":5},"d":{"name":"d"}}}`, want: MainDataChanges{Torrents: []string{"a", "d"}}},
+		{name: "torrent removed", body: `{"rid":2,"torrents_removed":["c"]}`, want: MainDataChanges{TorrentsRemoved: []string{"c"}, Trackers: true}},
+		{name: "category added", body: `{"rid":2,"categories":{"movies":{"name":"movies"}}}`, want: MainDataChanges{Categories: true}},
+		{name: "category removed", body: `{"rid":2,"categories_removed":["tv"]}`, want: MainDataChanges{Categories: true}},
+		{name: "tag added", body: `{"rid":2,"tags":["y"]}`, want: MainDataChanges{Tags: true}},
+		{name: "tag removed", body: `{"rid":2,"tags_removed":["x"]}`, want: MainDataChanges{Tags: true}},
+		{name: "tracker changed", body: `{"rid":2,"trackers":{"http://t3":["a"]}}`, want: MainDataChanges{Trackers: true}},
+		{name: "tracker removed", body: `{"rid":2,"trackers_removed":["http://t2"]}`, want: MainDataChanges{Trackers: true}},
+		{name: "server state", body: `{"rid":2,"server_state":{"dl_info_speed":1}}`, want: MainDataChanges{ServerState: true}},
+		{
+			name: "full update",
+			body: `{"rid":2,"full_update":true,"torrents":{"a":{"name":"a"},"d":{"name":"d"}},"categories":{},"tags":[],"server_state":{}}`,
+			want: MainDataChanges{Torrents: []string{"a", "d"}, TorrentsRemoved: []string{"b", "c"}, Categories: true, Tags: true, Trackers: true, ServerState: true},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var data MainData
+			applyMainDataJSON(t, &data, full)
+			applyMainDataJSON(t, &data, tt.body)
+
+			got := data.Changes
+			slices.Sort(got.Torrents)
+			slices.Sort(got.TorrentsRemoved)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("got %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMainData_AnnounceFlags(t *testing.T) {
+	var data MainData
+	applyMainDataJSON(t, &data, `{"rid":1,"full_update":true,"torrents":{
+		"a":{"has_tracker_warning":true,"has_tracker_error":false,"has_other_announce_error":true},
+		"b":{"has_tracker_warning":false,"has_tracker_error":true,"has_other_announce_error":false}}}`)
+
+	a, b := data.Torrents["a"], data.Torrents["b"]
+	if !a.HasTrackerWarning || a.HasTrackerError || !a.HasOtherAnnounceError {
+		t.Fatalf("full update: got torrent a %+v", a)
+	}
+	if b.HasTrackerWarning || !b.HasTrackerError || b.HasOtherAnnounceError {
+		t.Fatalf("full update: got torrent b %+v", b)
+	}
+
+	applyMainDataJSON(t, &data, `{"rid":2,"torrents":{
+		"a":{"has_tracker_warning":false,"has_tracker_error":true,"has_other_announce_error":false},
+		"b":{"has_tracker_warning":true}}}`)
+
+	a, b = data.Torrents["a"], data.Torrents["b"]
+	if a.HasTrackerWarning || !a.HasTrackerError || a.HasOtherAnnounceError {
+		t.Fatalf("partial update: got torrent a %+v", a)
+	}
+	if !b.HasTrackerWarning || !b.HasTrackerError || b.HasOtherAnnounceError {
+		t.Fatalf("partial update: got torrent b %+v", b)
+	}
+}
+
+func TestMainData_TrackersRemoved(t *testing.T) {
+	var data MainData
+	applyMainDataJSON(t, &data, `{"rid":1,"full_update":true,"torrents":{"a":{},"b":{},"c":{}},
+		"trackers":{"http://t1":["a","b"],"http://t2":["c"],"http://t3":["a"]}}`)
+	shared := data.Trackers["http://t1"]
+
+	applyMainDataJSON(t, &data, `{"rid":2,"torrents_removed":["a"],"trackers_removed":["http://t2"]}`)
+
+	want := map[string][]string{"http://t1": {"b"}}
+	if !reflect.DeepEqual(data.Trackers, want) {
+		t.Fatalf("got trackers %v, want %v", data.Trackers, want)
+	}
+	if !slices.Equal(shared, []string{"a", "b"}) {
+		t.Fatalf("a caller's copy of the hashes changed to %v", shared)
 	}
 }

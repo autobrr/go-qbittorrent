@@ -1,15 +1,17 @@
 package qbittorrent
 
 import (
+	"cmp"
 	"crypto/tls"
 	"io"
 	"log"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
+	"sync/atomic"
 	"time"
 
-	"github.com/Masterminds/semver"
+	"github.com/Masterminds/semver/v3"
 	"golang.org/x/net/publicsuffix"
 )
 
@@ -28,13 +30,15 @@ type Client struct {
 
 	log *log.Logger
 
-	version *semver.Version
+	// version is the last WebAPI version the server reported; every fetch refreshes it so an upgrade under a running client re-selects endpoints.
+	version atomic.Pointer[semver.Version]
 }
 
 type Config struct {
 	Host     string
 	Username string
 	Password string
+	APIKey   string
 
 	// TLS skip cert validation
 	TLSSkipVerify bool
@@ -71,7 +75,7 @@ func NewClient(cfg Config) *Client {
 
 	// set retry defaults
 	c.retryAttempts = 5
-	c.retryDelay = 1
+	c.retryDelay = time.Second
 
 	if cfg.RetryAttempts > 0 {
 		c.retryAttempts = cfg.RetryAttempts
@@ -97,7 +101,7 @@ func NewClient(cfg Config) *Client {
 		ForceAttemptHTTP2:     true,             // HTTP/2 provides better multiplexing for API calls to the same host
 		MaxIdleConns:          100,              // default transport value
 		MaxIdleConnsPerHost:   10,               // increased from default 2 for better connection reuse
-		IdleConnTimeout:       90 * time.Second, // default transport value
+		IdleConnTimeout:       5 * time.Second,  // below qBittorrent's 7s keep-alive, so a POST never races the server closing an idle conn
 		TLSHandshakeTimeout:   10 * time.Second, // default transport value
 		ExpectContinueTimeout: 1 * time.Second,  // default transport value
 		ReadBufferSize:        65536,
@@ -114,6 +118,12 @@ func NewClient(cfg Config) *Client {
 	}
 
 	return c
+}
+
+// attemptTimeout returns the timeout of one request attempt. A custom
+// http.Client with no Timeout falls back to the configured timeout.
+func (c *Client) attemptTimeout() time.Duration {
+	return cmp.Or(c.http.Timeout, c.timeout)
 }
 
 // WithHTTPClient allows you to a provide a custom [http.Client].

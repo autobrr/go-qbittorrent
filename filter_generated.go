@@ -52,6 +52,15 @@ func compareCategory(a, b *Torrent) int {
 	return 1
 }
 
+func compareComment(a, b *Torrent) int {
+	if a.Comment == b.Comment {
+		return 0
+	} else if a.Comment < b.Comment {
+		return -1
+	}
+	return 1
+}
+
 func compareCompleted(a, b *Torrent) int {
 	if a.Completed < b.Completed {
 		return -1
@@ -68,6 +77,15 @@ func compareCompletionOn(a, b *Torrent) int {
 		return 1
 	}
 	return 0
+}
+
+func compareCreatedBy(a, b *Torrent) int {
+	if a.CreatedBy == b.CreatedBy {
+		return 0
+	} else if a.CreatedBy < b.CreatedBy {
+		return -1
+	}
+	return 1
 }
 
 func compareContentPath(a, b *Torrent) int {
@@ -162,6 +180,36 @@ func compareHash(a, b *Torrent) int {
 	return 1
 }
 
+func compareHasTrackerWarning(a, b *Torrent) int {
+	if a.HasTrackerWarning != b.HasTrackerWarning {
+		if a.HasTrackerWarning {
+			return 1
+		}
+		return -1
+	}
+	return 0
+}
+
+func compareHasTrackerError(a, b *Torrent) int {
+	if a.HasTrackerError != b.HasTrackerError {
+		if a.HasTrackerError {
+			return 1
+		}
+		return -1
+	}
+	return 0
+}
+
+func compareHasOtherAnnounceError(a, b *Torrent) int {
+	if a.HasOtherAnnounceError != b.HasOtherAnnounceError {
+		if a.HasOtherAnnounceError {
+			return 1
+		}
+		return -1
+	}
+	return 0
+}
+
 func compareInfohashV1(a, b *Torrent) int {
 	if a.InfohashV1 == b.InfohashV1 {
 		return 0
@@ -230,6 +278,15 @@ func compareMaxSeedingTime(a, b *Torrent) int {
 	if a.MaxSeedingTime < b.MaxSeedingTime {
 		return -1
 	} else if a.MaxSeedingTime > b.MaxSeedingTime {
+		return 1
+	}
+	return 0
+}
+
+func compareMaxInactiveSeedingTime(a, b *Torrent) int {
+	if a.MaxInactiveSeedingTime < b.MaxInactiveSeedingTime {
+		return -1
+	} else if a.MaxInactiveSeedingTime > b.MaxInactiveSeedingTime {
 		return 1
 	}
 	return 0
@@ -350,6 +407,33 @@ func compareSeedingTimeLimit(a, b *Torrent) int {
 		return 1
 	}
 	return 0
+}
+
+func compareInactiveSeedingTimeLimit(a, b *Torrent) int {
+	if a.InactiveSeedingTimeLimit < b.InactiveSeedingTimeLimit {
+		return -1
+	} else if a.InactiveSeedingTimeLimit > b.InactiveSeedingTimeLimit {
+		return 1
+	}
+	return 0
+}
+
+func compareShareLimitAction(a, b *Torrent) int {
+	if a.ShareLimitAction == b.ShareLimitAction {
+		return 0
+	} else if a.ShareLimitAction < b.ShareLimitAction {
+		return -1
+	}
+	return 1
+}
+
+func compareShareLimitsMode(a, b *Torrent) int {
+	if a.ShareLimitsMode == b.ShareLimitsMode {
+		return 0
+	} else if a.ShareLimitsMode < b.ShareLimitsMode {
+		return -1
+	}
+	return 1
 }
 
 func compareSeenComplete(a, b *Torrent) int {
@@ -496,8 +580,10 @@ var torrentComparators = map[string]func(a, b *Torrent) int{
 	"auto_tmm": compareAutoManaged,
 	"availability": compareAvailability,
 	"category": compareCategory,
+	"comment": compareComment,
 	"completed": compareCompleted,
 	"completion_on": compareCompletionOn,
+	"created_by": compareCreatedBy,
 	"content_path": compareContentPath,
 	"dl_limit": compareDlLimit,
 	"dlspeed": compareDlSpeed,
@@ -508,6 +594,9 @@ var torrentComparators = map[string]func(a, b *Torrent) int{
 	"f_l_piece_prio": compareFirstLastPiecePrio,
 	"force_start": compareForceStart,
 	"hash": compareHash,
+	"has_tracker_warning": compareHasTrackerWarning,
+	"has_tracker_error": compareHasTrackerError,
+	"has_other_announce_error": compareHasOtherAnnounceError,
 	"infohash_v1": compareInfohashV1,
 	"infohash_v2": compareInfohashV2,
 	"popularity": comparePopularity,
@@ -516,6 +605,7 @@ var torrentComparators = map[string]func(a, b *Torrent) int{
 	"magnet_uri": compareMagnetURI,
 	"max_ratio": compareMaxRatio,
 	"max_seeding_time": compareMaxSeedingTime,
+	"max_inactive_seeding_time": compareMaxInactiveSeedingTime,
 	"name": compareName,
 	"num_complete": compareNumComplete,
 	"num_incomplete": compareNumIncomplete,
@@ -529,6 +619,9 @@ var torrentComparators = map[string]func(a, b *Torrent) int{
 	"save_path": compareSavePath,
 	"seeding_time": compareSeedingTime,
 	"seeding_time_limit": compareSeedingTimeLimit,
+	"inactive_seeding_time_limit": compareInactiveSeedingTimeLimit,
+	"share_limit_action": compareShareLimitAction,
+	"share_limits_mode": compareShareLimitsMode,
 	"seen_complete": compareSeenComplete,
 	"seq_dl": compareSequentialDownload,
 	"size": compareSize,

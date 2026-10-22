@@ -2,7 +2,9 @@ package qbittorrent
 
 import (
 	"encoding/json"
+	"maps"
 	"strconv"
+	"time"
 
 	"github.com/autobrr/go-qbittorrent/errors"
 )
@@ -11,89 +13,113 @@ var (
 	ErrBadCredentials = errors.New("bad credentials")
 	ErrIPBanned       = errors.New("User's IP is banned for too many failed login attempts")
 
-	ErrUnexpectedStatus = errors.New("unexpected status code")
+	ErrUnexpectedStatus      = errors.New("unexpected status code")
+	ErrUnexpectedContentType = errors.New("unexpected Content-Type")
 
-	ErrNoTorrentURLProvided           = errors.New("no torrent URL provided")
-	ErrEmptySavePath                  = errors.New("save path is empty")
-	ErrNoWriteAccessToPath            = errors.New("user does not have write access to directory")
-	ErrCannotCreateSavePath           = errors.New("unable to create save path directory")
-	ErrEmptyCategoryName              = errors.New("category name is empty")
-	ErrInvalidCategoryName            = errors.New("category name is invalid")
-	ErrCategoryEditingFailed          = errors.New("category editing failed")
-	ErrCategoryDoesNotExist           = errors.New("category name does not exist")
-	ErrInvalidPriority                = errors.New("priority is invalid or at least one id is not an integer")
-	ErrTorrentNotFound                = errors.New("torrent not found")
-	ErrTorrentMetdataNotDownloadedYet = errors.New("torrent metadata hasn't downloaded yet or at least one file id was not found")
-	ErrMissingNewPathParameter        = errors.New("missing newPath parameter")
-	ErrInvalidPathParameter           = errors.New("invalid newPath or oldPath, or newPath already in use")
-	ErrInvalidTorrentHash             = errors.New("torrent hash is invalid")
-	ErrEmptyTorrentName               = errors.New("torrent name is empty")
-	ErrAllURLsNotFound                = errors.New("all urls were not found")
-	ErrInvalidURL                     = errors.New("new url is not a valid URL")
-	ErrTorrentQueueingNotEnabled      = errors.New("torrent queueing is not enabled, could not set hashes to max priority")
-	ErrInvalidShareLimit              = errors.New("a share limit or at least one id is invalid")
-	ErrInvalidCookies                 = errors.New("request was not a valid json array of cookie objects")
-	ErrCannotGetTorrentPieceStates    = errors.New("could not get torrent piece states")
-	ErrInvalidPeers                   = errors.New("none of the supplied peers are valid")
+	ErrNoTorrentURLProvided            = errors.New("no torrent URL provided")
+	ErrEmptyInput                      = errors.New("input is empty")
+	ErrEmptySavePath                   = errors.New("save path is empty")
+	ErrNoWriteAccessToPath             = errors.New("user does not have write access to directory")
+	ErrCannotCreateSavePath            = errors.New("unable to create save path directory")
+	ErrEmptyCategoryName               = errors.New("category name is empty")
+	ErrInvalidCategoryName             = errors.New("category name is invalid")
+	ErrCategoryEditingFailed           = errors.New("category editing failed")
+	ErrCategoryDoesNotExist            = errors.New("category name does not exist")
+	ErrInvalidPriority                 = errors.New("priority is invalid or at least one id is not an integer")
+	ErrTorrentNotFound                 = errors.New("torrent not found")
+	ErrTorrentMetadataNotDownloadedYet = errors.New("torrent metadata hasn't downloaded yet or at least one file id was not found")
+	ErrMissingNewPathParameter         = errors.New("missing newPath parameter")
+	ErrInvalidPathParameter            = errors.New("invalid newPath or oldPath, or newPath already in use")
+	ErrInvalidTorrentHash              = errors.New("torrent hash is invalid")
+	ErrEmptyTorrentName                = errors.New("torrent name is empty")
+	ErrAllURLsNotFound                 = errors.New("all urls were not found")
+	ErrInvalidURL                      = errors.New("new url is not a valid URL")
+	ErrTorrentQueueingNotEnabled       = errors.New("torrent queueing is not enabled, could not change priority")
+	ErrInvalidShareLimit               = errors.New("a share limit or at least one id is invalid")
+	ErrInvalidCookies                  = errors.New("request was not a valid json array of cookie objects")
+	ErrCannotGetTorrentPieceStates     = errors.New("could not get torrent piece states")
+	ErrInvalidPeers                    = errors.New("none of the supplied peers are valid")
+	ErrInvalidMonitoredFolderTarget    = errors.New("invalid monitored folder target")
 
 	ErrReannounceTookTooLong = errors.New("reannounce took too long, deleted torrent")
 	ErrUnsupportedVersion    = errors.New("qBittorrent version too old, please upgrade to use this feature")
+
+	ErrTorrentCreationTooManyActiveTasks = errors.New("too many active torrent creation tasks")
+	ErrTorrentCreationTaskNotFound       = errors.New("torrent creation task not found")
+	ErrTorrentCreationUnfinished         = errors.New("torrent creation is still unfinished")
+	ErrTorrentCreationFailed             = errors.New("torrent creation failed")
+
+	ErrTorrentAddFailed = errors.New("torrent(s) failed to be added")
+
+	ErrRSSItemNotFound = errors.New("RSS item not found")
+	ErrRSSPathConflict = errors.New("RSS path already exists or is invalid")
+	ErrRSSRuleNotFound = errors.New("RSS rule not found")
 )
 
 type Torrent struct {
-	AddedOn            int64            `json:"added_on"`
-	AmountLeft         int64            `json:"amount_left"`
-	AutoManaged        bool             `json:"auto_tmm"`
-	Availability       float64          `json:"availability"`
-	Category           string           `json:"category"`
-	Completed          int64            `json:"completed"`
-	CompletionOn       int64            `json:"completion_on"`
-	ContentPath        string           `json:"content_path"`
-	DlLimit            int64            `json:"dl_limit"`
-	DlSpeed            int64            `json:"dlspeed"`
-	DownloadPath       string           `json:"download_path"`
-	Downloaded         int64            `json:"downloaded"`
-	DownloadedSession  int64            `json:"downloaded_session"`
-	ETA                int64            `json:"eta"`
-	FirstLastPiecePrio bool             `json:"f_l_piece_prio"`
-	ForceStart         bool             `json:"force_start"`
-	Hash               string           `json:"hash"`
-	InfohashV1         string           `json:"infohash_v1"`
-	InfohashV2         string           `json:"infohash_v2"`
-	Popularity         float64          `json:"popularity"`
-	Private            bool             `json:"private"`
-	LastActivity       int64            `json:"last_activity"`
-	MagnetURI          string           `json:"magnet_uri"`
-	MaxRatio           float64          `json:"max_ratio"`
-	MaxSeedingTime     int64            `json:"max_seeding_time"`
-	Name               string           `json:"name"`
-	NumComplete        int64            `json:"num_complete"`
-	NumIncomplete      int64            `json:"num_incomplete"`
-	NumLeechs          int64            `json:"num_leechs"`
-	NumSeeds           int64            `json:"num_seeds"`
-	Priority           int64            `json:"priority"`
-	Progress           float64          `json:"progress"`
-	Ratio              float64          `json:"ratio"`
-	RatioLimit         float64          `json:"ratio_limit"`
-	Reannounce         int64            `json:"reannounce"`
-	SavePath           string           `json:"save_path"`
-	SeedingTime        int64            `json:"seeding_time"`
-	SeedingTimeLimit   int64            `json:"seeding_time_limit"`
-	SeenComplete       int64            `json:"seen_complete"`
-	SequentialDownload bool             `json:"seq_dl"`
-	Size               int64            `json:"size"`
-	State              TorrentState     `json:"state"`
-	SuperSeeding       bool             `json:"super_seeding"`
-	Tags               string           `json:"tags"`
-	TimeActive         int64            `json:"time_active"`
-	TotalSize          int64            `json:"total_size"`
-	Tracker            string           `json:"tracker"`
-	TrackersCount      int64            `json:"trackers_count"`
-	UpLimit            int64            `json:"up_limit"`
-	Uploaded           int64            `json:"uploaded"`
-	UploadedSession    int64            `json:"uploaded_session"`
-	UpSpeed            int64            `json:"upspeed"`
-	Trackers           []TorrentTracker `json:"trackers"`
+	AddedOn                  int64            `json:"added_on"`
+	AmountLeft               int64            `json:"amount_left"`
+	AutoManaged              bool             `json:"auto_tmm"`
+	Availability             float64          `json:"availability"`
+	Category                 string           `json:"category"`
+	Comment                  string           `json:"comment"`
+	Completed                int64            `json:"completed"`
+	CompletionOn             int64            `json:"completion_on"`
+	CreatedBy                string           `json:"created_by"`
+	ContentPath              string           `json:"content_path"`
+	DlLimit                  int64            `json:"dl_limit"`
+	DlSpeed                  int64            `json:"dlspeed"`
+	DownloadPath             string           `json:"download_path"`
+	Downloaded               int64            `json:"downloaded"`
+	DownloadedSession        int64            `json:"downloaded_session"`
+	ETA                      int64            `json:"eta"`
+	FirstLastPiecePrio       bool             `json:"f_l_piece_prio"`
+	ForceStart               bool             `json:"force_start"`
+	Hash                     string           `json:"hash"`
+	HasMetadata              *bool            `json:"has_metadata"`
+	HasTrackerWarning        bool             `json:"has_tracker_warning"`      // sync/maindata only, qBittorrent 5.2+
+	HasTrackerError          bool             `json:"has_tracker_error"`        // sync/maindata only, qBittorrent 5.2+
+	HasOtherAnnounceError    bool             `json:"has_other_announce_error"` // sync/maindata only, qBittorrent 5.2+
+	InfohashV1               string           `json:"infohash_v1"`
+	InfohashV2               string           `json:"infohash_v2"`
+	Popularity               float64          `json:"popularity"`
+	Private                  bool             `json:"private"`
+	LastActivity             int64            `json:"last_activity"`
+	MagnetURI                string           `json:"magnet_uri"`
+	MaxRatio                 float64          `json:"max_ratio"`
+	MaxSeedingTime           int64            `json:"max_seeding_time"`
+	MaxInactiveSeedingTime   int64            `json:"max_inactive_seeding_time"`
+	Name                     string           `json:"name"`
+	NumComplete              int64            `json:"num_complete"`
+	NumIncomplete            int64            `json:"num_incomplete"`
+	NumLeechs                int64            `json:"num_leechs"`
+	NumSeeds                 int64            `json:"num_seeds"`
+	Priority                 int64            `json:"priority"`
+	Progress                 float64          `json:"progress"`
+	Ratio                    float64          `json:"ratio"`
+	RatioLimit               float64          `json:"ratio_limit"`
+	Reannounce               int64            `json:"reannounce"`
+	SavePath                 string           `json:"save_path"`
+	SeedingTime              int64            `json:"seeding_time"`
+	SeedingTimeLimit         int64            `json:"seeding_time_limit"`
+	InactiveSeedingTimeLimit int64            `json:"inactive_seeding_time_limit"`
+	ShareLimitAction         string           `json:"share_limit_action"`
+	ShareLimitsMode          string           `json:"share_limits_mode"`
+	SeenComplete             int64            `json:"seen_complete"`
+	SequentialDownload       bool             `json:"seq_dl"`
+	Size                     int64            `json:"size"`
+	State                    TorrentState     `json:"state"`
+	SuperSeeding             bool             `json:"super_seeding"`
+	Tags                     string           `json:"tags"`
+	TimeActive               int64            `json:"time_active"`
+	TotalSize                int64            `json:"total_size"`
+	Tracker                  string           `json:"tracker"`
+	TrackersCount            int64            `json:"trackers_count"`
+	UpLimit                  int64            `json:"up_limit"`
+	Uploaded                 int64            `json:"uploaded"`
+	UploadedSession          int64            `json:"uploaded_session"`
+	UpSpeed                  int64            `json:"upspeed"`
+	Trackers                 []TorrentTracker `json:"trackers"`
 }
 
 type TorrentTrackersResponse struct {
@@ -106,12 +132,14 @@ type TorrentTracker struct {
 	Status        TrackerStatus `json:"status"`
 	NumPeers      int           `json:"num_peers"`
 	NumSeeds      int           `json:"num_seeds"`
-	NumLeechers   int           `json:"num_leechers"`
+	NumLeechers   int           `json:"num_leeches"`
 	NumDownloaded int           `json:"num_downloaded"`
 	Message       string        `json:"msg"`
 }
 
-type TorrentFiles []struct {
+type TorrentFiles []TorrentFile
+
+type TorrentFile struct {
 	Availability float32 `json:"availability"`
 	Index        int     `json:"index"`
 	IsSeed       bool    `json:"is_seed,omitempty"`
@@ -122,9 +150,74 @@ type TorrentFiles []struct {
 	Size         int64   `json:"size"`
 }
 
+// Category is one category from torrents/categories or sync/maindata.
 type Category struct {
 	Name     string `json:"name"`
 	SavePath string `json:"savePath"`
+	// DownloadPath is the category's own download path option, sent as
+	// download_path from qBittorrent 4.4 (WebAPI 2.8.4). Nil means the category
+	// inherits the option, whether qBittorrent sent null or left the key out.
+	// Before WebAPI 2.11.10 (qBittorrent 5.1 and earlier) inherit leaves the key
+	// out, so a partial maindata update never reports a change from a path
+	// back to inherit. Only a full update or GetCategoriesCtx clears it there.
+	DownloadPath *CategoryDownloadPath `json:"download_path,omitempty"`
+}
+
+// CategoryDownloadPath is a category's download path option when it does not
+// inherit one. Enabled false means the category turns the download path off.
+// Enabled true means it uses Path, which may be empty or relative: qBittorrent
+// resolves those against the parent category or the global download path.
+//
+// qBittorrent encodes the option as false when it is disabled and as the path
+// string when it is enabled. UnmarshalJSON also accepts true, which qBittorrent
+// reads as enabled with an empty path.
+type CategoryDownloadPath struct {
+	Enabled bool
+	Path    string
+}
+
+// UnmarshalJSON decodes false, true or a path string. It leaves the value
+// unchanged for null, so a nil *CategoryDownloadPath field stays nil.
+func (d *CategoryDownloadPath) UnmarshalJSON(data []byte) error {
+	var value any
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	if value == nil {
+		return nil
+	}
+	parsed, ok := parseCategoryDownloadPath(value)
+	if !ok {
+		return errors.New("category download_path must be null, a bool or a string, got %s", data)
+	}
+	*d = *parsed
+	return nil
+}
+
+// MarshalJSON writes false when the option is disabled and the path string
+// when it is enabled. A nil *CategoryDownloadPath marshals as null, and a
+// Category field holding nil is left out.
+func (d CategoryDownloadPath) MarshalJSON() ([]byte, error) {
+	if !d.Enabled {
+		return []byte("false"), nil
+	}
+	return json.Marshal(d.Path)
+}
+
+// parseCategoryDownloadPath converts a decoded download_path value. It returns
+// nil and true for null, and false for a type qBittorrent never sends. The
+// generated maindata updater uses it for partial updates.
+func parseCategoryDownloadPath(value any) (*CategoryDownloadPath, bool) {
+	switch v := value.(type) {
+	case nil:
+		return nil, true
+	case bool:
+		return &CategoryDownloadPath{Enabled: v}, true
+	case string:
+		return &CategoryDownloadPath{Enabled: true, Path: v}, true
+	default:
+		return nil, false
+	}
 }
 
 type TorrentState string
@@ -250,7 +343,10 @@ const (
 
 	// Torrent is moving
 	TorrentFilterMoving TorrentFilter = "moving"
-) // TrackerStatus https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-4.1)#get-torrent-trackers
+)
+
+// TrackerStatus is the numeric status from torrents/trackers and sync payloads; see
+// https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-4.1)#get-torrent-trackers
 type TrackerStatus int
 
 const (
@@ -266,8 +362,14 @@ const (
 	// 3 Tracker is updating
 	TrackerStatusUpdating TrackerStatus = 3
 
-	// 4 Tracker has been contacted, but it is not working (or doesn't send proper replies)
+	// 4 Not working: generic announce failure; Web API 2.13+ adds 5 and 6 for finer-grained failures
 	TrackerStatusNotWorking TrackerStatus = 4
+
+	// 5 Tracker error: explicit tracker-side error (not unreachable; not generic 4)
+	TrackerStatusTrackerError TrackerStatus = 5
+
+	// 6 Unreachable: cannot connect to the tracker (vs 5: tracker returned an error instead)
+	TrackerStatusUnreachable TrackerStatus = 6
 )
 
 type ConnectionStatus string
@@ -410,6 +512,13 @@ func (o *TorrentAddOptions) Prepare() map[string]string {
 	return options
 }
 
+type TorrentAddResponse struct {
+	SuccessCount    int64    `json:"success_count"`
+	PendingCount    int64    `json:"pending_count"`
+	FailureCount    int64    `json:"failure_count"`
+	AddedTorrentIds []string `json:"added_torrent_ids"`
+}
+
 func ParseTorrentFilter(filter string) TorrentFilter {
 	switch filter {
 	case "downloading":
@@ -499,181 +608,327 @@ type TorrentProperties struct {
 	UpSpeedAvg             int     `json:"up_speed_avg"`
 }
 
+// AppPreferences is the response of app/preferences. It has one field for each
+// key that qBittorrent 4.3.9 to 5.3 sends, and it records which keys qBittorrent
+// sent. Has reports a key, and MarshalJSON writes only the sent keys.
+//
+// A plain copy is safe. The copy and the original share the record of sent keys,
+// but no method changes the record in place, so a later decode into one value
+// does not change the other.
 type AppPreferences struct {
-	AddTrackers                        string      `json:"add_trackers"`
-	AddTrackersEnabled                 bool        `json:"add_trackers_enabled"`
-	AltDlLimit                         int         `json:"alt_dl_limit"`
-	AltUpLimit                         int         `json:"alt_up_limit"`
-	AlternativeWebuiEnabled            bool        `json:"alternative_webui_enabled"`
-	AlternativeWebuiPath               string      `json:"alternative_webui_path"`
-	AnnounceIP                         string      `json:"announce_ip"`
-	AnnounceToAllTiers                 bool        `json:"announce_to_all_tiers"`
-	AnnounceToAllTrackers              bool        `json:"announce_to_all_trackers"`
-	AnonymousMode                      bool        `json:"anonymous_mode"`
-	AsyncIoThreads                     int         `json:"async_io_threads"`
-	AutoDeleteMode                     int         `json:"auto_delete_mode"`
-	AutoTmmEnabled                     bool        `json:"auto_tmm_enabled"`
-	AutorunEnabled                     bool        `json:"autorun_enabled"`
-	AutorunOnTorrentAddedEnabled       bool        `json:"autorun_on_torrent_added_enabled"`
-	AutorunOnTorrentAddedProgram       string      `json:"autorun_on_torrent_added_program"`
-	AutorunProgram                     string      `json:"autorun_program"`
-	BannedIPs                          string      `json:"banned_IPs"`
-	BittorrentProtocol                 int         `json:"bittorrent_protocol"`
-	BlockPeersOnPrivilegedPorts        bool        `json:"block_peers_on_privileged_ports"`
-	BypassAuthSubnetWhitelist          string      `json:"bypass_auth_subnet_whitelist"`
-	BypassAuthSubnetWhitelistEnabled   bool        `json:"bypass_auth_subnet_whitelist_enabled"`
-	BypassLocalAuth                    bool        `json:"bypass_local_auth"`
-	CategoryChangedTmmEnabled          bool        `json:"category_changed_tmm_enabled"`
-	CheckingMemoryUse                  int         `json:"checking_memory_use"`
-	ConnectionSpeed                    int         `json:"connection_speed"`
-	CurrentInterfaceAddress            string      `json:"current_interface_address"`
-	CurrentNetworkInterface            string      `json:"current_network_interface"`
-	Dht                                bool        `json:"dht"`
-	DiskCache                          int         `json:"disk_cache"`
-	DiskCacheTTL                       int         `json:"disk_cache_ttl"`
-	DiskIoReadMode                     int         `json:"disk_io_read_mode"`
-	DiskIoType                         int         `json:"disk_io_type"`
-	DiskIoWriteMode                    int         `json:"disk_io_write_mode"`
-	DiskQueueSize                      int         `json:"disk_queue_size"`
-	DlLimit                            int         `json:"dl_limit"`
-	DontCountSlowTorrents              bool        `json:"dont_count_slow_torrents"`
-	DyndnsDomain                       string      `json:"dyndns_domain"`
-	DyndnsEnabled                      bool        `json:"dyndns_enabled"`
-	DyndnsPassword                     string      `json:"dyndns_password"`
-	DyndnsService                      int         `json:"dyndns_service"`
-	DyndnsUsername                     string      `json:"dyndns_username"`
-	EmbeddedTrackerPort                int         `json:"embedded_tracker_port"`
-	EmbeddedTrackerPortForwarding      bool        `json:"embedded_tracker_port_forwarding"`
-	EnableCoalesceReadWrite            bool        `json:"enable_coalesce_read_write"`
-	EnableEmbeddedTracker              bool        `json:"enable_embedded_tracker"`
-	EnableMultiConnectionsFromSameIP   bool        `json:"enable_multi_connections_from_same_ip"`
-	EnablePieceExtentAffinity          bool        `json:"enable_piece_extent_affinity"`
-	EnableUploadSuggestions            bool        `json:"enable_upload_suggestions"`
-	Encryption                         int         `json:"encryption"`
-	ExcludedFileNames                  string      `json:"excluded_file_names"`
-	ExcludedFileNamesEnabled           bool        `json:"excluded_file_names_enabled"`
-	ExportDir                          string      `json:"export_dir"`
-	ExportDirFin                       string      `json:"export_dir_fin"`
-	FilePoolSize                       int         `json:"file_pool_size"`
-	HashingThreads                     int         `json:"hashing_threads"`
-	IdnSupportEnabled                  bool        `json:"idn_support_enabled"`
-	IncompleteFilesExt                 bool        `json:"incomplete_files_ext"`
-	IPFilterEnabled                    bool        `json:"ip_filter_enabled"`
-	IPFilterPath                       string      `json:"ip_filter_path"`
-	IPFilterTrackers                   bool        `json:"ip_filter_trackers"`
-	LimitLanPeers                      bool        `json:"limit_lan_peers"`
-	LimitTCPOverhead                   bool        `json:"limit_tcp_overhead"`
-	LimitUtpRate                       bool        `json:"limit_utp_rate"`
-	ListenPort                         int         `json:"listen_port"`
-	Locale                             string      `json:"locale"`
-	Lsd                                bool        `json:"lsd"`
-	MailNotificationAuthEnabled        bool        `json:"mail_notification_auth_enabled"`
-	MailNotificationEmail              string      `json:"mail_notification_email"`
-	MailNotificationEnabled            bool        `json:"mail_notification_enabled"`
-	MailNotificationPassword           string      `json:"mail_notification_password"`
-	MailNotificationSender             string      `json:"mail_notification_sender"`
-	MailNotificationSMTP               string      `json:"mail_notification_smtp"`
-	MailNotificationSslEnabled         bool        `json:"mail_notification_ssl_enabled"`
-	MailNotificationUsername           string      `json:"mail_notification_username"`
-	MaxActiveCheckingTorrents          int         `json:"max_active_checking_torrents"`
-	MaxActiveDownloads                 int         `json:"max_active_downloads"`
-	MaxActiveTorrents                  int         `json:"max_active_torrents"`
-	MaxActiveUploads                   int         `json:"max_active_uploads"`
-	MaxConcurrentHTTPAnnounces         int         `json:"max_concurrent_http_announces"`
-	MaxConnec                          int         `json:"max_connec"`
-	MaxConnecPerTorrent                int         `json:"max_connec_per_torrent"`
-	MaxRatio                           float64     `json:"max_ratio"`
-	MaxRatioAct                        int         `json:"max_ratio_act"`
-	MaxRatioEnabled                    bool        `json:"max_ratio_enabled"`
-	MaxSeedingTime                     int         `json:"max_seeding_time"`
-	MaxSeedingTimeEnabled              bool        `json:"max_seeding_time_enabled"`
-	MaxUploads                         int         `json:"max_uploads"`
-	MaxUploadsPerTorrent               int         `json:"max_uploads_per_torrent"`
-	MemoryWorkingSetLimit              int         `json:"memory_working_set_limit"`
-	OutgoingPortsMax                   int         `json:"outgoing_ports_max"`
-	OutgoingPortsMin                   int         `json:"outgoing_ports_min"`
-	PeerTos                            int         `json:"peer_tos"`
-	PeerTurnover                       int         `json:"peer_turnover"`
-	PeerTurnoverCutoff                 int         `json:"peer_turnover_cutoff"`
-	PeerTurnoverInterval               int         `json:"peer_turnover_interval"`
-	PerformanceWarning                 bool        `json:"performance_warning"`
-	Pex                                bool        `json:"pex"`
-	PreallocateAll                     bool        `json:"preallocate_all"`
-	ProxyAuthEnabled                   bool        `json:"proxy_auth_enabled"`
-	ProxyHostnameLookup                bool        `json:"proxy_hostname_lookup"`
-	ProxyIP                            string      `json:"proxy_ip"`
-	ProxyPassword                      string      `json:"proxy_password"`
-	ProxyPeerConnections               bool        `json:"proxy_peer_connections"`
-	ProxyPort                          int         `json:"proxy_port"`
-	ProxyTorrentsOnly                  bool        `json:"proxy_torrents_only"`
-	ProxyType                          interface{} `json:"proxy_type"` // pre 4.5.x this is an int and post 4.6.x it's a string
-	ProxyUsername                      string      `json:"proxy_username"`
-	QueueingEnabled                    bool        `json:"queueing_enabled"`
-	RandomPort                         bool        `json:"random_port"`
-	ReannounceWhenAddressChanged       bool        `json:"reannounce_when_address_changed"`
-	RecheckCompletedTorrents           bool        `json:"recheck_completed_torrents"`
-	RefreshInterval                    int         `json:"refresh_interval"`
-	RequestQueueSize                   int         `json:"request_queue_size"`
-	ResolvePeerCountries               bool        `json:"resolve_peer_countries"`
-	ResumeDataStorageType              string      `json:"resume_data_storage_type"`
-	RssAutoDownloadingEnabled          bool        `json:"rss_auto_downloading_enabled"`
-	RssDownloadRepackProperEpisodes    bool        `json:"rss_download_repack_proper_episodes"`
-	RssMaxArticlesPerFeed              int         `json:"rss_max_articles_per_feed"`
-	RssProcessingEnabled               bool        `json:"rss_processing_enabled"`
-	RssRefreshInterval                 int         `json:"rss_refresh_interval"`
-	RssSmartEpisodeFilters             string      `json:"rss_smart_episode_filters"`
-	SavePath                           string      `json:"save_path"`
-	SavePathChangedTmmEnabled          bool        `json:"save_path_changed_tmm_enabled"`
-	SaveResumeDataInterval             int         `json:"save_resume_data_interval"`
-	ScanDirs                           struct{}    `json:"scan_dirs"`
-	ScheduleFromHour                   int         `json:"schedule_from_hour"`
-	ScheduleFromMin                    int         `json:"schedule_from_min"`
-	ScheduleToHour                     int         `json:"schedule_to_hour"`
-	ScheduleToMin                      int         `json:"schedule_to_min"`
-	SchedulerDays                      int         `json:"scheduler_days"`
-	SchedulerEnabled                   bool        `json:"scheduler_enabled"`
-	SendBufferLowWatermark             int         `json:"send_buffer_low_watermark"`
-	SendBufferWatermark                int         `json:"send_buffer_watermark"`
-	SendBufferWatermarkFactor          int         `json:"send_buffer_watermark_factor"`
-	SlowTorrentDlRateThreshold         int         `json:"slow_torrent_dl_rate_threshold"`
-	SlowTorrentInactiveTimer           int         `json:"slow_torrent_inactive_timer"`
-	SlowTorrentUlRateThreshold         int         `json:"slow_torrent_ul_rate_threshold"`
-	SocketBacklogSize                  int         `json:"socket_backlog_size"`
-	SsrfMitigation                     bool        `json:"ssrf_mitigation"`
-	StartPausedEnabled                 bool        `json:"start_paused_enabled"`
-	StopTrackerTimeout                 int         `json:"stop_tracker_timeout"`
-	TempPath                           string      `json:"temp_path"`
-	TempPathEnabled                    bool        `json:"temp_path_enabled"`
-	TorrentChangedTmmEnabled           bool        `json:"torrent_changed_tmm_enabled"`
-	TorrentContentLayout               string      `json:"torrent_content_layout"`
-	TorrentStopCondition               string      `json:"torrent_stop_condition"`
-	UpLimit                            int         `json:"up_limit"`
-	UploadChokingAlgorithm             int         `json:"upload_choking_algorithm"`
-	UploadSlotsBehavior                int         `json:"upload_slots_behavior"`
-	Upnp                               bool        `json:"upnp"`
-	UpnpLeaseDuration                  int         `json:"upnp_lease_duration"`
-	UseCategoryPathsInManualMode       bool        `json:"use_category_paths_in_manual_mode"`
-	UseHTTPS                           bool        `json:"use_https"`
-	UtpTCPMixedMode                    int         `json:"utp_tcp_mixed_mode"`
-	ValidateHTTPSTrackerCertificate    bool        `json:"validate_https_tracker_certificate"`
-	WebUIAddress                       string      `json:"web_ui_address"`
-	WebUIBanDuration                   int         `json:"web_ui_ban_duration"`
-	WebUIClickjackingProtectionEnabled bool        `json:"web_ui_clickjacking_protection_enabled"`
-	WebUICsrfProtectionEnabled         bool        `json:"web_ui_csrf_protection_enabled"`
-	WebUICustomHTTPHeaders             string      `json:"web_ui_custom_http_headers"`
-	WebUIDomainList                    string      `json:"web_ui_domain_list"`
-	WebUIHostHeaderValidationEnabled   bool        `json:"web_ui_host_header_validation_enabled"`
-	WebUIHTTPSCertPath                 string      `json:"web_ui_https_cert_path"`
-	WebUIHTTPSKeyPath                  string      `json:"web_ui_https_key_path"`
-	WebUIMaxAuthFailCount              int         `json:"web_ui_max_auth_fail_count"`
-	WebUIPort                          int         `json:"web_ui_port"`
-	WebUIReverseProxiesList            string      `json:"web_ui_reverse_proxies_list"`
-	WebUIReverseProxyEnabled           bool        `json:"web_ui_reverse_proxy_enabled"`
-	WebUISecureCookieEnabled           bool        `json:"web_ui_secure_cookie_enabled"`
-	WebUISessionTimeout                int         `json:"web_ui_session_timeout"`
-	WebUIUpnp                          bool        `json:"web_ui_upnp"`
-	WebUIUseCustomHTTPHeadersEnabled   bool        `json:"web_ui_use_custom_http_headers_enabled"`
-	WebUIUsername                      string      `json:"web_ui_username"`
+	AddStoppedEnabled                  bool             `json:"add_stopped_enabled"` // From 5.0. Before 5.0 the key is start_paused_enabled. Read AddStopped.
+	AddToTopOfQueue                    bool             `json:"add_to_top_of_queue"`
+	AddTrackers                        string           `json:"add_trackers"`
+	AddTrackersEnabled                 bool             `json:"add_trackers_enabled"`
+	AddTrackersFromURLEnabled          bool             `json:"add_trackers_from_url_enabled"`
+	AddTrackersURL                     string           `json:"add_trackers_url"`
+	AddTrackersURLList                 string           `json:"add_trackers_url_list"`
+	AltDlLimit                         int              `json:"alt_dl_limit"`
+	AltUpLimit                         int              `json:"alt_up_limit"`
+	AlternativeWebuiEnabled            bool             `json:"alternative_webui_enabled"`
+	AlternativeWebuiPath               string           `json:"alternative_webui_path"`
+	AnnounceIP                         string           `json:"announce_ip"`
+	AnnouncePort                       int              `json:"announce_port"`
+	AnnounceToAllTiers                 bool             `json:"announce_to_all_tiers"`
+	AnnounceToAllTrackers              bool             `json:"announce_to_all_trackers"`
+	AnonymousMode                      bool             `json:"anonymous_mode"`
+	AppInstanceName                    string           `json:"app_instance_name"`
+	AsyncIoThreads                     int              `json:"async_io_threads"`
+	AutoDeleteMode                     int              `json:"auto_delete_mode"`
+	AutoTmmEnabled                     bool             `json:"auto_tmm_enabled"`
+	AutorunEnabled                     bool             `json:"autorun_enabled"`
+	AutorunOnTorrentAddedEnabled       bool             `json:"autorun_on_torrent_added_enabled"`
+	AutorunOnTorrentAddedProgram       string           `json:"autorun_on_torrent_added_program"`
+	AutorunProgram                     string           `json:"autorun_program"`
+	BannedIPs                          string           `json:"banned_IPs"`
+	BdecodeDepthLimit                  int              `json:"bdecode_depth_limit"`
+	BdecodeTokenLimit                  int              `json:"bdecode_token_limit"`
+	BittorrentProtocol                 int              `json:"bittorrent_protocol"`
+	BlockPeersOnPrivilegedPorts        bool             `json:"block_peers_on_privileged_ports"`
+	BypassAuthSubnetWhitelist          string           `json:"bypass_auth_subnet_whitelist"`
+	BypassAuthSubnetWhitelistEnabled   bool             `json:"bypass_auth_subnet_whitelist_enabled"`
+	BypassLocalAuth                    bool             `json:"bypass_local_auth"`
+	CategoryChangedTmmEnabled          bool             `json:"category_changed_tmm_enabled"`
+	CheckingMemoryUse                  int              `json:"checking_memory_use"`
+	ConfirmTorrentDeletion             bool             `json:"confirm_torrent_deletion"`
+	ConfirmTorrentRecheck              bool             `json:"confirm_torrent_recheck"`
+	ConnectionSpeed                    int              `json:"connection_speed"`
+	CurrentInterfaceAddress            string           `json:"current_interface_address"`
+	CurrentInterfaceName               string           `json:"current_interface_name"`
+	CurrentNetworkInterface            string           `json:"current_network_interface"`
+	DeleteTorrentContentFiles          bool             `json:"delete_torrent_content_files"`
+	Dht                                bool             `json:"dht"`
+	DhtBootstrapNodes                  string           `json:"dht_bootstrap_nodes"`
+	DiskCache                          int              `json:"disk_cache"`
+	DiskCacheTTL                       int              `json:"disk_cache_ttl"`
+	DiskIoReadMode                     int              `json:"disk_io_read_mode"`
+	DiskIoType                         int              `json:"disk_io_type"`
+	DiskIoWriteMode                    int              `json:"disk_io_write_mode"`
+	DiskQueueSize                      int              `json:"disk_queue_size"`
+	DlLimit                            int              `json:"dl_limit"`
+	DontCountSlowTorrents              bool             `json:"dont_count_slow_torrents"`
+	DyndnsDomain                       string           `json:"dyndns_domain"`
+	DyndnsEnabled                      bool             `json:"dyndns_enabled"`
+	DyndnsPassword                     string           `json:"dyndns_password"`
+	DyndnsService                      int              `json:"dyndns_service"`
+	DyndnsUsername                     string           `json:"dyndns_username"`
+	EmbeddedTrackerPort                int              `json:"embedded_tracker_port"`
+	EmbeddedTrackerPortForwarding      bool             `json:"embedded_tracker_port_forwarding"`
+	EnableCoalesceReadWrite            bool             `json:"enable_coalesce_read_write"`
+	EnableEmbeddedTracker              bool             `json:"enable_embedded_tracker"`
+	EnableMultiConnectionsFromSameIP   bool             `json:"enable_multi_connections_from_same_ip"`
+	EnableOsCache                      bool             `json:"enable_os_cache"`
+	EnablePieceExtentAffinity          bool             `json:"enable_piece_extent_affinity"`
+	EnableUploadSuggestions            bool             `json:"enable_upload_suggestions"`
+	Encryption                         int              `json:"encryption"`
+	ExcludedFileNames                  string           `json:"excluded_file_names"`
+	ExcludedFileNamesEnabled           bool             `json:"excluded_file_names_enabled"`
+	ExportDir                          string           `json:"export_dir"`     // Before 5.3. qBittorrent 5.3 renamed it to torrent_files_backup_dir.
+	ExportDirFin                       string           `json:"export_dir_fin"` // Before 5.3. qBittorrent 5.3 renamed it to torrent_files_finished_backup_dir.
+	FileLogAge                         int              `json:"file_log_age"`
+	FileLogAgeType                     int              `json:"file_log_age_type"`
+	FileLogBackupEnabled               bool             `json:"file_log_backup_enabled"`
+	FileLogDeleteOld                   bool             `json:"file_log_delete_old"`
+	FileLogEnabled                     bool             `json:"file_log_enabled"`
+	FileLogMaxSize                     int              `json:"file_log_max_size"`
+	FileLogPath                        string           `json:"file_log_path"`
+	FilePoolSize                       int              `json:"file_pool_size"`
+	HashingThreads                     int              `json:"hashing_threads"`
+	HostnameCacheTTL                   int              `json:"hostname_cache_ttl"`
+	I2PAddress                         string           `json:"i2p_address"`
+	I2PEnabled                         bool             `json:"i2p_enabled"`
+	I2PInboundLength                   int              `json:"i2p_inbound_length"`
+	I2PInboundQuantity                 int              `json:"i2p_inbound_quantity"`
+	I2PMixedMode                       bool             `json:"i2p_mixed_mode"`
+	I2POutboundLength                  int              `json:"i2p_outbound_length"`
+	I2POutboundQuantity                int              `json:"i2p_outbound_quantity"`
+	I2PPort                            int              `json:"i2p_port"`
+	IdnSupportEnabled                  bool             `json:"idn_support_enabled"`
+	IgnoreSslErrors                    bool             `json:"ignore_ssl_errors"`
+	IncompleteFilesExt                 bool             `json:"incomplete_files_ext"`
+	IPFilterEnabled                    bool             `json:"ip_filter_enabled"`
+	IPFilterPath                       string           `json:"ip_filter_path"`
+	IPFilterTrackers                   bool             `json:"ip_filter_trackers"`
+	LimitLanPeers                      bool             `json:"limit_lan_peers"`
+	LimitTCPOverhead                   bool             `json:"limit_tcp_overhead"`
+	LimitUtpRate                       bool             `json:"limit_utp_rate"`
+	ListenPort                         int              `json:"listen_port"`
+	Locale                             string           `json:"locale"`
+	Lsd                                bool             `json:"lsd"`
+	MailNotificationAuthEnabled        bool             `json:"mail_notification_auth_enabled"`
+	MailNotificationEmail              string           `json:"mail_notification_email"`
+	MailNotificationEnabled            bool             `json:"mail_notification_enabled"`
+	MailNotificationPassword           string           `json:"mail_notification_password"`
+	MailNotificationSender             string           `json:"mail_notification_sender"`
+	MailNotificationSMTP               string           `json:"mail_notification_smtp"`
+	MailNotificationSslEnabled         bool             `json:"mail_notification_ssl_enabled"` // Before 5.3. qBittorrent 5.3 replaced it with mail_notification_encryption_type.
+	MailNotificationUsername           string           `json:"mail_notification_username"`
+	MarkOfTheWeb                       bool             `json:"mark_of_the_web"`
+	MaxActiveCheckingTorrents          int              `json:"max_active_checking_torrents"`
+	MaxActiveDownloads                 int              `json:"max_active_downloads"`
+	MaxActiveTorrents                  int              `json:"max_active_torrents"`
+	MaxActiveUploads                   int              `json:"max_active_uploads"`
+	MaxConcurrentHTTPAnnounces         int              `json:"max_concurrent_http_announces"`
+	MaxConnec                          int              `json:"max_connec"`
+	MaxConnecPerTorrent                int              `json:"max_connec_per_torrent"`
+	MaxInactiveSeedingTime             int              `json:"max_inactive_seeding_time"`
+	MaxInactiveSeedingTimeEnabled      bool             `json:"max_inactive_seeding_time_enabled"`
+	MaxRatio                           float64          `json:"max_ratio"`
+	MaxRatioAct                        int              `json:"max_ratio_act"`
+	MaxRatioEnabled                    bool             `json:"max_ratio_enabled"`
+	MaxSeedingTime                     int              `json:"max_seeding_time"`
+	MaxSeedingTimeEnabled              bool             `json:"max_seeding_time_enabled"`
+	MaxUploads                         int              `json:"max_uploads"`
+	MaxUploadsPerTorrent               int              `json:"max_uploads_per_torrent"`
+	MemoryWorkingSetLimit              int              `json:"memory_working_set_limit"`
+	MergeTrackers                      bool             `json:"merge_trackers"`
+	OutgoingPortsMax                   int              `json:"outgoing_ports_max"`
+	OutgoingPortsMin                   int              `json:"outgoing_ports_min"`
+	PeerTos                            int              `json:"peer_tos"`
+	PeerTurnover                       int              `json:"peer_turnover"`
+	PeerTurnoverCutoff                 int              `json:"peer_turnover_cutoff"`
+	PeerTurnoverInterval               int              `json:"peer_turnover_interval"`
+	PerformanceWarning                 bool             `json:"performance_warning"`
+	Pex                                bool             `json:"pex"`
+	PreallocateAll                     bool             `json:"preallocate_all"`
+	ProxyAuthEnabled                   bool             `json:"proxy_auth_enabled"`
+	ProxyBittorrent                    bool             `json:"proxy_bittorrent"`
+	ProxyHostnameLookup                bool             `json:"proxy_hostname_lookup"`
+	ProxyIP                            string           `json:"proxy_ip"`
+	ProxyMisc                          bool             `json:"proxy_misc"`
+	ProxyPassword                      string           `json:"proxy_password"`
+	ProxyPeerConnections               bool             `json:"proxy_peer_connections"`
+	ProxyPort                          int              `json:"proxy_port"`
+	ProxyRss                           bool             `json:"proxy_rss"`
+	ProxyTorrentsOnly                  bool             `json:"proxy_torrents_only"`
+	ProxyType                          interface{}      `json:"proxy_type"` // pre 4.5.x this is an int and post 4.6.x it's a string
+	ProxyUsername                      string           `json:"proxy_username"`
+	PythonExecutablePath               string           `json:"python_executable_path"`
+	QueueingEnabled                    bool             `json:"queueing_enabled"`
+	RandomPort                         bool             `json:"random_port"`
+	ReannounceWhenAddressChanged       bool             `json:"reannounce_when_address_changed"`
+	RecheckCompletedTorrents           bool             `json:"recheck_completed_torrents"`
+	RefreshInterval                    int              `json:"refresh_interval"`
+	RequestQueueSize                   int              `json:"request_queue_size"`
+	ResolvePeerCountries               bool             `json:"resolve_peer_countries"`
+	ResolvePeerHostNames               bool             `json:"resolve_peer_host_names"`
+	ResumeDataStorageType              string           `json:"resume_data_storage_type"`
+	RssAutoDownloadingEnabled          bool             `json:"rss_auto_downloading_enabled"`
+	RssDownloadRepackProperEpisodes    bool             `json:"rss_download_repack_proper_episodes"`
+	RssFetchDelay                      int64            `json:"rss_fetch_delay"`
+	RssMaxArticlesPerFeed              int              `json:"rss_max_articles_per_feed"`
+	RssProcessingEnabled               bool             `json:"rss_processing_enabled"`
+	RssRefreshInterval                 int              `json:"rss_refresh_interval"`
+	RssSmartEpisodeFilters             string           `json:"rss_smart_episode_filters"`
+	SavePath                           string           `json:"save_path"`
+	SavePathChangedTmmEnabled          bool             `json:"save_path_changed_tmm_enabled"`
+	SaveResumeDataInterval             int              `json:"save_resume_data_interval"`
+	SaveStatisticsInterval             int              `json:"save_statistics_interval"`
+	ScanDirs                           MonitoredFolders `json:"scan_dirs"`
+	ScheduleFromHour                   int              `json:"schedule_from_hour"`
+	ScheduleFromMin                    int              `json:"schedule_from_min"`
+	ScheduleToHour                     int              `json:"schedule_to_hour"`
+	ScheduleToMin                      int              `json:"schedule_to_min"`
+	SchedulerDays                      int              `json:"scheduler_days"`
+	SchedulerEnabled                   bool             `json:"scheduler_enabled"`
+	SendBufferLowWatermark             int              `json:"send_buffer_low_watermark"`
+	SendBufferWatermark                int              `json:"send_buffer_watermark"`
+	SendBufferWatermarkFactor          int              `json:"send_buffer_watermark_factor"`
+	SlowTorrentDlRateThreshold         int              `json:"slow_torrent_dl_rate_threshold"`
+	SlowTorrentInactiveTimer           int              `json:"slow_torrent_inactive_timer"`
+	SlowTorrentUlRateThreshold         int              `json:"slow_torrent_ul_rate_threshold"`
+	SocketBacklogSize                  int              `json:"socket_backlog_size"`
+	SocketReceiveBufferSize            int              `json:"socket_receive_buffer_size"`
+	SocketSendBufferSize               int              `json:"socket_send_buffer_size"`
+	SslEnabled                         bool             `json:"ssl_enabled"`
+	SslListenPort                      int              `json:"ssl_listen_port"`
+	SsrfMitigation                     bool             `json:"ssrf_mitigation"`
+	StartPausedEnabled                 bool             `json:"start_paused_enabled"` // Before 5.0. qBittorrent 5.0 renamed it to add_stopped_enabled. Read AddStopped.
+	StatusBarExternalIP                bool             `json:"status_bar_external_ip"`
+	StopTrackerTimeout                 int              `json:"stop_tracker_timeout"`
+	TempPath                           string           `json:"temp_path"`
+	TempPathEnabled                    bool             `json:"temp_path_enabled"`
+	TorrentChangedTmmEnabled           bool             `json:"torrent_changed_tmm_enabled"`
+	TorrentContentLayout               string           `json:"torrent_content_layout"`
+	TorrentContentRemoveOption         string           `json:"torrent_content_remove_option"`
+	TorrentFileSizeLimit               int64            `json:"torrent_file_size_limit"`
+	TorrentStopCondition               string           `json:"torrent_stop_condition"`
+	UpLimit                            int              `json:"up_limit"`
+	UploadChokingAlgorithm             int              `json:"upload_choking_algorithm"`
+	UploadSlotsBehavior                int              `json:"upload_slots_behavior"`
+	Upnp                               bool             `json:"upnp"`
+	UpnpLeaseDuration                  int              `json:"upnp_lease_duration"`
+	UseCategoryPathsInManualMode       bool             `json:"use_category_paths_in_manual_mode"`
+	UseHTTPS                           bool             `json:"use_https"`
+	UseSubcategories                   bool             `json:"use_subcategories"`
+	UseUnwantedFolder                  bool             `json:"use_unwanted_folder"`
+	UtpTCPMixedMode                    int              `json:"utp_tcp_mixed_mode"`
+	ValidateHTTPSTrackerCertificate    bool             `json:"validate_https_tracker_certificate"`
+	WebUIAddress                       string           `json:"web_ui_address"`
+	WebUIAPIKey                        string           `json:"web_ui_api_key"` // MarshalJSON never writes this key.
+	WebUIBanDuration                   int              `json:"web_ui_ban_duration"`
+	WebUIClickjackingProtectionEnabled bool             `json:"web_ui_clickjacking_protection_enabled"`
+	WebUICsrfProtectionEnabled         bool             `json:"web_ui_csrf_protection_enabled"`
+	WebUICustomHTTPHeaders             string           `json:"web_ui_custom_http_headers"`
+	WebUIDomainList                    string           `json:"web_ui_domain_list"`
+	WebUIHostHeaderValidationEnabled   bool             `json:"web_ui_host_header_validation_enabled"`
+	WebUIHTTPSCertPath                 string           `json:"web_ui_https_cert_path"`
+	WebUIHTTPSKeyPath                  string           `json:"web_ui_https_key_path"`
+	WebUIMaxAuthFailCount              int              `json:"web_ui_max_auth_fail_count"`
+	WebUIPort                          int              `json:"web_ui_port"`
+	WebUIReverseProxiesList            string           `json:"web_ui_reverse_proxies_list"`
+	WebUIReverseProxyEnabled           bool             `json:"web_ui_reverse_proxy_enabled"`
+	WebUISecureCookieEnabled           bool             `json:"web_ui_secure_cookie_enabled"`
+	WebUISessionTimeout                int              `json:"web_ui_session_timeout"`
+	WebUIUpnp                          bool             `json:"web_ui_upnp"`
+	WebUIUseCustomHTTPHeadersEnabled   bool             `json:"web_ui_use_custom_http_headers_enabled"`
+	WebUIUsername                      string           `json:"web_ui_username"`
+
+	// qBittorrent 5.3 preferences.
+	EnableMultiConnectionsFromSamePeerID bool   `json:"enable_multi_connections_from_same_peer_id"`
+	I2PInboundLengthVariance             int    `json:"i2p_inbound_length_variance"`
+	I2POutboundLengthVariance            int    `json:"i2p_outbound_length_variance"`
+	I2PPexEnabled                        bool   `json:"i2p_pex_enabled"`
+	MailNotificationEncryptionType       string `json:"mail_notification_encryption_type"` // None, STARTTLS, or SMTPS
+	MaxOutstandingBlockRequests          int    `json:"max_outstanding_block_requests"`
+	RemoveTorrentFileBackup              bool   `json:"remove_torrent_file_backup"`
+	SeedingOutgoingConnections           bool   `json:"seeding_outgoing_connections"`
+	ShareLimitsMode                      string `json:"share_limits_mode"`
+	ShutdownTimeout                      int    `json:"shutdown_timeout"`
+	StartPaused                          bool   `json:"start_paused"` // Pauses the whole session at startup. Not the setting for new torrents: see AddStopped.
+	StoreSearchJobResults                bool   `json:"store_search_job_results"`
+	StoreSearchJobs                      bool   `json:"store_search_jobs"`
+	TorrentFilesBackupEnabled            bool   `json:"torrent_files_backup_enabled"`
+	TorrentFilesBackupDir                string `json:"torrent_files_backup_dir"`
+	TorrentFilesFinishedBackupDirEnabled bool   `json:"torrent_files_finished_backup_dir_enabled"`
+	TorrentFilesFinishedBackupDir        string `json:"torrent_files_finished_backup_dir"`
+	WebtorrentStunServer                 string `json:"webtorrent_stun_server"`
+	WebUISessionsCountLimit              int    `json:"web_ui_sessions_count_limit"`
+
+	// sent holds the keys that qBittorrent sent. It is nil for a value that was never decoded.
+	sent map[string]struct{}
+}
+
+// appPreferencesFields has the fields of AppPreferences without its JSON methods.
+type appPreferencesFields AppPreferences
+
+// UnmarshalJSON decodes the preferences and adds the keys of data to the record of sent keys.
+func (p *AppPreferences) UnmarshalJSON(data []byte) error {
+	var keys map[string]json.RawMessage
+	if err := json.Unmarshal(data, &keys); err != nil {
+		return err
+	}
+	if keys == nil {
+		return nil
+	}
+	if err := json.Unmarshal(data, (*appPreferencesFields)(p)); err != nil {
+		return err
+	}
+	sent := make(map[string]struct{}, len(p.sent)+len(keys))
+	maps.Copy(sent, p.sent)
+	for key := range keys {
+		sent[key] = struct{}{}
+	}
+	p.sent = sent
+	return nil
+}
+
+// MarshalJSON writes the keys that qBittorrent sent, or every field for a value
+// that was never decoded. It never writes web_ui_api_key.
+func (p AppPreferences) MarshalJSON() ([]byte, error) {
+	data, err := json.Marshal(appPreferencesFields(p))
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	delete(fields, "web_ui_api_key")
+	if p.sent != nil {
+		maps.DeleteFunc(fields, func(key string, _ json.RawMessage) bool {
+			_, sent := p.sent[key]
+			return !sent
+		})
+	}
+	return json.Marshal(fields)
+}
+
+// Has reports whether qBittorrent sent key.
+func (p AppPreferences) Has(key string) bool {
+	_, ok := p.sent[key]
+	return ok
+}
+
+// AddStopped reports whether qBittorrent adds new torrents stopped. It reads
+// add_stopped_enabled (5.0 and later) or start_paused_enabled (before 5.0),
+// whichever qBittorrent sent. It never reads start_paused, which pauses the
+// whole session at startup.
+func (p AppPreferences) AddStopped() bool {
+	if p.Has("start_paused_enabled") && !p.Has("add_stopped_enabled") {
+		return p.StartPausedEnabled
+	}
+	return p.AddStoppedEnabled
 }
 
 type MainData struct {
@@ -686,34 +941,57 @@ type MainData struct {
 	Tags              []string            `json:"tags"`
 	TagsRemoved       []string            `json:"tags_removed"`
 	Trackers          map[string][]string `json:"trackers"`
+	TrackersRemoved   []string            `json:"trackers_removed"`
 	ServerState       ServerState         `json:"server_state"`
+	// Changes lists what the last sync response changed.
+	Changes MainDataChanges `json:"-"`
+}
+
+// MainDataChanges lists what one sync response changed. A full update
+// changes everything: Torrents holds every hash, and TorrentsRemoved holds
+// each hash that the full update dropped.
+type MainDataChanges struct {
+	// Torrents holds the hashes of the added and changed torrents.
+	Torrents        []string
+	TorrentsRemoved []string
+	Categories      bool
+	Tags            bool
+	Trackers        bool
+	ServerState     bool
+}
+
+func (c MainDataChanges) empty() bool {
+	return len(c.Torrents) == 0 && len(c.TorrentsRemoved) == 0 && !c.Categories && !c.Tags && !c.Trackers && !c.ServerState
 }
 
 type ServerState struct {
-	AlltimeDl            int64  `json:"alltime_dl"`
-	AlltimeUl            int64  `json:"alltime_ul"`
-	AverageTimeQueue     int64  `json:"average_time_queue"`
-	ConnectionStatus     string `json:"connection_status"`
-	DhtNodes             int64  `json:"dht_nodes"`
-	DlInfoData           int64  `json:"dl_info_data"`
-	DlInfoSpeed          int64  `json:"dl_info_speed"`
-	DlRateLimit          int64  `json:"dl_rate_limit"`
-	FreeSpaceOnDisk      int64  `json:"free_space_on_disk"`
-	GlobalRatio          string `json:"global_ratio"`
-	QueuedIoJobs         int64  `json:"queued_io_jobs"`
-	Queueing             bool   `json:"queueing"`
-	ReadCacheHits        string `json:"read_cache_hits"`
-	ReadCacheOverload    string `json:"read_cache_overload"`
-	RefreshInterval      int64  `json:"refresh_interval"`
-	TotalBuffersSize     int64  `json:"total_buffers_size"`
-	TotalPeerConnections int64  `json:"total_peer_connections"`
-	TotalQueuedSize      int64  `json:"total_queued_size"`
-	TotalWastedSession   int64  `json:"total_wasted_session"`
-	UpInfoData           int64  `json:"up_info_data"`
-	UpInfoSpeed          int64  `json:"up_info_speed"`
-	UpRateLimit          int64  `json:"up_rate_limit"`
-	UseAltSpeedLimits    bool   `json:"use_alt_speed_limits"`
-	WriteCacheOverload   string `json:"write_cache_overload"`
+	AlltimeDl             int64  `json:"alltime_dl"`
+	AlltimeUl             int64  `json:"alltime_ul"`
+	AverageTimeQueue      int64  `json:"average_time_queue"`
+	ConnectionStatus      string `json:"connection_status"`
+	DhtNodes              int64  `json:"dht_nodes"`
+	DlInfoData            int64  `json:"dl_info_data"`
+	DlInfoSpeed           int64  `json:"dl_info_speed"`
+	DlRateLimit           int64  `json:"dl_rate_limit"`
+	FreeSpaceOnDisk       int64  `json:"free_space_on_disk"`
+	GlobalRatio           string `json:"global_ratio"`
+	LastExternalAddressV4 string `json:"last_external_address_v4,omitempty"`
+	LastExternalAddressV6 string `json:"last_external_address_v6,omitempty"`
+	QueuedIoJobs          int64  `json:"queued_io_jobs"`
+	Queueing              bool   `json:"queueing"`
+	ReadCacheHits         string `json:"read_cache_hits"`
+	ReadCacheOverload     string `json:"read_cache_overload"`
+	RefreshInterval       int64  `json:"refresh_interval"`
+	TotalBuffersSize      int64  `json:"total_buffers_size"`
+	TotalPeerConnections  int64  `json:"total_peer_connections"`
+	TotalQueuedSize       int64  `json:"total_queued_size"`
+	TotalWastedSession    int64  `json:"total_wasted_session"`
+	UpInfoData            int64  `json:"up_info_data"`
+	UpInfoSpeed           int64  `json:"up_info_speed"`
+	UpRateLimit           int64  `json:"up_rate_limit"`
+	UseAltSpeedLimits     bool   `json:"use_alt_speed_limits"`
+	UseSubcategories      bool   `json:"use_subcategories"`
+	WriteCacheOverload    string `json:"write_cache_overload"`
 }
 
 // Log
@@ -802,7 +1080,15 @@ type BuildInfo struct {
 	Libtorrent string `json:"libtorrent"` // libtorrent version
 	Boost      string `json:"boost"`      // Boost version
 	Openssl    string `json:"openssl"`    // OpenSSL version
+	Zlib       string `json:"zlib"`       // zlib version
 	Bitness    int    `json:"bitness"`    // Application bitness (e.g.64-bit)
+	Platform   string `json:"platform"`   // Platform (linux, macos, windows, unknown)
+}
+
+// NetworkInterface is one entry of the network interface list.
+type NetworkInterface struct {
+	Name  string `json:"name"`  // Human-readable name
+	Value string `json:"value"` // System name, the value of the current_network_interface preference
 }
 
 type Cookie struct {
@@ -831,4 +1117,126 @@ var (
 
 type WebSeed struct {
 	URL string `json:"url"`
+}
+
+// TorrentFormat represents the torrent format for creation
+type TorrentFormat string
+
+const (
+	TorrentFormatV1     TorrentFormat = "v1"
+	TorrentFormatV2     TorrentFormat = "v2"
+	TorrentFormatHybrid TorrentFormat = "hybrid"
+)
+
+// TorrentCreationStatus represents the status of a torrent creation task
+type TorrentCreationStatus string
+
+const (
+	TorrentCreationStatusQueued   TorrentCreationStatus = "Queued"
+	TorrentCreationStatusRunning  TorrentCreationStatus = "Running"
+	TorrentCreationStatusFinished TorrentCreationStatus = "Finished"
+	TorrentCreationStatusFailed   TorrentCreationStatus = "Failed"
+)
+
+// TorrentCreationParams represents the parameters for creating a torrent
+type TorrentCreationParams struct {
+	SourcePath          string        `json:"sourcePath"`
+	TorrentFilePath     string        `json:"torrentFilePath,omitempty"`
+	Private             bool          `json:"private,omitempty"`
+	Format              TorrentFormat `json:"format,omitempty"`
+	OptimizeAlignment   bool          `json:"optimizeAlignment,omitempty"`
+	PaddedFileSizeLimit int           `json:"paddedFileSizeLimit,omitempty"`
+	PieceSize           int           `json:"pieceSize,omitempty"`
+	Comment             string        `json:"comment,omitempty"`
+	Source              string        `json:"source,omitempty"`
+	Trackers            []string      `json:"trackers,omitempty"`
+	URLSeeds            []string      `json:"urlSeeds,omitempty"`
+	StartSeeding        *bool         `json:"startSeeding,omitempty"` // nil = default (true), false = don't seed, true = seed
+}
+
+// TorrentCreationTask represents a torrent creation task.
+// Dates retain legacy strings. Numeric Unix seconds become UTC RFC3339 strings.
+type TorrentCreationTask struct {
+	TaskID              string                `json:"taskID"`
+	SourcePath          string                `json:"sourcePath"`
+	TorrentFilePath     string                `json:"torrentFilePath,omitempty"`
+	PieceSize           int                   `json:"pieceSize"`
+	Private             bool                  `json:"private"`
+	Format              TorrentFormat         `json:"format,omitempty"`
+	OptimizeAlignment   bool                  `json:"optimizeAlignment,omitempty"`
+	PaddedFileSizeLimit int                   `json:"paddedFileSizeLimit,omitempty"`
+	Status              TorrentCreationStatus `json:"status"`
+	Comment             string                `json:"comment,omitempty"`
+	Source              string                `json:"source,omitempty"`
+	Trackers            []string              `json:"trackers,omitempty"`
+	URLSeeds            []string              `json:"urlSeeds,omitempty"`
+	TimeAdded           string                `json:"timeAdded"`
+	TimeStarted         string                `json:"timeStarted,omitempty"`
+	TimeFinished        string                `json:"timeFinished,omitempty"`
+	Progress            float64               `json:"progress,omitempty"`
+	ErrorMessage        string                `json:"errorMessage,omitempty"`
+}
+
+func (t *TorrentCreationTask) UnmarshalJSON(data []byte) error {
+	type task TorrentCreationTask
+	wire := struct {
+		*task
+		TimeAdded    torrentCreationTime `json:"timeAdded"`
+		TimeStarted  torrentCreationTime `json:"timeStarted"`
+		TimeFinished torrentCreationTime `json:"timeFinished"`
+	}{task: (*task)(t)}
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+	t.TimeAdded = string(wire.TimeAdded)
+	t.TimeStarted = string(wire.TimeStarted)
+	t.TimeFinished = string(wire.TimeFinished)
+	return nil
+}
+
+type torrentCreationTime string
+
+func (t *torrentCreationTime) UnmarshalJSON(data []byte) error {
+	if len(data) > 0 && data[0] == '"' {
+		return json.Unmarshal(data, (*string)(t))
+	}
+	seconds, err := strconv.ParseInt(string(data), 10, 64)
+	if err != nil {
+		return errors.Wrap(err, "invalid torrent creation date")
+	}
+	if seconds < 0 {
+		// qBittorrent sends -1 when the task has no valid date.
+		*t = ""
+		return nil
+	}
+	date := time.Unix(seconds, 0).UTC()
+	if date.Year() < 0 || date.Year() > 9999 {
+		return errors.New("torrent creation date is outside the RFC3339 range")
+	}
+	*t = torrentCreationTime(date.Format(time.RFC3339))
+	return nil
+}
+
+// TorrentCreationTaskResponse represents the response when adding a torrent creation task
+type TorrentCreationTaskResponse struct {
+	TaskID string `json:"taskID"`
+}
+
+// DirectoryContentMode selects which entries getDirectoryContent returns.
+type DirectoryContentMode string
+
+const (
+	DirectoryContentAll   DirectoryContentMode = "all"
+	DirectoryContentDirs  DirectoryContentMode = "dirs"
+	DirectoryContentFiles DirectoryContentMode = "files"
+)
+
+// PathMetadata represents the response of the getDirectoryContent method with withMetadata set to true
+type PathMetadata struct {
+	Name                 string `json:"name"`
+	Type                 string `json:"type"` // "dir" or "file"
+	Size                 int64  `json:"size,omitempty"`
+	CreationDate         int64  `json:"creation_date"`
+	LastAccessDate       int64  `json:"last_access_date"`
+	LastModificationDate int64  `json:"last_modification_date"`
 }

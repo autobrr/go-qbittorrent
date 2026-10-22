@@ -38,6 +38,13 @@ func updateTorrentCategory(val interface{}, obj *Torrent) {
 	}
 }
 
+// updateTorrentComment updates the Comment field of Torrent
+func updateTorrentComment(val interface{}, obj *Torrent) {
+	if c, ok := val.(string); ok {
+		obj.Comment = c
+	}
+}
+
 // updateTorrentCompleted updates the Completed field of Torrent
 func updateTorrentCompleted(val interface{}, obj *Torrent) {
 	if c, ok := val.(float64); ok {
@@ -49,6 +56,13 @@ func updateTorrentCompleted(val interface{}, obj *Torrent) {
 func updateTorrentCompletionOn(val interface{}, obj *Torrent) {
 	if c, ok := val.(float64); ok {
 		obj.CompletionOn = int64(c)
+	}
+}
+
+// updateTorrentCreatedBy updates the CreatedBy field of Torrent
+func updateTorrentCreatedBy(val interface{}, obj *Torrent) {
+	if c, ok := val.(string); ok {
+		obj.CreatedBy = c
 	}
 }
 
@@ -122,6 +136,34 @@ func updateTorrentHash(val interface{}, obj *Torrent) {
 	}
 }
 
+// updateTorrentHasMetadata updates the HasMetadata field of Torrent
+func updateTorrentHasMetadata(val interface{}, obj *Torrent) {
+	if h, ok := val.(bool); ok {
+		obj.HasMetadata = &h
+	}
+}
+
+// updateTorrentHasTrackerWarning updates the HasTrackerWarning field of Torrent
+func updateTorrentHasTrackerWarning(val interface{}, obj *Torrent) {
+	if h, ok := val.(bool); ok {
+		obj.HasTrackerWarning = h
+	}
+}
+
+// updateTorrentHasTrackerError updates the HasTrackerError field of Torrent
+func updateTorrentHasTrackerError(val interface{}, obj *Torrent) {
+	if h, ok := val.(bool); ok {
+		obj.HasTrackerError = h
+	}
+}
+
+// updateTorrentHasOtherAnnounceError updates the HasOtherAnnounceError field of Torrent
+func updateTorrentHasOtherAnnounceError(val interface{}, obj *Torrent) {
+	if h, ok := val.(bool); ok {
+		obj.HasOtherAnnounceError = h
+	}
+}
+
 // updateTorrentInfohashV1 updates the InfohashV1 field of Torrent
 func updateTorrentInfohashV1(val interface{}, obj *Torrent) {
 	if i, ok := val.(string); ok {
@@ -175,6 +217,13 @@ func updateTorrentMaxRatio(val interface{}, obj *Torrent) {
 func updateTorrentMaxSeedingTime(val interface{}, obj *Torrent) {
 	if m, ok := val.(float64); ok {
 		obj.MaxSeedingTime = int64(m)
+	}
+}
+
+// updateTorrentMaxInactiveSeedingTime updates the MaxInactiveSeedingTime field of Torrent
+func updateTorrentMaxInactiveSeedingTime(val interface{}, obj *Torrent) {
+	if m, ok := val.(float64); ok {
+		obj.MaxInactiveSeedingTime = int64(m)
 	}
 }
 
@@ -266,6 +315,27 @@ func updateTorrentSeedingTime(val interface{}, obj *Torrent) {
 func updateTorrentSeedingTimeLimit(val interface{}, obj *Torrent) {
 	if s, ok := val.(float64); ok {
 		obj.SeedingTimeLimit = int64(s)
+	}
+}
+
+// updateTorrentInactiveSeedingTimeLimit updates the InactiveSeedingTimeLimit field of Torrent
+func updateTorrentInactiveSeedingTimeLimit(val interface{}, obj *Torrent) {
+	if i, ok := val.(float64); ok {
+		obj.InactiveSeedingTimeLimit = int64(i)
+	}
+}
+
+// updateTorrentShareLimitAction updates the ShareLimitAction field of Torrent
+func updateTorrentShareLimitAction(val interface{}, obj *Torrent) {
+	if s, ok := val.(string); ok {
+		obj.ShareLimitAction = s
+	}
+}
+
+// updateTorrentShareLimitsMode updates the ShareLimitsMode field of Torrent
+func updateTorrentShareLimitsMode(val interface{}, obj *Torrent) {
+	if s, ok := val.(string); ok {
+		obj.ShareLimitsMode = s
 	}
 }
 
@@ -390,8 +460,10 @@ var torrentFieldUpdaters = map[string]func(val interface{}, obj *Torrent){
 	"auto_tmm": updateTorrentAutoManaged,
 	"availability": updateTorrentAvailability,
 	"category": updateTorrentCategory,
+	"comment": updateTorrentComment,
 	"completed": updateTorrentCompleted,
 	"completion_on": updateTorrentCompletionOn,
+	"created_by": updateTorrentCreatedBy,
 	"content_path": updateTorrentContentPath,
 	"dl_limit": updateTorrentDlLimit,
 	"dlspeed": updateTorrentDlSpeed,
@@ -402,6 +474,10 @@ var torrentFieldUpdaters = map[string]func(val interface{}, obj *Torrent){
 	"f_l_piece_prio": updateTorrentFirstLastPiecePrio,
 	"force_start": updateTorrentForceStart,
 	"hash": updateTorrentHash,
+	"has_metadata": updateTorrentHasMetadata,
+	"has_tracker_warning": updateTorrentHasTrackerWarning,
+	"has_tracker_error": updateTorrentHasTrackerError,
+	"has_other_announce_error": updateTorrentHasOtherAnnounceError,
 	"infohash_v1": updateTorrentInfohashV1,
 	"infohash_v2": updateTorrentInfohashV2,
 	"popularity": updateTorrentPopularity,
@@ -410,6 +486,7 @@ var torrentFieldUpdaters = map[string]func(val interface{}, obj *Torrent){
 	"magnet_uri": updateTorrentMagnetURI,
 	"max_ratio": updateTorrentMaxRatio,
 	"max_seeding_time": updateTorrentMaxSeedingTime,
+	"max_inactive_seeding_time": updateTorrentMaxInactiveSeedingTime,
 	"name": updateTorrentName,
 	"num_complete": updateTorrentNumComplete,
 	"num_incomplete": updateTorrentNumIncomplete,
@@ -423,6 +500,9 @@ var torrentFieldUpdaters = map[string]func(val interface{}, obj *Torrent){
 	"save_path": updateTorrentSavePath,
 	"seeding_time": updateTorrentSeedingTime,
 	"seeding_time_limit": updateTorrentSeedingTimeLimit,
+	"inactive_seeding_time_limit": updateTorrentInactiveSeedingTimeLimit,
+	"share_limit_action": updateTorrentShareLimitAction,
+	"share_limits_mode": updateTorrentShareLimitsMode,
 	"seen_complete": updateTorrentSeenComplete,
 	"seq_dl": updateTorrentSequentialDownload,
 	"size": updateTorrentSize,
@@ -505,7 +585,7 @@ var torrenttrackerFieldUpdaters = map[string]func(val interface{}, obj *TorrentT
 	"status": updateTorrentTrackerStatus,
 	"num_peers": updateTorrentTrackerNumPeers,
 	"num_seeds": updateTorrentTrackerNumSeeds,
-	"num_leechers": updateTorrentTrackerNumLeechers,
+	"num_leeches": updateTorrentTrackerNumLeechers,
 	"num_downloaded": updateTorrentTrackerNumDownloaded,
 	"msg": updateTorrentTrackerMessage,
 }
@@ -534,10 +614,18 @@ func updateCategorySavePath(val interface{}, obj *Category) {
 	}
 }
 
+// updateCategoryDownloadPath updates the DownloadPath field of Category
+func updateCategoryDownloadPath(val interface{}, obj *Category) {
+	if d, ok := parseCategoryDownloadPath(val); ok {
+		obj.DownloadPath = d
+	}
+}
+
 // Precomputed field updaters for Category - created once at package init
 var categoryFieldUpdaters = map[string]func(val interface{}, obj *Category){
 	"name": updateCategoryName,
 	"savePath": updateCategorySavePath,
+	"download_path": updateCategoryDownloadPath,
 }
 
 // updateCategoryFields updates only the fields that are present in the update map
@@ -617,6 +705,20 @@ func updateServerStateFreeSpaceOnDisk(val interface{}, obj *ServerState) {
 func updateServerStateGlobalRatio(val interface{}, obj *ServerState) {
 	if g, ok := val.(string); ok {
 		obj.GlobalRatio = g
+	}
+}
+
+// updateServerStateLastExternalAddressV4 updates the LastExternalAddressV4 field of ServerState
+func updateServerStateLastExternalAddressV4(val interface{}, obj *ServerState) {
+	if l, ok := val.(string); ok {
+		obj.LastExternalAddressV4 = l
+	}
+}
+
+// updateServerStateLastExternalAddressV6 updates the LastExternalAddressV6 field of ServerState
+func updateServerStateLastExternalAddressV6(val interface{}, obj *ServerState) {
+	if l, ok := val.(string); ok {
+		obj.LastExternalAddressV6 = l
 	}
 }
 
@@ -711,6 +813,13 @@ func updateServerStateUseAltSpeedLimits(val interface{}, obj *ServerState) {
 	}
 }
 
+// updateServerStateUseSubcategories updates the UseSubcategories field of ServerState
+func updateServerStateUseSubcategories(val interface{}, obj *ServerState) {
+	if u, ok := val.(bool); ok {
+		obj.UseSubcategories = u
+	}
+}
+
 // updateServerStateWriteCacheOverload updates the WriteCacheOverload field of ServerState
 func updateServerStateWriteCacheOverload(val interface{}, obj *ServerState) {
 	if w, ok := val.(string); ok {
@@ -730,6 +839,8 @@ var serverstateFieldUpdaters = map[string]func(val interface{}, obj *ServerState
 	"dl_rate_limit": updateServerStateDlRateLimit,
 	"free_space_on_disk": updateServerStateFreeSpaceOnDisk,
 	"global_ratio": updateServerStateGlobalRatio,
+	"last_external_address_v4": updateServerStateLastExternalAddressV4,
+	"last_external_address_v6": updateServerStateLastExternalAddressV6,
 	"queued_io_jobs": updateServerStateQueuedIoJobs,
 	"queueing": updateServerStateQueueing,
 	"read_cache_hits": updateServerStateReadCacheHits,
@@ -743,6 +854,7 @@ var serverstateFieldUpdaters = map[string]func(val interface{}, obj *ServerState
 	"up_info_speed": updateServerStateUpInfoSpeed,
 	"up_rate_limit": updateServerStateUpRateLimit,
 	"use_alt_speed_limits": updateServerStateUseAltSpeedLimits,
+	"use_subcategories": updateServerStateUseSubcategories,
 	"write_cache_overload": updateServerStateWriteCacheOverload,
 }
 
