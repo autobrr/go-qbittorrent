@@ -13,10 +13,6 @@ func (m *mockTrackerAPI) GetTorrentsCtx(ctx context.Context, o TorrentFilterOpti
 	return nil, nil
 }
 
-func (m *mockTrackerAPI) GetTorrentTrackersCtx(ctx context.Context, hash string) ([]TorrentTracker, error) {
-	return nil, nil
-}
-
 func TestTrackerManagerHydrateWithExistingTrackers(t *testing.T) {
 	api := &mockTrackerAPI{}
 	manager := NewTrackerManager(api)
@@ -73,10 +69,6 @@ func (a *recordingTrackerAPI) GetTorrentsCtx(ctx context.Context, o TorrentFilte
 		result = append(result, Torrent{Hash: hash, Trackers: trackers})
 	}
 	return result, nil
-}
-
-func (a *recordingTrackerAPI) GetTorrentTrackersCtx(ctx context.Context, hash string) ([]TorrentTracker, error) {
-	return a.data[hash], nil
 }
 
 func TestTrackerManagerHydrateWithIncludeTrackersSingleRequest(t *testing.T) {
@@ -189,10 +181,6 @@ func (a *fallbackTrackerAPI) GetTorrentsCtx(ctx context.Context, o TorrentFilter
 	return []Torrent{}, nil
 }
 
-func (a *fallbackTrackerAPI) GetTorrentTrackersCtx(ctx context.Context, hash string) ([]TorrentTracker, error) {
-	return a.data[hash], nil
-}
-
 func TestTrackerManagerHydrateWithIncludeTrackersFallback(t *testing.T) {
 	data := map[string][]TorrentTracker{
 		"HASHA": {{Url: "udp://fallback/a", Status: TrackerStatusOK}},
@@ -221,5 +209,100 @@ func TestTrackerManagerHydrateWithIncludeTrackersFallback(t *testing.T) {
 
 	if len(trackerMap) != len(torrents) {
 		t.Fatalf("expected tracker map entries for all torrents, got %d", len(trackerMap))
+	}
+}
+
+type statusTrackerAPI struct {
+	status TrackerStatus
+	err    error
+	calls  int
+	last   TorrentFilterOptions
+}
+
+func (a *statusTrackerAPI) GetTorrentsCtx(ctx context.Context, o TorrentFilterOptions) ([]Torrent, error) {
+	a.calls++
+	a.last = o
+	if a.err != nil {
+		return nil, a.err
+	}
+	return []Torrent{{Hash: "HASHA", Trackers: []TorrentTracker{{Url: "udp://a", Status: a.status}}}}, nil
+}
+
+func TestTrackerManagerRefreshReplacesCachedEntry(t *testing.T) {
+	api := &statusTrackerAPI{status: TrackerStatusOK}
+	manager := NewTrackerManager(api)
+	manager.SetUseIncludeTrackers(true)
+	manager.HydrateTorrents(t.Context(), []Torrent{{Hash: "HASHA"}})
+
+	api.status = TrackerStatusNotWorking
+	calls := api.calls
+	refreshed, trackerMap, err := manager.Refresh(t.Context(), []Torrent{{Hash: "HASHA", Trackers: []TorrentTracker{{Url: "udp://a", Status: TrackerStatusOK}}}})
+	if err != nil {
+		t.Fatalf("Refresh returned error: %v", err)
+	}
+	if api.calls-calls != 1 || len(api.last.Hashes) != 0 || !api.last.IncludeTrackers {
+		t.Fatalf("Refresh sent %d requests, last %+v; want 1 unfiltered includeTrackers request", api.calls-calls, api.last)
+	}
+	if got := refreshed[0].Trackers[0].Status; got != TrackerStatusNotWorking {
+		t.Fatalf("Refresh returned status %v, want %v", got, TrackerStatusNotWorking)
+	}
+	if got := trackerMap["HASHA"][0].Status; got != TrackerStatusNotWorking {
+		t.Fatalf("Refresh map status %v, want %v", got, TrackerStatusNotWorking)
+	}
+
+	calls = api.calls
+	hydrated, _ := manager.HydrateTorrents(t.Context(), []Torrent{{Hash: "HASHA"}})
+	if api.calls != calls {
+		t.Fatalf("HydrateTorrents sent %d requests, want 0", api.calls-calls)
+	}
+	if got := hydrated[0].Trackers[0].Status; got != TrackerStatusNotWorking {
+		t.Fatalf("HydrateTorrents served status %v, want %v", got, TrackerStatusNotWorking)
+	}
+}
+
+func TestTrackerManagerRefreshKeepsCacheOnError(t *testing.T) {
+	api := &statusTrackerAPI{status: TrackerStatusOK}
+	manager := NewTrackerManager(api)
+	manager.SetUseIncludeTrackers(true)
+	manager.HydrateTorrents(t.Context(), []Torrent{{Hash: "HASHA"}})
+
+	api.err = errors.New("timeout")
+	calls := api.calls
+	refreshed, trackerMap, err := manager.Refresh(t.Context(), []Torrent{{Hash: "HASHA"}})
+	if !errors.Is(err, api.err) {
+		t.Fatalf("Refresh returned error %v, want %v", err, api.err)
+	}
+	if api.calls-calls != 1 {
+		t.Fatalf("failed Refresh sent %d requests, want 1", api.calls-calls)
+	}
+	if len(trackerMap) != 0 || len(refreshed[0].Trackers) != 0 {
+		t.Fatalf("failed Refresh changed the result: map %v, trackers %+v", trackerMap, refreshed[0].Trackers)
+	}
+
+	calls = api.calls
+	hydrated, _ := manager.HydrateTorrents(t.Context(), []Torrent{{Hash: "HASHA"}})
+	if api.calls != calls {
+		t.Fatalf("HydrateTorrents sent %d requests, want 0", api.calls-calls)
+	}
+	if len(hydrated[0].Trackers) == 0 || hydrated[0].Trackers[0].Status != TrackerStatusOK {
+		t.Fatalf("cache entry lost after failed Refresh: %+v", hydrated[0].Trackers)
+	}
+}
+
+func TestTrackerManagerWithoutIncludeTrackersSendsNoRequest(t *testing.T) {
+	api := &statusTrackerAPI{status: TrackerStatusOK}
+	manager := NewTrackerManager(api)
+	manager.SetUseIncludeTrackers(false)
+
+	torrents := []Torrent{{Hash: "HASHA"}}
+	manager.HydrateTorrents(t.Context(), torrents)
+	if _, _, err := manager.Refresh(t.Context(), torrents); err != nil {
+		t.Fatalf("Refresh returned error: %v", err)
+	}
+	if api.calls != 0 {
+		t.Fatalf("sent %d requests, want 0", api.calls)
+	}
+	if len(torrents[0].Trackers) != 0 {
+		t.Fatalf("torrent changed: %+v", torrents[0].Trackers)
 	}
 }
