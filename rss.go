@@ -251,7 +251,7 @@ func (c *Client) SetRSSFeedURL(path, url string) error {
 // SetRSSFeedURLCtx changes the URL of an existing feed with context.
 // Requires qBittorrent 4.6.0+ (WebAPI 2.9.1+).
 func (c *Client) SetRSSFeedURLCtx(ctx context.Context, path, url string) error {
-	if ok, err := c.RequiresMinVersion(semver.MustParse("2.9.1")); !ok {
+	if ok, err := c.RequiresMinVersionCtx(ctx, semver.MustParse("2.9.1")); !ok {
 		return errors.Wrap(err, "SetRSSFeedURL requires qBittorrent 4.6.0+ (WebAPI >= 2.9.1)")
 	}
 

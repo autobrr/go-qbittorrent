@@ -5,7 +5,7 @@ for the qBittorrent WebAPI. There is no app, no database and no frontend here.
 
 ## Tests
 
-- CI runs `go test -tags ci ./...`. Match it before you report a change complete.
+- CI runs `go test -tags ci ./...`, and that run is the test gate.
 - `methods_test.go` is `//go:build !ci`, so a plain `go test ./...` runs more than
   CI does. A green local run does not prove a green CI run.
 - `filter_live_bench_test.go` is `//go:build integration` and needs a live
@@ -37,5 +37,5 @@ consumers, so say in the PR which of them a change reaches:
   does not do it for you.
 - Update a PR by adding a commit. Never force-push: PRs are squash-merged, so a
   rewrite gains nothing and breaks review history.
-- Answer the AI disclosure section truthfully. Never put AI attribution in a
-  commit message or a PR body.
+- Put AI attribution only in the AI disclosure section of the template, and
+  answer that section truthfully.

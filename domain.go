@@ -65,7 +65,10 @@ type Torrent struct {
 	Comment                  string           `json:"comment"`
 	Completed                int64            `json:"completed"`
 	CompletionOn             int64            `json:"completion_on"`
+	ConnectionsCount         int64            `json:"connections_count"`
+	ConnectionsLimit         int64            `json:"connections_limit"`
 	CreatedBy                string           `json:"created_by"`
+	CreationDate             int64            `json:"creation_date"`
 	ContentPath              string           `json:"content_path"`
 	DlLimit                  int64            `json:"dl_limit"`
 	DlSpeed                  int64            `json:"dlspeed"`
@@ -77,6 +80,9 @@ type Torrent struct {
 	ForceStart               bool             `json:"force_start"`
 	Hash                     string           `json:"hash"`
 	HasMetadata              *bool            `json:"has_metadata"`
+	HasTrackerWarning        bool             `json:"has_tracker_warning"`      // sync/maindata only, qBittorrent 5.2+
+	HasTrackerError          bool             `json:"has_tracker_error"`        // sync/maindata only, qBittorrent 5.2+
+	HasOtherAnnounceError    bool             `json:"has_other_announce_error"` // sync/maindata only, qBittorrent 5.2+
 	InfohashV1               string           `json:"infohash_v1"`
 	InfohashV2               string           `json:"infohash_v2"`
 	Popularity               float64          `json:"popularity"`
@@ -91,6 +97,9 @@ type Torrent struct {
 	NumIncomplete            int64            `json:"num_incomplete"`
 	NumLeechs                int64            `json:"num_leechs"`
 	NumSeeds                 int64            `json:"num_seeds"`
+	PieceSize                int64            `json:"piece_size"`
+	PiecesHave               int64            `json:"pieces_have"`
+	PiecesNum                int64            `json:"pieces_num"`
 	Priority                 int64            `json:"priority"`
 	Progress                 float64          `json:"progress"`
 	Ratio                    float64          `json:"ratio"`
@@ -110,6 +119,7 @@ type Torrent struct {
 	Tags                     string           `json:"tags"`
 	TimeActive               int64            `json:"time_active"`
 	TotalSize                int64            `json:"total_size"`
+	TotalWasted              int64            `json:"total_wasted"`
 	Tracker                  string           `json:"tracker"`
 	TrackersCount            int64            `json:"trackers_count"`
 	UpLimit                  int64            `json:"up_limit"`
@@ -147,9 +157,74 @@ type TorrentFile struct {
 	Size         int64   `json:"size"`
 }
 
+// Category is one category from torrents/categories or sync/maindata.
 type Category struct {
 	Name     string `json:"name"`
 	SavePath string `json:"savePath"`
+	// DownloadPath is the category's own download path option, sent as
+	// download_path from qBittorrent 4.4 (WebAPI 2.8.4). Nil means the category
+	// inherits the option, whether qBittorrent sent null or left the key out.
+	// Before WebAPI 2.11.10 (qBittorrent 5.1 and earlier) inherit leaves the key
+	// out, so a partial maindata update never reports a change from a path
+	// back to inherit. Only a full update or GetCategoriesCtx clears it there.
+	DownloadPath *CategoryDownloadPath `json:"download_path,omitempty"`
+}
+
+// CategoryDownloadPath is a category's download path option when it does not
+// inherit one. Enabled false means the category turns the download path off.
+// Enabled true means it uses Path, which may be empty or relative: qBittorrent
+// resolves those against the parent category or the global download path.
+//
+// qBittorrent encodes the option as false when it is disabled and as the path
+// string when it is enabled. UnmarshalJSON also accepts true, which qBittorrent
+// reads as enabled with an empty path.
+type CategoryDownloadPath struct {
+	Enabled bool
+	Path    string
+}
+
+// UnmarshalJSON decodes false, true or a path string. It leaves the value
+// unchanged for null, so a nil *CategoryDownloadPath field stays nil.
+func (d *CategoryDownloadPath) UnmarshalJSON(data []byte) error {
+	var value any
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	if value == nil {
+		return nil
+	}
+	parsed, ok := parseCategoryDownloadPath(value)
+	if !ok {
+		return errors.New("category download_path must be null, a bool or a string, got %s", data)
+	}
+	*d = *parsed
+	return nil
+}
+
+// MarshalJSON writes false when the option is disabled and the path string
+// when it is enabled. A nil *CategoryDownloadPath marshals as null, and a
+// Category field holding nil is left out.
+func (d CategoryDownloadPath) MarshalJSON() ([]byte, error) {
+	if !d.Enabled {
+		return []byte("false"), nil
+	}
+	return json.Marshal(d.Path)
+}
+
+// parseCategoryDownloadPath converts a decoded download_path value. It returns
+// nil and true for null, and false for a type qBittorrent never sends. The
+// generated maindata updater uses it for partial updates.
+func parseCategoryDownloadPath(value any) (*CategoryDownloadPath, bool) {
+	switch v := value.(type) {
+	case nil:
+		return nil, true
+	case bool:
+		return &CategoryDownloadPath{Enabled: v}, true
+	case string:
+		return &CategoryDownloadPath{Enabled: true, Path: v}, true
+	default:
+		return nil, false
+	}
 }
 
 type TorrentState string
@@ -873,7 +948,27 @@ type MainData struct {
 	Tags              []string            `json:"tags"`
 	TagsRemoved       []string            `json:"tags_removed"`
 	Trackers          map[string][]string `json:"trackers"`
+	TrackersRemoved   []string            `json:"trackers_removed"`
 	ServerState       ServerState         `json:"server_state"`
+	// Changes lists what the last sync response changed.
+	Changes MainDataChanges `json:"-"`
+}
+
+// MainDataChanges lists what one sync response changed. A full update
+// changes everything: Torrents holds every hash, and TorrentsRemoved holds
+// each hash that the full update dropped.
+type MainDataChanges struct {
+	// Torrents holds the hashes of the added and changed torrents.
+	Torrents        []string
+	TorrentsRemoved []string
+	Categories      bool
+	Tags            bool
+	Trackers        bool
+	ServerState     bool
+}
+
+func (c MainDataChanges) empty() bool {
+	return len(c.Torrents) == 0 && len(c.TorrentsRemoved) == 0 && !c.Categories && !c.Tags && !c.Trackers && !c.ServerState
 }
 
 type ServerState struct {

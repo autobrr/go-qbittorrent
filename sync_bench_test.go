@@ -1,6 +1,7 @@
 package qbittorrent
 
 import (
+	"fmt"
 	"testing"
 	"time"
 )
@@ -106,5 +107,68 @@ func BenchmarkSyncManager_MultipleSequentialGetsUnchecked(b *testing.B) {
 		_, _ = syncManager.GetTorrentUnchecked("hash1")
 		_ = syncManager.GetServerStateUnchecked()
 		_ = syncManager.GetCategoriesUnchecked()
+	}
+}
+
+// newLibrarySyncManager returns a manager that holds n torrents with mixed
+// categories, tags, states and sizes. Sizes repeat, so a sort by size has ties.
+func newLibrarySyncManager(n int) (*SyncManager, []string) {
+	categories := []string{"", "movies", "tv"}
+	tags := []string{"", "a", "a,b", "b"}
+	states := []TorrentState{TorrentStateUploading, TorrentStatePausedUp, TorrentStateDownloading, TorrentStateStalledDl, TorrentStateError}
+
+	torrents := make(map[string]Torrent, n)
+	hashes := make([]string, 0, n)
+	for i := range n {
+		hash := fmt.Sprintf("%040x", i)
+		hashes = append(hashes, hash)
+		torrents[hash] = Torrent{
+			Hash:     hash,
+			Name:     fmt.Sprintf("torrent %d", i),
+			Category: categories[i%len(categories)],
+			Tags:     tags[i%len(tags)],
+			State:    states[i%len(states)],
+			Size:     int64(i % 7),
+			AddedOn:  int64(n - i),
+		}
+	}
+
+	sm := NewSyncManager(nil)
+	sm.data = &MainData{Torrents: torrents}
+	sm.updateAllTorrents()
+	return sm, hashes
+}
+
+func BenchmarkSyncManager_GetTorrentsByHash(b *testing.B) {
+	sm, hashes := newLibrarySyncManager(50_000)
+
+	for _, count := range []int{1, 1_000, 50_000} {
+		b.Run(fmt.Sprintf("hashes=%d", count), func(b *testing.B) {
+			options := TorrentFilterOptions{Hashes: hashes[:count]}
+			for b.Loop() {
+				_ = sm.GetTorrentsUnchecked(options)
+			}
+		})
+	}
+}
+
+// BenchmarkSyncManager_UpdateAllTorrents measures the cache rebuild that runs
+// after each sync.
+func BenchmarkSyncManager_UpdateAllTorrents(b *testing.B) {
+	sm, _ := newLibrarySyncManager(50_000)
+	for b.Loop() {
+		sm.updateAllTorrents()
+	}
+}
+
+// BenchmarkSyncManager_ApplyUnchangedSync measures a sync response that
+// changes nothing, while an OnUpdate callback is set.
+func BenchmarkSyncManager_ApplyUnchangedSync(b *testing.B) {
+	sm, _ := newLibrarySyncManager(50_000)
+	sm.options.OnUpdate = func(*MainData) {}
+	source := &MainData{Rid: 2}
+	raw := map[string]any{"rid": float64(2)}
+	for b.Loop() {
+		sm.applySyncResult(source, raw, time.Now(), nil)
 	}
 }
