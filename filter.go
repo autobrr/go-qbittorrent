@@ -2,10 +2,7 @@
 
 package qbittorrent
 
-import (
-	"slices"
-	"strings"
-)
+import "strings"
 
 // removeDuplicateStrings removes duplicate strings from a slice and returns unique items
 func removeDuplicateStrings(input []string) []string {
@@ -47,14 +44,9 @@ func removeStrings(input []string, toRemove []string) []string {
 	return result
 }
 
-// matchesTorrentFilter checks if a torrent matches the given filter options
+// matchesTorrentFilter checks if a torrent matches the category, tag and state
+// filters. The caller applies the hash filter.
 func matchesTorrentFilter(torrent Torrent, options TorrentFilterOptions) bool {
-	if len(options.Hashes) > 0 {
-		found := slices.Contains(options.Hashes, torrent.Hash)
-		if !found {
-			return false
-		}
-	}
 	if options.Category != "" && torrent.Category != options.Category {
 		return false
 	}
