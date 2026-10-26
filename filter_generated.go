@@ -79,6 +79,24 @@ func compareCompletionOn(a, b *Torrent) int {
 	return 0
 }
 
+func compareConnectionsCount(a, b *Torrent) int {
+	if a.ConnectionsCount < b.ConnectionsCount {
+		return -1
+	} else if a.ConnectionsCount > b.ConnectionsCount {
+		return 1
+	}
+	return 0
+}
+
+func compareConnectionsLimit(a, b *Torrent) int {
+	if a.ConnectionsLimit < b.ConnectionsLimit {
+		return -1
+	} else if a.ConnectionsLimit > b.ConnectionsLimit {
+		return 1
+	}
+	return 0
+}
+
 func compareCreatedBy(a, b *Torrent) int {
 	if a.CreatedBy == b.CreatedBy {
 		return 0
@@ -86,6 +104,15 @@ func compareCreatedBy(a, b *Torrent) int {
 		return -1
 	}
 	return 1
+}
+
+func compareCreationDate(a, b *Torrent) int {
+	if a.CreationDate < b.CreationDate {
+		return -1
+	} else if a.CreationDate > b.CreationDate {
+		return 1
+	}
+	return 0
 }
 
 func compareContentPath(a, b *Torrent) int {
@@ -337,6 +364,33 @@ func compareNumSeeds(a, b *Torrent) int {
 	return 0
 }
 
+func comparePieceSize(a, b *Torrent) int {
+	if a.PieceSize < b.PieceSize {
+		return -1
+	} else if a.PieceSize > b.PieceSize {
+		return 1
+	}
+	return 0
+}
+
+func comparePiecesHave(a, b *Torrent) int {
+	if a.PiecesHave < b.PiecesHave {
+		return -1
+	} else if a.PiecesHave > b.PiecesHave {
+		return 1
+	}
+	return 0
+}
+
+func comparePiecesNum(a, b *Torrent) int {
+	if a.PiecesNum < b.PiecesNum {
+		return -1
+	} else if a.PiecesNum > b.PiecesNum {
+		return 1
+	}
+	return 0
+}
+
 func comparePriority(a, b *Torrent) int {
 	if a.Priority < b.Priority {
 		return -1
@@ -510,6 +564,15 @@ func compareTotalSize(a, b *Torrent) int {
 	return 0
 }
 
+func compareTotalWasted(a, b *Torrent) int {
+	if a.TotalWasted < b.TotalWasted {
+		return -1
+	} else if a.TotalWasted > b.TotalWasted {
+		return 1
+	}
+	return 0
+}
+
 func compareTracker(a, b *Torrent) int {
 	if a.Tracker == b.Tracker {
 		return 0
@@ -583,7 +646,10 @@ var torrentComparators = map[string]func(a, b *Torrent) int{
 	"comment": compareComment,
 	"completed": compareCompleted,
 	"completion_on": compareCompletionOn,
+	"connections_count": compareConnectionsCount,
+	"connections_limit": compareConnectionsLimit,
 	"created_by": compareCreatedBy,
+	"creation_date": compareCreationDate,
 	"content_path": compareContentPath,
 	"dl_limit": compareDlLimit,
 	"dlspeed": compareDlSpeed,
@@ -611,6 +677,9 @@ var torrentComparators = map[string]func(a, b *Torrent) int{
 	"num_incomplete": compareNumIncomplete,
 	"num_leechs": compareNumLeechs,
 	"num_seeds": compareNumSeeds,
+	"piece_size": comparePieceSize,
+	"pieces_have": comparePiecesHave,
+	"pieces_num": comparePiecesNum,
 	"priority": comparePriority,
 	"progress": compareProgress,
 	"ratio": compareRatio,
@@ -630,6 +699,7 @@ var torrentComparators = map[string]func(a, b *Torrent) int{
 	"tags": compareTags,
 	"time_active": compareTimeActive,
 	"total_size": compareTotalSize,
+	"total_wasted": compareTotalWasted,
 	"tracker": compareTracker,
 	"trackers_count": compareTrackersCount,
 	"up_limit": compareUpLimit,
