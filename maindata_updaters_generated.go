@@ -59,10 +59,31 @@ func updateTorrentCompletionOn(val interface{}, obj *Torrent) {
 	}
 }
 
+// updateTorrentConnectionsCount updates the ConnectionsCount field of Torrent
+func updateTorrentConnectionsCount(val interface{}, obj *Torrent) {
+	if c, ok := val.(float64); ok {
+		obj.ConnectionsCount = int64(c)
+	}
+}
+
+// updateTorrentConnectionsLimit updates the ConnectionsLimit field of Torrent
+func updateTorrentConnectionsLimit(val interface{}, obj *Torrent) {
+	if c, ok := val.(float64); ok {
+		obj.ConnectionsLimit = int64(c)
+	}
+}
+
 // updateTorrentCreatedBy updates the CreatedBy field of Torrent
 func updateTorrentCreatedBy(val interface{}, obj *Torrent) {
 	if c, ok := val.(string); ok {
 		obj.CreatedBy = c
+	}
+}
+
+// updateTorrentCreationDate updates the CreationDate field of Torrent
+func updateTorrentCreationDate(val interface{}, obj *Torrent) {
+	if c, ok := val.(float64); ok {
+		obj.CreationDate = int64(c)
 	}
 }
 
@@ -262,6 +283,27 @@ func updateTorrentNumSeeds(val interface{}, obj *Torrent) {
 	}
 }
 
+// updateTorrentPieceSize updates the PieceSize field of Torrent
+func updateTorrentPieceSize(val interface{}, obj *Torrent) {
+	if p, ok := val.(float64); ok {
+		obj.PieceSize = int64(p)
+	}
+}
+
+// updateTorrentPiecesHave updates the PiecesHave field of Torrent
+func updateTorrentPiecesHave(val interface{}, obj *Torrent) {
+	if p, ok := val.(float64); ok {
+		obj.PiecesHave = int64(p)
+	}
+}
+
+// updateTorrentPiecesNum updates the PiecesNum field of Torrent
+func updateTorrentPiecesNum(val interface{}, obj *Torrent) {
+	if p, ok := val.(float64); ok {
+		obj.PiecesNum = int64(p)
+	}
+}
+
 // updateTorrentPriority updates the Priority field of Torrent
 func updateTorrentPriority(val interface{}, obj *Torrent) {
 	if p, ok := val.(float64); ok {
@@ -395,6 +437,13 @@ func updateTorrentTotalSize(val interface{}, obj *Torrent) {
 	}
 }
 
+// updateTorrentTotalWasted updates the TotalWasted field of Torrent
+func updateTorrentTotalWasted(val interface{}, obj *Torrent) {
+	if t, ok := val.(float64); ok {
+		obj.TotalWasted = int64(t)
+	}
+}
+
 // updateTorrentTracker updates the Tracker field of Torrent
 func updateTorrentTracker(val interface{}, obj *Torrent) {
 	if t, ok := val.(string); ok {
@@ -463,7 +512,10 @@ var torrentFieldUpdaters = map[string]func(val interface{}, obj *Torrent){
 	"comment": updateTorrentComment,
 	"completed": updateTorrentCompleted,
 	"completion_on": updateTorrentCompletionOn,
+	"connections_count": updateTorrentConnectionsCount,
+	"connections_limit": updateTorrentConnectionsLimit,
 	"created_by": updateTorrentCreatedBy,
+	"creation_date": updateTorrentCreationDate,
 	"content_path": updateTorrentContentPath,
 	"dl_limit": updateTorrentDlLimit,
 	"dlspeed": updateTorrentDlSpeed,
@@ -492,6 +544,9 @@ var torrentFieldUpdaters = map[string]func(val interface{}, obj *Torrent){
 	"num_incomplete": updateTorrentNumIncomplete,
 	"num_leechs": updateTorrentNumLeechs,
 	"num_seeds": updateTorrentNumSeeds,
+	"piece_size": updateTorrentPieceSize,
+	"pieces_have": updateTorrentPiecesHave,
+	"pieces_num": updateTorrentPiecesNum,
 	"priority": updateTorrentPriority,
 	"progress": updateTorrentProgress,
 	"ratio": updateTorrentRatio,
@@ -511,6 +566,7 @@ var torrentFieldUpdaters = map[string]func(val interface{}, obj *Torrent){
 	"tags": updateTorrentTags,
 	"time_active": updateTorrentTimeActive,
 	"total_size": updateTorrentTotalSize,
+	"total_wasted": updateTorrentTotalWasted,
 	"tracker": updateTorrentTracker,
 	"trackers_count": updateTorrentTrackersCount,
 	"up_limit": updateTorrentUpLimit,
