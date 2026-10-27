@@ -65,7 +65,10 @@ type Torrent struct {
 	Comment                  string           `json:"comment"`
 	Completed                int64            `json:"completed"`
 	CompletionOn             int64            `json:"completion_on"`
+	ConnectionsCount         int64            `json:"connections_count"`
+	ConnectionsLimit         int64            `json:"connections_limit"`
 	CreatedBy                string           `json:"created_by"`
+	CreationDate             int64            `json:"creation_date"`
 	ContentPath              string           `json:"content_path"`
 	DlLimit                  int64            `json:"dl_limit"`
 	DlSpeed                  int64            `json:"dlspeed"`
@@ -94,6 +97,9 @@ type Torrent struct {
 	NumIncomplete            int64            `json:"num_incomplete"`
 	NumLeechs                int64            `json:"num_leechs"`
 	NumSeeds                 int64            `json:"num_seeds"`
+	PieceSize                int64            `json:"piece_size"`
+	PiecesHave               int64            `json:"pieces_have"`
+	PiecesNum                int64            `json:"pieces_num"`
 	Priority                 int64            `json:"priority"`
 	Progress                 float64          `json:"progress"`
 	Ratio                    float64          `json:"ratio"`
@@ -113,6 +119,7 @@ type Torrent struct {
 	Tags                     string           `json:"tags"`
 	TimeActive               int64            `json:"time_active"`
 	TotalSize                int64            `json:"total_size"`
+	TotalWasted              int64            `json:"total_wasted"`
 	Tracker                  string           `json:"tracker"`
 	TrackersCount            int64            `json:"trackers_count"`
 	UpLimit                  int64            `json:"up_limit"`
