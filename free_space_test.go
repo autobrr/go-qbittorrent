@@ -68,8 +68,8 @@ func TestClient_GetFreeSpaceAtPathCtx(t *testing.T) {
 
 func TestClient_GetFreeSpaceAtPathCtx_Canceled(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/v2/app/webapiVersion", func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte("2.15.2"))
+	mux.HandleFunc("GET /api/v2/app/webapiVersion", func(http.ResponseWriter, *http.Request) {
+		t.Error("canceled version request reached the server")
 	})
 	mux.HandleFunc("GET /api/v2/app/getFreeSpaceAtPath", func(http.ResponseWriter, *http.Request) {
 		t.Error("canceled request reached the server")
