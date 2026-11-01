@@ -5,9 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"log"
 	"net/http"
-	"net/http/cookiejar"
 	"net/http/httptest"
 	"reflect"
 	"slices"
@@ -17,42 +15,6 @@ import (
 	"time"
 )
 
-// MockClient creates a client with mocked HTTP responses
-type MockClient struct {
-	*Client
-	mockResponses map[string]mockResponse
-	callCount     int
-}
-
-type mockResponse struct {
-	data map[string]interface{}
-	err  error
-}
-
-type mockRoundTripper struct {
-	mock *MockClient
-}
-
-func (m *mockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	m.mock.callCount++
-
-	// Get the mock response for this endpoint
-	response, exists := m.mock.mockResponses[req.URL.Path]
-	if !exists || response.err != nil {
-		if response.err != nil {
-			return nil, response.err
-		}
-		return nil, context.DeadlineExceeded // Default error for missing mocks
-	}
-
-	// Create a mock HTTP response
-	jsonData, _ := json.Marshal(response.data)
-	return &http.Response{
-		StatusCode: 200,
-		Body:       io.NopCloser(bytes.NewReader(jsonData)),
-	}, nil
-}
-
 // roundTripFunc adapts a function into an http.RoundTripper so a test can drive
 // a real Client's request path (login skipped via API key auth) to a
 // deterministic success or failure without touching the network.
@@ -60,108 +22,18 @@ type roundTripFunc func(req *http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
 
-func NewMockClient() *MockClient {
-	// Create a mock transport that returns mock responses
-	mockTransport := &mockRoundTripper{}
-
-	// Create a client with the mock transport
-	jar, _ := cookiejar.New(nil)
-	client := &Client{
-		http: &http.Client{
-			Transport: mockTransport,
-			Jar:       jar,
-		},
-		// A literal Client skips the NewClient defaults that retryDo needs.
-		log:           log.New(io.Discard, "", 0),
-		timeout:       DefaultTimeout,
-		retryAttempts: 1,
-	}
-
-	mock := &MockClient{
-		Client:        client,
-		mockResponses: make(map[string]mockResponse),
-	}
-
-	// Store reference to mock in transport so it can access mock responses
-	mockTransport.mock = mock
-
-	// Set up default mock responses
-	mock.SetMockResponse("/sync/maindata", mockResponse{
-		data: map[string]interface{}{
-			"rid":         1,
-			"full_update": true,
-			"torrents":    make(map[string]interface{}),
-			"categories":  make(map[string]interface{}),
-			"tags":        []string{},
-			"server_state": map[string]interface{}{
-				"connection_status": "connected",
-			},
-		},
-		err: nil,
+// newOfflineClient returns a client that fails each request without a
+// network call, for tests that need no qBittorrent.
+func newOfflineClient() *Client {
+	client := NewClient(Config{Host: "http://qbit.test", APIKey: "test-key", RetryAttempts: 1})
+	client.http.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return nil, context.DeadlineExceeded
 	})
-
-	return mock
-}
-
-func (m *MockClient) SetMockResponse(endpoint string, response mockResponse) {
-	m.mockResponses[endpoint] = response
-}
-
-func (m *MockClient) SyncMainDataCtx(ctx context.Context, rid int64) (*MainData, error) {
-	m.callCount++
-	response, exists := m.mockResponses["/sync/maindata"]
-	if !exists || response.err != nil {
-		if response.err != nil {
-			return nil, response.err
-		}
-		return nil, context.DeadlineExceeded // Default error for missing mocks
-	}
-
-	return &MainData{
-		Rid:        int64(response.data["rid"].(int)),
-		FullUpdate: response.data["full_update"].(bool),
-		Torrents:   make(map[string]Torrent),
-		Categories: make(map[string]Category),
-		Tags:       []string{},
-		ServerState: ServerState{
-			ConnectionStatus: "connected",
-		},
-	}, nil
-}
-
-func (m *MockClient) SyncMainDataCtxWithRaw(ctx context.Context, rid int64) (*MainData, map[string]interface{}, error) {
-	data, err := m.SyncMainDataCtx(ctx, rid)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// Create basic raw data for testing
-	rawData := map[string]interface{}{
-		"rid":         data.Rid,
-		"full_update": data.FullUpdate,
-		"torrents":    map[string]interface{}{},
-		"categories":  map[string]interface{}{},
-		"tags":        []interface{}{},
-		"server_state": map[string]interface{}{
-			"connection_status": "connected",
-		},
-	}
-
-	return data, rawData, nil
-}
-
-func createMockSyncManager() (*SyncManager, *MockClient) {
-	mockClient := NewMockClient()
-	sm := &SyncManager{
-		client:  mockClient.Client,
-		options: DefaultSyncOptions(),
-	}
-
-	return sm, mockClient
+	return client
 }
 
 func TestSyncManager_BasicSync(t *testing.T) {
-	syncManager, _ := createMockSyncManager()
+	syncManager := NewSyncManager(newOfflineClient())
 
 	if syncManager == nil {
 		t.Fatal("NewSyncManager returned nil")
@@ -179,8 +51,7 @@ func TestSyncManager_WithOptions(t *testing.T) {
 		SyncInterval: 5 * time.Second,
 	}
 
-	mockClient := NewMockClient()
-	syncManager := NewSyncManager(mockClient.Client, options)
+	syncManager := NewSyncManager(newOfflineClient(), options)
 
 	if !syncManager.options.AutoSync {
 		t.Error("AutoSync option not set correctly")
@@ -192,7 +63,7 @@ func TestSyncManager_WithOptions(t *testing.T) {
 }
 
 func TestSyncManager_GetDataWhenEmpty(t *testing.T) {
-	syncManager, _ := createMockSyncManager()
+	syncManager := NewSyncManager(newOfflineClient())
 	// Disable dynamic sync for this test to prevent automatic syncing
 	syncManager.options.DynamicSync = false
 
@@ -223,7 +94,7 @@ func TestSyncManager_GetDataWhenEmpty(t *testing.T) {
 }
 
 func TestSyncManager_InitializeData(t *testing.T) {
-	syncManager, _ := createMockSyncManager()
+	syncManager := NewSyncManager(newOfflineClient())
 	// Disable dynamic sync for this test to prevent automatic syncing
 	syncManager.options.DynamicSync = false
 
