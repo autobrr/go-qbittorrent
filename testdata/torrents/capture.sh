@@ -63,6 +63,7 @@ for version in 4.6.7 5.0.0 5.1.4 5.2.4 5.3.0; do
 	done
 	[[ $ready ]] || { echo "$version: torrent not ready" >&2; exit 1; }
 	api "$url/torrents/info" >"$scratch/$version-info.json"
+	api "$url/torrents/info?includeTrackers=true" >"$scratch/$version-info-trackers.json"
 	hash=$(jq -r '.torrents | keys[0]' "$scratch/$version-full.json")
 	rid=$(jq -r .rid "$scratch/$version-full.json")
 	if at_least 5.2.0; then
