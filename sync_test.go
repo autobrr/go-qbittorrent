@@ -2264,20 +2264,29 @@ func TestSyncManager_BeforeFullUpdateRunsBeforeCache(t *testing.T) {
 
 // TestSyncManager_BeforeFullUpdateErrorGoesToOnError checks that an error from
 // BeforeFullUpdate goes to OnError, and that the full update still enters the
-// cache.
+// cache. OnError runs after the update enters the cache, so that a checked
+// getter in OnError does not wait for the first sync.
 func TestSyncManager_BeforeFullUpdateErrorGoesToOnError(t *testing.T) {
 	errVersion := errors.New("read version")
 	var gotErrs []error
+	var cacheInOnError []string
+	var sm *SyncManager
 	opts := DefaultSyncOptions()
 	opts.BeforeFullUpdate = func(context.Context, *MainData) error { return errVersion }
-	opts.OnError = func(err error) { gotErrs = append(gotErrs, err) }
-	sm := NewSyncManager(newRestartClient(t), opts)
+	opts.OnError = func(err error) {
+		gotErrs = append(gotErrs, err)
+		cacheInOnError = torrentHashes(sm)
+	}
+	sm = NewSyncManager(newRestartClient(t), opts)
 
 	if err := sm.Sync(t.Context()); err != nil {
 		t.Fatalf("expected the sync to succeed, got %v", err)
 	}
 	if len(gotErrs) != 1 || !errors.Is(gotErrs[0], errVersion) || !strings.Contains(gotErrs[0].Error(), "before full update") {
 		t.Fatalf("expected OnError to get the callback error once, got %v", gotErrs)
+	}
+	if !slices.Equal(cacheInOnError, []string{"old"}) {
+		t.Fatalf("expected the full update in the cache when OnError runs, got %v", cacheInOnError)
 	}
 	if got := torrentHashes(sm); !slices.Equal(got, []string{"old"}) {
 		t.Fatalf("expected the full update in the cache, got %v", got)

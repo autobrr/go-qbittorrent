@@ -220,13 +220,18 @@ func (sm *SyncManager) doSync(ctx context.Context) (interface{}, error) {
 
 	// The callback gets the sync deadline, not the one-attempt deadline of the
 	// fetch, which the fetch can have used up.
+	var cbErr error
 	if err == nil && source.FullUpdate && sm.options.BeforeFullUpdate != nil {
-		if cbErr := sm.options.BeforeFullUpdate(ctx, source); cbErr != nil && sm.options.OnError != nil {
-			sm.options.OnError(fmt.Errorf("before full update: %w", cbErr))
-		}
+		cbErr = sm.options.BeforeFullUpdate(ctx, source)
 	}
 
 	update := sm.applySyncResult(source, rawData, startTime, err)
+
+	// Report the callback error after the update enters the cache, so that
+	// a checked getter in OnError does not wait for this sync.
+	if cbErr != nil && sm.options.OnError != nil {
+		sm.options.OnError(fmt.Errorf("before full update: %w", cbErr))
+	}
 
 	// Callbacks run after the mutex is released so implementations can safely
 	// read back from the sync manager (the *Unchecked getters, LastError,
