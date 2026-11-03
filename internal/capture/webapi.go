@@ -34,6 +34,7 @@ var (
 	// {{u"app"_s, u"shutdown"_s}, Http::HEADER_REQUEST_METHOD_POST}
 	// {{QLatin1String("app"), QLatin1String("shutdown")}, Http::METHOD_POST}
 	postOnlyRe = regexp.MustCompile(`\{\{[^"]*"(\w+)"[^"]*"(\w+)"[^}]*\},\s*Http::\w*POST\}`)
+	postRe     = regexp.MustCompile(`Http::\w*POST`)
 	declRe     = regexp.MustCompile(`^\s*void (\w+)Action\(\)`)
 	defRe      = regexp.MustCompile(`^void \w+::(\w+)Action\(\)`)
 	literalRe  = regexp.MustCompile(`"([^"]*)"`)
@@ -64,8 +65,12 @@ func parseRelease(tree fs.FS, tag string) (release, error) {
 	r.WebAPIVersion = strings.Join(strings.Fields(strings.ReplaceAll(string(m[1]), ",", " ")), ".")
 	// Releases before 4.4.5 have no method table, so every action is "any".
 	postOnly := map[string]bool{}
-	for _, m := range postOnlyRe.FindAllSubmatch(app, -1) {
+	entries := postOnlyRe.FindAllSubmatch(app, -1)
+	for _, m := range entries {
 		postOnly[string(m[1])+"/"+string(m[2])] = true
+	}
+	if n := len(postRe.FindAll(app, -1)); len(entries) != n {
+		return r, fmt.Errorf("%s: read %d of %d POST entries in m_allowedMethod", tag, len(entries), n)
 	}
 	if len(postOnly) == 0 && bytes.Contains(app, []byte("m_allowedMethod")) {
 		return r, fmt.Errorf("%s: no POST entry in m_allowedMethod", tag)
@@ -83,15 +88,20 @@ func parseRelease(tree fs.FS, tag string) (release, error) {
 		}
 		found := false
 		for line := range strings.Lines(string(decls)) {
-			if m := declRe.FindStringSubmatch(line); m != nil {
-				found = true
-				name := scope + "/" + m[1]
-				method := "any"
-				if postOnly[name] {
-					method = "POST"
-				}
-				r.Actions[name] = action{Method: method, Params: []string{}}
+			if !strings.Contains(line, "Action(") {
+				continue
 			}
+			m := declRe.FindStringSubmatch(line)
+			if m == nil {
+				return r, fmt.Errorf("%s: %s: cannot read action declaration: %s", tag, header, strings.TrimSpace(line))
+			}
+			found = true
+			name := scope + "/" + m[1]
+			method := "any"
+			if postOnly[name] {
+				method = "POST"
+			}
+			r.Actions[name] = action{Method: method, Params: []string{}}
 		}
 		// apicontroller.h is the base class: it has no actions.
 		if !found {
