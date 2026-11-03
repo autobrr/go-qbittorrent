@@ -51,8 +51,20 @@ type SyncOptions struct {
 	// OnUpdate is called after each sync response that changed the data.
 	// MainData.Changes tells what changed.
 	OnUpdate func(*MainData)
-	// OnError is called when sync encounters an error
+	// OnError is called when sync encounters an error, and with each error
+	// from BeforeFullUpdate
 	OnError func(error)
+	// BeforeFullUpdate is called with each sync response that has full_update
+	// set, before the response enters the cache. qBittorrent sends one after
+	// each restart, so use it to read state that a restart can change, such as
+	// the Web API version. It runs without the lock of the sync manager, and a cache read meanwhile
+	// returns the old data. Use the *Unchecked getters inside it: a checked
+	// getter can wait for the sync that runs the callback.
+	// ctx has the deadline of the whole sync, which leaves time for a request.
+	// An error goes to OnError, and the update still enters the cache. The
+	// sync still succeeds, so LastError does not change.
+	// The callback must not change or keep update.
+	BeforeFullUpdate func(ctx context.Context, update *MainData) error
 	// RetainRemovedData keeps removed items for one sync cycle for comparison
 	RetainRemovedData bool
 }
@@ -197,13 +209,22 @@ func (sm *SyncManager) doSync(ctx context.Context) (interface{}, error) {
 	// it again to a server that is already slow. Thus a full update gets one
 	// attempt timeout, which leaves no time for a retry after a timeout. The
 	// rid read here decides, because a failed sync resets it to 0.
+	fetchCtx := ctx
 	if rid == 0 {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, sm.client.attemptTimeout())
+		fetchCtx, cancel = context.WithTimeout(ctx, sm.client.attemptTimeout())
 		defer cancel()
 	}
 
-	source, rawData, err := sm.client.SyncMainDataCtxWithRaw(ctx, rid)
+	source, rawData, err := sm.client.SyncMainDataCtxWithRaw(fetchCtx, rid)
+
+	// The callback gets the sync deadline, not the one-attempt deadline of the
+	// fetch, which the fetch can have used up.
+	if err == nil && source.FullUpdate && sm.options.BeforeFullUpdate != nil {
+		if cbErr := sm.options.BeforeFullUpdate(ctx, source); cbErr != nil && sm.options.OnError != nil {
+			sm.options.OnError(fmt.Errorf("before full update: %w", cbErr))
+		}
+	}
 
 	update := sm.applySyncResult(source, rawData, startTime, err)
 
@@ -212,8 +233,8 @@ func (sm *SyncManager) doSync(ctx context.Context) (interface{}, error) {
 	// LastSuccessfulSyncTime, ...): a callback invoked under the lock that
 	// re-entered any getter self-deadlocked on the non-reentrant RWMutex.
 	// Calling Sync from a callback blocks until its ctx ends: it would join
-	// the singleflight call it is running in. Checked getters do not block
-	// here, because sm.data is always set by the time a callback runs.
+	// the singleflight call it is running in. Checked getters do not block in
+	// OnUpdate or OnError, because sm.data is always set by then.
 	if err != nil {
 		if sm.options.OnError != nil {
 			sm.options.OnError(err)
