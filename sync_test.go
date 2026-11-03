@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log"
+	"maps"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -2183,5 +2185,133 @@ func TestMainData_TrackersRemoved(t *testing.T) {
 	}
 	if !slices.Equal(shared, []string{"a", "b"}) {
 		t.Fatalf("a caller's copy of the hashes changed to %v", shared)
+	}
+}
+
+// newRestartClient returns a client for a fake sync endpoint. The first
+// request gets a full update with torrent "old", the second a partial update,
+// and each later request a full update with torrent "new", as after a restart
+// of qBittorrent.
+func newRestartClient(t *testing.T) *Client {
+	t.Helper()
+	var (
+		mu    sync.Mutex
+		calls int
+	)
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v2/sync/maindata", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		calls++
+		call := calls
+		mu.Unlock()
+
+		switch call {
+		case 1:
+			_, _ = io.WriteString(w, `{"rid":1,"full_update":true,"torrents":{"old":{"hash":"old"}},"categories":{},"tags":[],"server_state":{}}`)
+		case 2:
+			_, _ = io.WriteString(w, `{"rid":2,"torrents":{"old":{"progress":0.5}}}`)
+		default:
+			_, _ = io.WriteString(w, `{"rid":1,"full_update":true,"torrents":{"new":{"hash":"new"}},"categories":{},"tags":[],"server_state":{}}`)
+		}
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	return NewClient(Config{Host: server.URL, APIKey: "test-key", RetryAttempts: 1})
+}
+
+func torrentHashes(sm *SyncManager) []string {
+	var hashes []string
+	for _, torrent := range sm.GetTorrentsUnchecked(TorrentFilterOptions{}) {
+		hashes = append(hashes, torrent.Hash)
+	}
+	return hashes
+}
+
+// TestSyncManager_BeforeFullUpdateRunsBeforeCache checks that BeforeFullUpdate
+// runs for each full update and not for a partial one, and that a cache read
+// in parallel with it returns the old data instead of blocking.
+func TestSyncManager_BeforeFullUpdateRunsBeforeCache(t *testing.T) {
+	var sm *SyncManager
+	var seen [][]string // for each call: the update torrents, then the cached torrents
+	opts := DefaultSyncOptions()
+	opts.BeforeFullUpdate = func(ctx context.Context, update *MainData) error {
+		cached := make(chan []string, 1)
+		go func() { cached <- torrentHashes(sm) }()
+		select {
+		case got := <-cached:
+			seen = append(seen, slices.Collect(maps.Keys(update.Torrents)), got)
+		case <-time.After(2 * time.Second):
+			t.Error("a cache read blocked while BeforeFullUpdate ran")
+		}
+		return nil
+	}
+	sm = NewSyncManager(newRestartClient(t), opts)
+
+	for i := range 3 {
+		if err := sm.Sync(t.Context()); err != nil {
+			t.Fatalf("sync %d: %v", i+1, err)
+		}
+	}
+
+	want := [][]string{{"old"}, nil, {"new"}, {"old"}}
+	if !reflect.DeepEqual(seen, want) {
+		t.Fatalf("expected update and cached torrents %v, got %v", want, seen)
+	}
+	if got := torrentHashes(sm); !slices.Equal(got, []string{"new"}) {
+		t.Fatalf("expected the full update in the cache after the sync, got %v", got)
+	}
+}
+
+// TestSyncManager_BeforeFullUpdateErrorGoesToOnError checks that an error from
+// BeforeFullUpdate goes to OnError, and that the full update still enters the
+// cache. OnError runs after the update enters the cache, so that a checked
+// getter in OnError does not wait for the first sync.
+func TestSyncManager_BeforeFullUpdateErrorGoesToOnError(t *testing.T) {
+	errVersion := errors.New("read version")
+	var gotErrs []error
+	var cacheInOnError []string
+	var sm *SyncManager
+	opts := DefaultSyncOptions()
+	opts.BeforeFullUpdate = func(context.Context, *MainData) error { return errVersion }
+	opts.OnError = func(err error) {
+		gotErrs = append(gotErrs, err)
+		cacheInOnError = torrentHashes(sm)
+	}
+	sm = NewSyncManager(newRestartClient(t), opts)
+
+	if err := sm.Sync(t.Context()); err != nil {
+		t.Fatalf("expected the sync to succeed, got %v", err)
+	}
+	if len(gotErrs) != 1 || !errors.Is(gotErrs[0], errVersion) || !strings.Contains(gotErrs[0].Error(), "before full update") {
+		t.Fatalf("expected OnError to get the callback error once, got %v", gotErrs)
+	}
+	if !slices.Equal(cacheInOnError, []string{"old"}) {
+		t.Fatalf("expected the full update in the cache when OnError runs, got %v", cacheInOnError)
+	}
+	if got := torrentHashes(sm); !slices.Equal(got, []string{"old"}) {
+		t.Fatalf("expected the full update in the cache, got %v", got)
+	}
+}
+
+// TestSyncManager_BeforeFullUpdateGetsTheSyncDeadline checks that the callback
+// does not inherit the one-attempt deadline of a full update fetch. After a
+// restart the fetch can use most of that time, and the callback can need a
+// request of its own.
+func TestSyncManager_BeforeFullUpdateGetsTheSyncDeadline(t *testing.T) {
+	client := newRestartClient(t)
+	var remaining time.Duration
+	opts := DefaultSyncOptions()
+	opts.BeforeFullUpdate = func(ctx context.Context, _ *MainData) error {
+		deadline, _ := ctx.Deadline()
+		remaining = time.Until(deadline)
+		return nil
+	}
+	sm := NewSyncManager(client, opts)
+
+	if err := sm.Sync(t.Context()); err != nil {
+		t.Fatalf("sync: %v", err)
+	}
+	if remaining <= client.attemptTimeout() {
+		t.Fatalf("expected the callback to get more than one attempt timeout (%v), got %v", client.attemptTimeout(), remaining)
 	}
 }
