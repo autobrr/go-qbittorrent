@@ -43,6 +43,7 @@ var (
 )
 
 const (
+	qbtRepo   = "https://github.com/qbittorrent/qBittorrent.git"
 	appHeader = "src/webui/webapplication.h"
 	apiDir    = "src/webui/api"
 )
@@ -170,8 +171,7 @@ func captureWebAPI() error {
 		}
 		defer os.RemoveAll(tmp)
 		src = tmp
-		if _, err := git(src, "clone", "--quiet", "--filter=blob:none", "--no-checkout",
-			"https://github.com/qbittorrent/qBittorrent.git", "."); err != nil {
+		if _, err := git(src, "clone", "--quiet", "--filter=blob:none", "--no-checkout", qbtRepo, "."); err != nil {
 			return err
 		}
 	}
