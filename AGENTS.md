@@ -5,7 +5,8 @@ for the qBittorrent WebAPI. There is no app, no database and no frontend here.
 
 ## Tests
 
-- CI runs `go test -tags ci ./...`, and that run is the test gate.
+- CI runs `go test -tags ci ./...`, then `go test ./...` in `internal/capture/`.
+  Those two runs are the test gate.
 - `methods_test.go` is `//go:build !ci`, so a plain `go test ./...` runs more than
   CI does. A green local run does not prove a green CI run.
 - `filter_live_bench_test.go` is `//go:build integration` and needs a live
@@ -15,6 +16,11 @@ for the qBittorrent WebAPI. There is no app, no database and no frontend here.
   are real qBittorrent responses, recorded by the `capture.sh` in each folder from local
   Docker images. Change them only through the script: for a new qBittorrent release, add
   its image to each script and run the script again.
+- The JSON files in `testdata/webapi/` come from the qBittorrent source, not from a
+  Docker image. Change them only through `go run . webapi` in `internal/capture/`.
+  Set `QBT_SRC` to a local qBittorrent clone, or the command clones the source itself.
+- `internal/capture/` is a separate Go module, so the root `go test ./...` skips it.
+  Keep its dependencies out of the root `go.mod`.
 
 ## Generated code
 
