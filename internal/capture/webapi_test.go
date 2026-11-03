@@ -54,3 +54,20 @@ void TorrentsController::deleteAction() const
 		t.Fatalf("got %+v\nwant %+v", got, want)
 	}
 }
+
+func TestParseReleaseRejectsUndeclaredPOSTAction(t *testing.T) {
+	tree := fstest.MapFS{
+		"src/webui/webapplication.h": {Data: []byte(`
+inline const Utils::Version<3, 2> API_VERSION {2, 16, 2};
+    const QHash<std::pair<QString, QString>, QString> m_allowedMethod =
+    {
+        {{u"torrents"_s, u"rename"_s}, Http::HEADER_REQUEST_METHOD_POST},
+    };
+`)},
+		"src/webui/api/torrentscontroller.h":   {Data: []byte("    void infoAction();\n")},
+		"src/webui/api/torrentscontroller.cpp": {Data: []byte("void TorrentsController::infoAction()\n{\n}\n")},
+	}
+	if _, err := parseRelease(tree, "release-5.3.0"); err == nil {
+		t.Fatal("parseRelease accepted a POST entry for an action that no controller declares")
+	}
+}

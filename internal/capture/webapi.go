@@ -100,6 +100,11 @@ func parseRelease(tree fs.FS, tag string) (release, error) {
 			return r, fmt.Errorf("%s: %w", tag, err)
 		}
 	}
+	for name := range postOnly {
+		if _, ok := r.Actions[name]; !ok {
+			return r, fmt.Errorf("%s: m_allowedMethod lists %s, which no controller declares", tag, name)
+		}
+	}
 	return r, nil
 }
 
