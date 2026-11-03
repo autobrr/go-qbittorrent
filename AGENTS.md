@@ -11,6 +11,10 @@ for the qBittorrent WebAPI. There is no app, no database and no frontend here.
 - `filter_live_bench_test.go` is `//go:build integration` and needs a live
   qBittorrent. Runnable benchmarks are in `sync_bench_test.go` and `sorting_test.go`.
 - A test must never reach a real tracker or a real qBittorrent. Use `httptest`.
+- The JSON files in `testdata/preferences/`, `testdata/torrents/` and `testdata/features/`
+  are real qBittorrent responses, recorded by the `capture.sh` in each folder from local
+  Docker images. Change them only through the script: for a new qBittorrent release, add
+  its image to each script and run the script again.
 
 ## Generated code
 

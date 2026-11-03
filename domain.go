@@ -852,6 +852,8 @@ type AppPreferences struct {
 	WebUIUsername                      string           `json:"web_ui_username"`
 
 	// qBittorrent 5.3 preferences.
+	ConfirmRemoveAllTags                 bool   `json:"confirm_remove_all_tags"`
+	ConfirmRemoveTrackerFromAllTorrents  bool   `json:"confirm_remove_tracker_from_all_torrents"`
 	EnableMultiConnectionsFromSamePeerID bool   `json:"enable_multi_connections_from_same_peer_id"`
 	I2PInboundLengthVariance             int    `json:"i2p_inbound_length_variance"`
 	I2POutboundLengthVariance            int    `json:"i2p_outbound_length_variance"`
