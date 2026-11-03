@@ -24,8 +24,10 @@ api() {
 }
 url=http://127.0.0.1:8080/api/v2
 fields='["pieces_num", "pieces_have", "piece_size", "total_wasted", "creation_date", "connections_count", "connections_limit"]'
+# Succeeds when the running version is $1 or newer.
+at_least() { [[ $(printf '%s\n' "$1" "$version" | sort -V | head -n1) == "$1" ]]; }
 
-for version in 5.1.4 5.2.4; do
+for version in 4.6.7 5.0.0 5.1.4 5.2.4 5.3.0; do
 	image=lscr.io/linuxserver/qbittorrent:$version
 	docker run -d --rm --name "$name" --network none -e WEBUI_PORT=8080 "$image" >/dev/null
 	logged_in=
@@ -61,9 +63,10 @@ for version in 5.1.4 5.2.4; do
 	done
 	[[ $ready ]] || { echo "$version: torrent not ready" >&2; exit 1; }
 	api "$url/torrents/info" >"$scratch/$version-info.json"
+	api "$url/torrents/info?includeTrackers=true" >"$scratch/$version-info-trackers.json"
 	hash=$(jq -r '.torrents | keys[0]' "$scratch/$version-full.json")
 	rid=$(jq -r .rid "$scratch/$version-full.json")
-	if [[ $version == 5.2.4 ]]; then
+	if at_least 5.2.0; then
 		jq -e --argjson fields "$fields" '.torrents[] | . as $t | ($fields | all(. as $key | $t | has($key))) and .pieces_num == 2 and .pieces_have == 0 and .piece_size == 65536' \
 			"$scratch/$version-full.json" >/dev/null
 		jq -e --argjson fields "$fields" 'length == 1 and (.[0] | . as $t | $fields | all(. as $key | $t | has($key)))' \
@@ -88,18 +91,19 @@ for version in 5.1.4 5.2.4; do
 		sleep 1
 	done
 	[[ $complete ]] || { echo "$version: recheck did not produce a delta" >&2; exit 1; }
-	if [[ $version == 5.2.4 ]]; then
+	if at_least 5.2.0; then
 		jq -e --arg hash "$hash" '.torrents[$hash].pieces_have == 2' "$scratch/$version-delta.json" >/dev/null
 	fi
+	webapi=$(api "$url/app/webapiVersion")
 	digest=$(docker image inspect "$image" --format '{{index .RepoDigests 0}}')
-	jq -n --arg version "$actual" --arg image "$digest" --arg hash "$hash" \
-		'{version: $version, image: $image, hash: $hash, network: "none", content_bytes: 131072, piece_bytes: 65536}' \
+	jq -n --arg version "$actual" --arg webapi "$webapi" --arg image "$digest" --arg hash "$hash" \
+		'{version: $version, webapi_version: $webapi, image: $image, hash: $hash, network: "none", content_bytes: 131072, piece_bytes: 65536}' \
 		>"$scratch/$version-source.json"
 	docker rm -f "$name" >/dev/null
 	echo "$actual: full, info, and recheck delta captured"
 done
 
-# Keep the previous captures if either version fails its assertions.
+# Keep the previous captures if any version fails its assertions.
 for capture in "$scratch"/*.json; do
 	jq -S . "$capture" >"$(basename "$capture")"
 done
