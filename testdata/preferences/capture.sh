@@ -22,15 +22,7 @@ declare -A images=(
 	[5.0.4]=lscr.io/linuxserver/qbittorrent:5.0.4
 	[5.1.4]=lscr.io/linuxserver/qbittorrent:5.1.4
 	[5.2.4]=lscr.io/linuxserver/qbittorrent:5.2.4
-	# No image of 5.3.0rc1 exists. This alpha build of master (2026-10-11) sends the
-	# keys of release-5.3.0rc1 and two more keys, which the script removes below.
-	# Replace it with the linuxserver image when 5.3.0 is released.
-	[5.3.0rc1]=qbittorrentofficial/qbittorrent-nox@sha256:8353cba072aeee388a42e89d4f298bc55006ad33f48228dfeb8d54d9f97dc9c2
-)
-
-# Keys that the image sends but the release does not.
-declare -A extra_keys=(
-	[5.3.0rc1]='confirm_remove_all_tags confirm_remove_tracker_from_all_torrents'
+	[5.3.0]=lscr.io/linuxserver/qbittorrent:5.3.0
 )
 
 cleanup() { docker rm -f "$name" >/dev/null 2>&1 || true; }
@@ -65,10 +57,8 @@ capture() {
 		return 1
 	fi
 
-	local drop='.'
-	for key in ${extra_keys[$version]:-}; do drop+=" | del(.$key)"; done
 	# Write to a temporary file first, so that a failed request keeps the old capture.
-	curl -sf -b "$jar" "$url/api/v2/app/preferences" | jq -S "$drop" >"$out"
+	curl -sf -b "$jar" "$url/api/v2/app/preferences" | jq -S . >"$out"
 	mv "$out" "$version.json"
 	rm -f "$jar"
 	echo "$version: $(jq length "$version.json") keys"
