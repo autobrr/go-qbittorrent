@@ -3155,7 +3155,10 @@ func (c *Client) ReannounceTorrentWithRetry(ctx context.Context, hash string, op
 
 	attempts := 0
 
-	for attempts < maxAttempts {
+	// Each pass waits for the interval and checks the trackers. The first
+	// maxAttempts passes re-announce when no tracker works. The last pass only
+	// checks the result of the last re-announce.
+	for attempts <= maxAttempts {
 		c.log.Printf("re-announce %s attempt: %d", hash, attempts)
 
 		// add delay for next run
@@ -3179,6 +3182,10 @@ func (c *Client) ReannounceTorrentWithRetry(ctx context.Context, hash string, op
 
 			// if working lets return
 			return nil
+		}
+
+		if attempts == maxAttempts {
+			break
 		}
 
 		c.log.Printf("not working yet, lets re-announce %s attempt: %d", hash, attempts)
