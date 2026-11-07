@@ -1,0 +1,563 @@
+{
+  "actions": {
+    "app/buildInfo": {
+      "method": "any",
+      "params": []
+    },
+    "app/defaultSavePath": {
+      "method": "any",
+      "params": []
+    },
+    "app/networkInterfaceAddressList": {
+      "method": "any",
+      "params": [
+        "iface"
+      ]
+    },
+    "app/networkInterfaceList": {
+      "method": "any",
+      "params": []
+    },
+    "app/preferences": {
+      "method": "any",
+      "params": []
+    },
+    "app/setPreferences": {
+      "method": "POST",
+      "params": [
+        "json"
+      ]
+    },
+    "app/shutdown": {
+      "method": "POST",
+      "params": []
+    },
+    "app/version": {
+      "method": "any",
+      "params": []
+    },
+    "app/webapiVersion": {
+      "method": "any",
+      "params": []
+    },
+    "auth/login": {
+      "method": "POST",
+      "params": []
+    },
+    "auth/logout": {
+      "method": "POST",
+      "params": []
+    },
+    "log/main": {
+      "method": "any",
+      "params": []
+    },
+    "log/peers": {
+      "method": "any",
+      "params": []
+    },
+    "rss/addFeed": {
+      "method": "POST",
+      "params": [
+        "url",
+        "path"
+      ]
+    },
+    "rss/addFolder": {
+      "method": "POST",
+      "params": [
+        "path"
+      ]
+    },
+    "rss/items": {
+      "method": "any",
+      "params": []
+    },
+    "rss/markAsRead": {
+      "method": "POST",
+      "params": [
+        "itemPath"
+      ]
+    },
+    "rss/matchingArticles": {
+      "method": "any",
+      "params": [
+        "ruleName"
+      ]
+    },
+    "rss/moveItem": {
+      "method": "POST",
+      "params": [
+        "itemPath",
+        "destPath"
+      ]
+    },
+    "rss/refreshItem": {
+      "method": "POST",
+      "params": [
+        "itemPath"
+      ]
+    },
+    "rss/removeItem": {
+      "method": "POST",
+      "params": [
+        "path"
+      ]
+    },
+    "rss/removeRule": {
+      "method": "POST",
+      "params": [
+        "ruleName"
+      ]
+    },
+    "rss/renameRule": {
+      "method": "POST",
+      "params": [
+        "ruleName",
+        "newRuleName"
+      ]
+    },
+    "rss/rules": {
+      "method": "any",
+      "params": []
+    },
+    "rss/setFeedURL": {
+      "method": "POST",
+      "params": [
+        "path",
+        "url"
+      ]
+    },
+    "rss/setRule": {
+      "method": "POST",
+      "params": [
+        "ruleName",
+        "ruleDef"
+      ]
+    },
+    "search/delete": {
+      "method": "POST",
+      "params": [
+        "id"
+      ]
+    },
+    "search/enablePlugin": {
+      "method": "POST",
+      "params": [
+        "names",
+        "enable"
+      ]
+    },
+    "search/installPlugin": {
+      "method": "POST",
+      "params": [
+        "sources"
+      ]
+    },
+    "search/plugins": {
+      "method": "any",
+      "params": []
+    },
+    "search/results": {
+      "method": "any",
+      "params": [
+        "id"
+      ]
+    },
+    "search/start": {
+      "method": "POST",
+      "params": [
+        "pattern",
+        "category",
+        "plugins"
+      ]
+    },
+    "search/status": {
+      "method": "any",
+      "params": []
+    },
+    "search/stop": {
+      "method": "POST",
+      "params": [
+        "id"
+      ]
+    },
+    "search/uninstallPlugin": {
+      "method": "POST",
+      "params": [
+        "names"
+      ]
+    },
+    "search/updatePlugins": {
+      "method": "POST",
+      "params": []
+    },
+    "sync/maindata": {
+      "method": "any",
+      "params": []
+    },
+    "sync/torrentPeers": {
+      "method": "any",
+      "params": []
+    },
+    "torrents/add": {
+      "method": "POST",
+      "params": []
+    },
+    "torrents/addPeers": {
+      "method": "POST",
+      "params": [
+        "hashes",
+        "peers"
+      ]
+    },
+    "torrents/addTags": {
+      "method": "POST",
+      "params": [
+        "hashes",
+        "tags"
+      ]
+    },
+    "torrents/addTrackers": {
+      "method": "POST",
+      "params": [
+        "hash",
+        "urls"
+      ]
+    },
+    "torrents/bottomPrio": {
+      "method": "POST",
+      "params": [
+        "hashes"
+      ]
+    },
+    "torrents/categories": {
+      "method": "any",
+      "params": []
+    },
+    "torrents/createCategory": {
+      "method": "POST",
+      "params": [
+        "category"
+      ]
+    },
+    "torrents/createTags": {
+      "method": "POST",
+      "params": [
+        "tags"
+      ]
+    },
+    "torrents/decreasePrio": {
+      "method": "POST",
+      "params": [
+        "hashes"
+      ]
+    },
+    "torrents/delete": {
+      "method": "POST",
+      "params": [
+        "hashes",
+        "deleteFiles"
+      ]
+    },
+    "torrents/deleteTags": {
+      "method": "POST",
+      "params": [
+        "tags"
+      ]
+    },
+    "torrents/downloadLimit": {
+      "method": "any",
+      "params": [
+        "hashes"
+      ]
+    },
+    "torrents/editCategory": {
+      "method": "POST",
+      "params": [
+        "category",
+        "savePath"
+      ]
+    },
+    "torrents/editTracker": {
+      "method": "POST",
+      "params": [
+        "hash",
+        "origUrl",
+        "newUrl"
+      ]
+    },
+    "torrents/export": {
+      "method": "any",
+      "params": [
+        "hash"
+      ]
+    },
+    "torrents/filePrio": {
+      "method": "POST",
+      "params": [
+        "hash",
+        "id",
+        "priority"
+      ]
+    },
+    "torrents/files": {
+      "method": "any",
+      "params": [
+        "hash"
+      ]
+    },
+    "torrents/increasePrio": {
+      "method": "POST",
+      "params": [
+        "hashes"
+      ]
+    },
+    "torrents/info": {
+      "method": "any",
+      "params": []
+    },
+    "torrents/pause": {
+      "method": "POST",
+      "params": [
+        "hashes"
+      ]
+    },
+    "torrents/pieceHashes": {
+      "method": "any",
+      "params": [
+        "hash"
+      ]
+    },
+    "torrents/pieceStates": {
+      "method": "any",
+      "params": [
+        "hash"
+      ]
+    },
+    "torrents/properties": {
+      "method": "any",
+      "params": [
+        "hash"
+      ]
+    },
+    "torrents/reannounce": {
+      "method": "POST",
+      "params": [
+        "hashes"
+      ]
+    },
+    "torrents/recheck": {
+      "method": "POST",
+      "params": [
+        "hashes"
+      ]
+    },
+    "torrents/removeCategories": {
+      "method": "POST",
+      "params": [
+        "categories"
+      ]
+    },
+    "torrents/removeTags": {
+      "method": "POST",
+      "params": [
+        "hashes"
+      ]
+    },
+    "torrents/removeTrackers": {
+      "method": "POST",
+      "params": [
+        "hash",
+        "urls"
+      ]
+    },
+    "torrents/rename": {
+      "method": "POST",
+      "params": [
+        "hash",
+        "name"
+      ]
+    },
+    "torrents/renameFile": {
+      "method": "POST",
+      "params": [
+        "hash",
+        "oldPath",
+        "newPath"
+      ]
+    },
+    "torrents/renameFolder": {
+      "method": "POST",
+      "params": [
+        "hash",
+        "oldPath",
+        "newPath"
+      ]
+    },
+    "torrents/resume": {
+      "method": "POST",
+      "params": [
+        "hashes"
+      ]
+    },
+    "torrents/setAutoManagement": {
+      "method": "POST",
+      "params": [
+        "hashes",
+        "enable"
+      ]
+    },
+    "torrents/setCategory": {
+      "method": "POST",
+      "params": [
+        "hashes",
+        "category"
+      ]
+    },
+    "torrents/setDownloadLimit": {
+      "method": "POST",
+      "params": [
+        "hashes",
+        "limit"
+      ]
+    },
+    "torrents/setDownloadPath": {
+      "method": "POST",
+      "params": [
+        "id",
+        "path"
+      ]
+    },
+    "torrents/setForceStart": {
+      "method": "POST",
+      "params": [
+        "hashes",
+        "value"
+      ]
+    },
+    "torrents/setLocation": {
+      "method": "POST",
+      "params": [
+        "hashes",
+        "location"
+      ]
+    },
+    "torrents/setSavePath": {
+      "method": "POST",
+      "params": [
+        "id",
+        "path"
+      ]
+    },
+    "torrents/setShareLimits": {
+      "method": "POST",
+      "params": [
+        "hashes",
+        "ratioLimit",
+        "seedingTimeLimit",
+        "inactiveSeedingTimeLimit"
+      ]
+    },
+    "torrents/setSuperSeeding": {
+      "method": "POST",
+      "params": [
+        "hashes",
+        "value"
+      ]
+    },
+    "torrents/setUploadLimit": {
+      "method": "POST",
+      "params": [
+        "hashes",
+        "limit"
+      ]
+    },
+    "torrents/tags": {
+      "method": "any",
+      "params": []
+    },
+    "torrents/toggleFirstLastPiecePrio": {
+      "method": "POST",
+      "params": [
+        "hashes"
+      ]
+    },
+    "torrents/toggleSequentialDownload": {
+      "method": "POST",
+      "params": [
+        "hashes"
+      ]
+    },
+    "torrents/topPrio": {
+      "method": "POST",
+      "params": [
+        "hashes"
+      ]
+    },
+    "torrents/trackers": {
+      "method": "any",
+      "params": [
+        "hash"
+      ]
+    },
+    "torrents/uploadLimit": {
+      "method": "any",
+      "params": [
+        "hashes"
+      ]
+    },
+    "torrents/webseeds": {
+      "method": "any",
+      "params": [
+        "hash"
+      ]
+    },
+    "transfer/banPeers": {
+      "method": "POST",
+      "params": [
+        "peers"
+      ]
+    },
+    "transfer/downloadLimit": {
+      "method": "any",
+      "params": []
+    },
+    "transfer/info": {
+      "method": "any",
+      "params": []
+    },
+    "transfer/setDownloadLimit": {
+      "method": "POST",
+      "params": [
+        "limit"
+      ]
+    },
+    "transfer/setSpeedLimitsMode": {
+      "method": "POST",
+      "params": [
+        "mode"
+      ]
+    },
+    "transfer/setUploadLimit": {
+      "method": "POST",
+      "params": [
+        "limit"
+      ]
+    },
+    "transfer/speedLimitsMode": {
+      "method": "any",
+      "params": []
+    },
+    "transfer/toggleSpeedLimitsMode": {
+      "method": "POST",
+      "params": []
+    },
+    "transfer/uploadLimit": {
+      "method": "any",
+      "params": []
+    }
+  },
+  "version": "v4.6.0",
+  "webapi_version": "2.9.2"
+}
