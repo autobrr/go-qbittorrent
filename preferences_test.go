@@ -14,7 +14,7 @@ import (
 )
 
 // loadPreferenceCaptures reads the app/preferences responses that
-// testdata/preferences/capture.sh wrote, keyed by qBittorrent version.
+// `go run . preferences` in internal/capture wrote, keyed by qBittorrent version.
 func loadPreferenceCaptures(t *testing.T) map[string][]byte {
 	t.Helper()
 	paths, err := filepath.Glob("testdata/preferences/*.json")
