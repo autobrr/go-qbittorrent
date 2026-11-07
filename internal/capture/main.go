@@ -55,6 +55,7 @@ func main() {
 	case "webapi":
 		err = captureWebAPI()
 	default:
+		cleanup()
 		fmt.Fprintln(os.Stderr, usage)
 		os.Exit(2)
 	}
