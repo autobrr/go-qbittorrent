@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestFeatureProbesComplete checks that each file of testdata/features/capture.sh
-// has a result for each probe. qui tests its version table against these files.
+// TestFeatureProbesComplete checks that each file that `go run . features` in
+// internal/capture wrote has a result for each probe. qui tests its version table against these files.
 func TestFeatureProbesComplete(t *testing.T) {
 	files, err := filepath.Glob(filepath.Join("testdata", "features", "*.json"))
 	require.NoError(t, err)
