@@ -1,0 +1,9 @@
+{
+  "content_bytes": 131072,
+  "hash": "909a049b1e5761e6a47bf0638ca05ee88e27734a",
+  "image": "lscr.io/linuxserver/qbittorrent@sha256:d01b1df556154862eca982d0f2c420073e2e2959c309951fbfddd25525ea28ce",
+  "network": "none",
+  "piece_bytes": 65536,
+  "version": "v5.0.0",
+  "webapi_version": "2.11.2"
+}
