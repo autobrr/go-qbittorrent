@@ -502,6 +502,42 @@ func (sm *SyncManager) GetTorrentsUnchecked(options TorrentFilterOptions) []Torr
 	return result
 }
 
+// GetTorrentsMatching returns copies of the torrents for which match returns true.
+// Freshness works as in [SyncManager.GetData], and match works as in
+// [SyncManager.GetTorrentsMatchingUnchecked].
+func (sm *SyncManager) GetTorrentsMatching(match func(*Torrent) bool) []Torrent {
+	sm.ensureFreshData()
+	return sm.GetTorrentsMatchingUnchecked(match)
+}
+
+// GetTorrentsMatchingUnchecked returns copies of the torrents for which match
+// returns true, without checking freshness. It copies only the matches. It
+// returns nil only when the manager has no data yet, and an empty slice when
+// no torrent matches.
+//
+// match runs under the read lock of the sync manager. It must not keep or
+// change the pointer, must not call the sync manager, and must return fast.
+func (sm *SyncManager) GetTorrentsMatchingUnchecked(match func(*Torrent) bool) []Torrent {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+
+	if sm.data == nil {
+		return nil
+	}
+
+	var matches []int
+	for i := range sm.allTorrents {
+		if match(&sm.allTorrents[i]) {
+			matches = append(matches, i)
+		}
+	}
+	result := make([]Torrent, len(matches))
+	for j, i := range matches {
+		result[j] = sm.allTorrents[i]
+	}
+	return result
+}
+
 // GetTorrentMap returns a filtered map of torrents keyed by hash.
 // Freshness works as in [SyncManager.GetData].
 func (sm *SyncManager) GetTorrentMap(options TorrentFilterOptions) map[string]Torrent {

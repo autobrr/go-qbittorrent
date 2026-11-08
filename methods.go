@@ -256,7 +256,7 @@ func (c *Client) getApiVersion(ctx context.Context) (*semver.Version, error) {
 // qBittorrent 5.0.0 (WebAPI 2.11) renamed "paused"/"resumed" to "stopped"/"running"; the seeding
 // filter has always been "seeding".
 func (c *Client) translateFilter(ctx context.Context, filter TorrentFilter) string {
-	if filter == TorrentFilterUploading {
+	if filter == TorrentFilterUploading || filter == TorrentFilterSeeding {
 		return "seeding"
 	}
 

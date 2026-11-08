@@ -333,7 +333,11 @@ const (
 	// Torrent is stalled
 	TorrentFilterStalled TorrentFilter = "stalled"
 
-	// Torrent is being seeded and data is being transferred
+	// Torrent is complete and running: uploading, stalledUP, queuedUP, checkingUP or forcedUP
+	TorrentFilterSeeding TorrentFilter = "seeding"
+
+	// Same as TorrentFilterSeeding. qBittorrent has no "uploading" filter, so
+	// the client sends "seeding" for it.
 	TorrentFilterUploading TorrentFilter = "uploading"
 
 	// Torrent is being seeded, but no connection were made
@@ -536,7 +540,7 @@ func ParseTorrentFilter(filter string) TorrentFilter {
 	case "downloading":
 		return TorrentFilterDownloading
 	case "seeding":
-		return TorrentFilterUploading
+		return TorrentFilterSeeding
 	case "completed":
 		return TorrentFilterCompleted
 	case "resumed":

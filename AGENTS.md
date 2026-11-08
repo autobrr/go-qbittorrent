@@ -12,11 +12,15 @@ for the qBittorrent WebAPI. There is no app, no database and no frontend here.
 - `filter_live_bench_test.go` is `//go:build integration` and needs a live
   qBittorrent. Runnable benchmarks are in `sync_bench_test.go` and `sorting_test.go`.
 - A test must never reach a real tracker or a real qBittorrent. Use `httptest`.
-- The JSON files in `testdata/preferences/`, `testdata/torrents/` and `testdata/features/`
-  are real qBittorrent responses, recorded from local Docker images by `go run . features`,
-  `go run . preferences` and `go run . torrents` in `internal/capture/`. Change them only
-  through the command: for a new qBittorrent release, add it to the version list of each
-  subcommand and run the subcommand again.
+- The JSON files in `testdata/preferences/`, `testdata/torrents/`, `testdata/features/` and
+  `testdata/filters/` are real qBittorrent responses, recorded from local Docker images by
+  `go run . features`, `go run . preferences`, `go run . torrents` and `go run . filters` in
+  `internal/capture/`. CI does not run these commands. Change the files only through the
+  command: for a new qBittorrent release, add it to the version list of each subcommand and
+  run the subcommand again.
+- `filter_results_test.go` fails on each difference between the library filter and
+  `testdata/filters/` that it does not name. To accept a new difference, name it there
+  with its reason.
 - The JSON files in `testdata/webapi/` come from the qBittorrent source, not from a
   Docker image. Change them only through `go run . webapi` in `internal/capture/`.
   Set `QBT_SRC` to a local qBittorrent clone, or the command clones the source itself.

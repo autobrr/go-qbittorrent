@@ -85,7 +85,8 @@ func containsExactTag(tags string, target string) bool {
 
 // stateFilterMatches is a precomputed lookup table for state-filter matches.
 // Its keys are the known states returned by KnownTorrentStates, so every
-// TorrentState constant needs an entry here.
+// TorrentState constant needs an entry here. testdata/filters holds the
+// results of real qBittorrent that the table follows.
 var stateFilterMatches = map[TorrentState]map[TorrentFilter]struct{}{
 	TorrentStateError: {
 		TorrentFilterAll:      struct{}{},
@@ -94,14 +95,14 @@ var stateFilterMatches = map[TorrentState]map[TorrentFilter]struct{}{
 	},
 	TorrentStateMissingFiles: {
 		TorrentFilterAll:      struct{}{},
+		TorrentFilterError:    struct{}{},
 		TorrentFilterInactive: struct{}{},
 	},
 	TorrentStateUploading: {
 		TorrentFilterAll:       struct{}{},
 		TorrentFilterActive:    struct{}{},
-		TorrentFilterUploading: struct{}{},
+		TorrentFilterSeeding:   struct{}{},
 		TorrentFilterCompleted: struct{}{},
-		TorrentFilterResumed:   struct{}{},
 	},
 	TorrentStatePausedUp: {
 		TorrentFilterAll:       struct{}{},
@@ -119,6 +120,7 @@ var stateFilterMatches = map[TorrentState]map[TorrentFilter]struct{}{
 	},
 	TorrentStateQueuedUp: {
 		TorrentFilterAll:       struct{}{},
+		TorrentFilterSeeding:   struct{}{},
 		TorrentFilterCompleted: struct{}{},
 		TorrentFilterInactive:  struct{}{},
 	},
@@ -126,85 +128,89 @@ var stateFilterMatches = map[TorrentState]map[TorrentFilter]struct{}{
 		TorrentFilterAll:              struct{}{},
 		TorrentFilterStalled:          struct{}{},
 		TorrentFilterStalledUploading: struct{}{},
+		TorrentFilterSeeding:          struct{}{},
 		TorrentFilterCompleted:        struct{}{},
 		TorrentFilterInactive:         struct{}{},
 	},
 	TorrentStateCheckingUp: {
 		TorrentFilterAll:       struct{}{},
-		TorrentFilterActive:    struct{}{},
+		TorrentFilterSeeding:   struct{}{},
 		TorrentFilterCompleted: struct{}{},
-		TorrentFilterResumed:   struct{}{},
+		TorrentFilterChecking:  struct{}{},
+		TorrentFilterInactive:  struct{}{},
 	},
 	TorrentStateForcedUp: {
 		TorrentFilterAll:       struct{}{},
 		TorrentFilterActive:    struct{}{},
-		TorrentFilterUploading: struct{}{},
+		TorrentFilterSeeding:   struct{}{},
 		TorrentFilterCompleted: struct{}{},
-		TorrentFilterResumed:   struct{}{},
 	},
 	TorrentStateAllocating: {
 		TorrentFilterAll:         struct{}{},
-		TorrentFilterActive:      struct{}{},
+		TorrentFilterInactive:    struct{}{},
 		TorrentFilterDownloading: struct{}{},
-		TorrentFilterResumed:     struct{}{},
 	},
 	TorrentStateDownloading: {
 		TorrentFilterAll:         struct{}{},
 		TorrentFilterActive:      struct{}{},
 		TorrentFilterDownloading: struct{}{},
-		TorrentFilterResumed:     struct{}{},
 	},
 	TorrentStateMetaDl: {
 		TorrentFilterAll:         struct{}{},
 		TorrentFilterActive:      struct{}{},
 		TorrentFilterDownloading: struct{}{},
-		TorrentFilterResumed:     struct{}{},
 	},
 	TorrentStateForcedMetaDl: {
 		TorrentFilterAll:         struct{}{},
 		TorrentFilterActive:      struct{}{},
 		TorrentFilterDownloading: struct{}{},
-		TorrentFilterResumed:     struct{}{},
 	},
 	TorrentStatePausedDl: {
-		TorrentFilterAll:      struct{}{},
-		TorrentFilterPaused:   struct{}{},
-		TorrentFilterStopped:  struct{}{},
-		TorrentFilterInactive: struct{}{},
+		TorrentFilterAll:         struct{}{},
+		TorrentFilterPaused:      struct{}{},
+		TorrentFilterStopped:     struct{}{},
+		TorrentFilterDownloading: struct{}{},
+		TorrentFilterInactive:    struct{}{},
 	},
 	TorrentStateStoppedDl: {
-		TorrentFilterAll:      struct{}{},
-		TorrentFilterPaused:   struct{}{},
-		TorrentFilterStopped:  struct{}{},
-		TorrentFilterInactive: struct{}{},
+		TorrentFilterAll:         struct{}{},
+		TorrentFilterPaused:      struct{}{},
+		TorrentFilterStopped:     struct{}{},
+		TorrentFilterDownloading: struct{}{},
+		TorrentFilterInactive:    struct{}{},
 	},
 	TorrentStateQueuedDl: {
-		TorrentFilterAll:      struct{}{},
-		TorrentFilterInactive: struct{}{},
+		TorrentFilterAll:         struct{}{},
+		TorrentFilterDownloading: struct{}{},
+		TorrentFilterInactive:    struct{}{},
 	},
 	TorrentStateStalledDl: {
 		TorrentFilterAll:                struct{}{},
 		TorrentFilterStalled:            struct{}{},
 		TorrentFilterStalledDownloading: struct{}{},
+		TorrentFilterDownloading:        struct{}{},
 		TorrentFilterInactive:           struct{}{},
 	},
 	TorrentStateCheckingDl: {
 		TorrentFilterAll:         struct{}{},
-		TorrentFilterActive:      struct{}{},
 		TorrentFilterDownloading: struct{}{},
-		TorrentFilterResumed:     struct{}{},
+		TorrentFilterChecking:    struct{}{},
+		TorrentFilterInactive:    struct{}{},
 	},
 	TorrentStateForcedDl: {
 		TorrentFilterAll:         struct{}{},
 		TorrentFilterActive:      struct{}{},
 		TorrentFilterDownloading: struct{}{},
-		TorrentFilterResumed:     struct{}{},
 	},
 	TorrentStateCheckingResumeData: {
-		TorrentFilterAll: struct{}{},
+		TorrentFilterAll:      struct{}{},
+		TorrentFilterChecking: struct{}{},
+		TorrentFilterInactive: struct{}{},
 	},
 	TorrentStateMoving: {
-		TorrentFilterAll: struct{}{},
+		TorrentFilterAll:    struct{}{},
+		TorrentFilterActive: struct{}{},
+		TorrentFilterMoving: struct{}{},
 	},
 	TorrentStateUnknown: {
 		TorrentFilterAll: struct{}{},
@@ -226,18 +232,11 @@ func KnownTorrentStates() []TorrentState {
 
 // matchesStateFilter checks if a torrent state matches the given filter using precomputed lookup
 func matchesStateFilter(state TorrentState, filter TorrentFilter) bool {
-	// Special case: TorrentFilterRunning means "not stopped"
-	// Added in qBittorrent v4.6.0+ (commit 5d1c2496, March 2024)
-	if filter == TorrentFilterRunning {
-		// Running is the inverse of stopped states
-		return state != TorrentStateStoppedUp && state != TorrentStateStoppedDl
+	if filter == TorrentFilterUploading {
+		filter = TorrentFilterSeeding
 	}
-
-	// Special case: TorrentFilterResumed for backward compatibility
-	// Used in qBittorrent < v4.6.0 (e.g., v4.3.9)
-	// "Resumed" meant !isPaused() in older versions
-	if filter == TorrentFilterResumed {
-		// Resumed is the inverse of paused states
+	// running and resumed are the same filter: qBittorrent 5.0.0 renamed resumed.
+	if filter == TorrentFilterRunning || filter == TorrentFilterResumed {
 		return state != TorrentStatePausedUp && state != TorrentStatePausedDl &&
 			state != TorrentStateStoppedUp && state != TorrentStateStoppedDl
 	}

@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestContainsExactTag(t *testing.T) {
@@ -204,6 +206,7 @@ func TestMatchesStateFilter_ForcedMetaDl(t *testing.T) {
 		{filter: TorrentFilterStalled, want: false},
 		{filter: TorrentFilterStalledDownloading, want: false},
 		{filter: TorrentFilterUploading, want: false},
+		{filter: TorrentFilterSeeding, want: false},
 		{filter: TorrentFilterError, want: false},
 	}
 
@@ -219,4 +222,36 @@ func TestMatchesStateFilter_ForcedMetaDl(t *testing.T) {
 			}
 		})
 	}
+}
+
+// active is the list of qBittorrent 5.1.4 on each version, and inactive is the
+// opposite. unknown keeps only all.
+func TestActiveInactiveFilters(t *testing.T) {
+	t.Parallel()
+
+	var torrents []Torrent
+	for _, state := range KnownTorrentStates() {
+		torrents = append(torrents, Torrent{Hash: string(state), State: state})
+	}
+	sm := newSyncedManager(t, torrents...)
+
+	require.Equal(t, []string{"downloading", "forcedDL", "forcedMetaDL", "forcedUP", "metaDL", "moving", "uploading"},
+		hashes(sm.GetTorrentsUnchecked(TorrentFilterOptions{Filter: TorrentFilterActive})))
+	require.Equal(t, []string{"allocating", "checkingDL", "checkingResumeData", "checkingUP", "error", "missingFiles",
+		"pausedDL", "pausedUP", "queuedDL", "queuedUP", "stalledDL", "stalledUP", "stoppedDL", "stoppedUP"},
+		hashes(sm.GetTorrentsUnchecked(TorrentFilterOptions{Filter: TorrentFilterInactive})))
+}
+
+func TestUploadingIsSeeding(t *testing.T) {
+	t.Parallel()
+
+	var torrents []Torrent
+	for _, state := range KnownTorrentStates() {
+		torrents = append(torrents, Torrent{Hash: string(state), State: state})
+	}
+	sm := newSyncedManager(t, torrents...)
+
+	seeding := []string{"checkingUP", "forcedUP", "queuedUP", "stalledUP", "uploading"}
+	require.Equal(t, seeding, hashes(sm.GetTorrentsUnchecked(TorrentFilterOptions{Filter: TorrentFilterSeeding})))
+	require.Equal(t, seeding, hashes(sm.GetTorrentsUnchecked(TorrentFilterOptions{Filter: TorrentFilterUploading})))
 }

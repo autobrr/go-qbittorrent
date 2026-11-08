@@ -8,8 +8,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -111,13 +113,40 @@ func mkbrr(content string, size int64, args ...string) error {
 	if err := os.Truncate(content, size); err != nil {
 		return err
 	}
+	return mkbrrCreate(content, strings.TrimSuffix(content, filepath.Ext(content))+".torrent",
+		append([]string{"--piece-length", "16"}, args...)...)
+}
+
+// mkbrrCreate writes a torrent of content to output, and limits the hashing as
+// the testing rules ask.
+func mkbrrCreate(content, output string, args ...string) error {
 	cmd := exec.Command("nice", append([]string{"-n", "19", "env", "GOMAXPROCS=2", "mkbrr", "create", content,
-		"--workers", "1", "--piece-length", "16", "--no-creator", "--quiet",
-		"--output", strings.TrimSuffix(content, filepath.Ext(content)) + ".torrent"}, args...)...)
+		"--workers", "1", "--no-creator", "--quiet", "--output", output}, args...)...)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("mkbrr: %w: %s", err, out)
 	}
 	return nil
+}
+
+// cleanups run last first, on success, on an error, and on an interrupt.
+var cleanups struct {
+	sync.Mutex
+	fns []func()
+}
+
+func onCleanup(fn func()) {
+	cleanups.Lock()
+	defer cleanups.Unlock()
+	cleanups.fns = append(cleanups.fns, fn)
+}
+
+func runCleanups() {
+	cleanups.Lock()
+	defer cleanups.Unlock()
+	for _, fn := range slices.Backward(cleanups.fns) {
+		fn()
+	}
+	cleanups.fns = nil
 }
 
 // writeSorted writes data to testdata/<dir>/<name> with sorted keys and
