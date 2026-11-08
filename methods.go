@@ -268,7 +268,7 @@ func (c *Client) translateFilter(ctx context.Context, filter TorrentFilter) stri
 	}
 
 	// ver is the WebAPI version (2.x), not the qBittorrent version
-	isModernVersion := !ver.LessThan(semver.MustParse("2.11.0"))
+	isModernVersion := ver.GreaterThanEqual(semver.MustParse("2.11.0"))
 
 	switch filter {
 	case TorrentFilterResumed:
