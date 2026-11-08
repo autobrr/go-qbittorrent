@@ -173,3 +173,27 @@ func BenchmarkSyncManager_ApplyUnchangedSync(b *testing.B) {
 		sm.applySyncResult(source, raw, time.Now(), nil)
 	}
 }
+
+func BenchmarkSyncManager_GetTorrentsMatching(b *testing.B) {
+	sm, _ := newLibrarySyncManager(50_000)
+	for _, tc := range []struct {
+		name    string
+		options TorrentFilterOptions
+		match   func(*Torrent) bool
+	}{
+		{"category", TorrentFilterOptions{Category: "movies"}, func(t *Torrent) bool { return t.Category == "movies" }},
+		{"state", TorrentFilterOptions{Filter: TorrentFilterError}, func(t *Torrent) bool { return t.State == TorrentStateError }},
+		{"none", TorrentFilterOptions{Category: "none"}, func(t *Torrent) bool { return false }},
+	} {
+		b.Run(tc.name+"/matching", func(b *testing.B) {
+			for b.Loop() {
+				_ = sm.GetTorrentsMatchingUnchecked(tc.match)
+			}
+		})
+		b.Run(tc.name+"/options", func(b *testing.B) {
+			for b.Loop() {
+				_ = sm.GetTorrentsUnchecked(tc.options)
+			}
+		})
+	}
+}

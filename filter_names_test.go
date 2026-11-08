@@ -15,6 +15,7 @@ func TestGetTorrentsCtx_FilterNames(t *testing.T) {
 		TorrentFilterResumed:   "resumed",
 		TorrentFilterRunning:   "resumed",
 		TorrentFilterUploading: "seeding",
+		TorrentFilterSeeding:   "seeding",
 	}
 	modern := map[TorrentFilter]string{
 		TorrentFilterPaused:    "stopped",
@@ -22,6 +23,7 @@ func TestGetTorrentsCtx_FilterNames(t *testing.T) {
 		TorrentFilterResumed:   "running",
 		TorrentFilterRunning:   "running",
 		TorrentFilterUploading: "seeding",
+		TorrentFilterSeeding:   "seeding",
 	}
 
 	for _, tc := range []struct {
@@ -67,7 +69,8 @@ func TestParseTorrentFilter(t *testing.T) {
 	for name, want := range map[string]TorrentFilter{
 		"all":                 TorrentFilterAll,
 		"downloading":         TorrentFilterDownloading,
-		"seeding":             TorrentFilterUploading,
+		"seeding":             TorrentFilterSeeding,
+		"uploading":           TorrentFilterAll,
 		"completed":           TorrentFilterCompleted,
 		"paused":              TorrentFilterPaused,
 		"resumed":             TorrentFilterResumed,
