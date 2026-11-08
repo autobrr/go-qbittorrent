@@ -130,7 +130,12 @@ func captureFilters(scratch string, versions []string) error {
 	// Keep the previous captures if any release fails.
 	captures := map[string][]byte{}
 	for _, v := range versions {
-		r := &rig{want: v, root: filepath.Join(scratch, v), seeds: seedDir, torrents: torrents,
+		// A temp name keeps the folder that cleanup removes inside scratch, whatever the argument is.
+		root, err := os.MkdirTemp(scratch, "filters-")
+		if err != nil {
+			return err
+		}
+		r := &rig{want: v, root: root, seeds: seedDir, torrents: torrents,
 			a: fmt.Sprintf("qbt-filters-%d-a", os.Getpid()), b: fmt.Sprintf("qbt-filters-%d-b", os.Getpid())}
 		capture, err := r.run()
 		runCleanups()
@@ -228,6 +233,11 @@ func (r *rig) run() ([]byte, error) {
 		}
 	}
 
+	for _, f := range filterValues {
+		if r.tallies[f] == nil {
+			return nil, fmt.Errorf("filter %s: no valid response", f)
+		}
+	}
 	verdicts := map[string]map[string]string{}
 	var reached []string
 	for f, states := range r.tallies {

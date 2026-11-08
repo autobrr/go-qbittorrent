@@ -37,6 +37,9 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	if err := os.MkdirAll(cache, 0o700); err != nil {
+		log.Fatal(err)
+	}
 	scratch, err := os.MkdirTemp(cache, "qbt-capture-")
 	if err != nil {
 		log.Fatal(err)
