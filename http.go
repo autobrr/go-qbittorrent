@@ -10,9 +10,11 @@ import (
 	"mime/multipart"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"net/url"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/autobrr/go-qbittorrent/errors"
@@ -406,13 +408,25 @@ func isDialError(err error) bool {
 
 // retryDo sends req and retries it. With lostResponseURL set, an attempt that
 // fails after the dial is followed by one last attempt to that URL, because
-// the server can have built a response that the client did not get.
+// the server can have built a response that the client did not get. The same
+// applies to an attempt that the transport wrote more than one time.
 func (c *Client) retryDo(ctx context.Context, req *http.Request, lostResponseURL *url.URL) (*http.Response, error) {
 	var (
 		originalBody []byte
 		err          error
 		lastChance   bool
+		copiesSent   atomic.Int32
 	)
+
+	if lostResponseURL != nil {
+		req = req.WithContext(httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{
+			WroteRequest: func(info httptrace.WroteRequestInfo) {
+				if info.Err == nil {
+					copiesSent.Add(1)
+				}
+			},
+		}))
+	}
 
 	if req != nil && req.Body != nil {
 		originalBody, err = copyBody(req.Body)
@@ -433,6 +447,7 @@ func (c *Client) retryDo(ctx context.Context, req *http.Request, lostResponseURL
 			resetBody(req, originalBody)
 		}
 
+		copiesSent.Store(0)
 		resp, err = c.http.Do(req)
 
 		if err != nil {
@@ -467,6 +482,17 @@ func (c *Client) retryDo(ctx context.Context, req *http.Request, lostResponseURL
 			}
 
 			return err
+		}
+
+		// The transport sends a GET again by itself when a reused connection
+		// closes before the first byte of the response. A redirect also sends
+		// two requests, but to two URLs.
+		if lostResponseURL != nil && !lastChance && copiesSent.Load() > 1 && resp.Request.URL.String() == req.URL.String() {
+			drainAndClose(resp)
+			lastChance = true
+			req = req.Clone(ctx)
+			req.URL = lostResponseURL
+			return errors.New("the transport sent the request again")
 		}
 
 		if resp.StatusCode == http.StatusForbidden {

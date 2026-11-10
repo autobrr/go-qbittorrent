@@ -190,7 +190,7 @@ func closeConnection(w http.ResponseWriter, _ *http.Request) {
 
 // sendBodyOnNewConnection makes the client open a new connection for the next
 // request. The transport sends a GET again by itself when a reused connection
-// closes, and the test would not see that.
+// closes, and TestSyncManager_TransportResendAsksForFullUpdate covers that.
 func sendBodyOnNewConnection(body string) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Connection", "close")
@@ -330,6 +330,77 @@ func TestSyncManager_RetryAfterLoginKeepsRid(t *testing.T) {
 		}
 	}
 	if want, got := []string{"0", "5", "5"}, script.seenRids(); !slices.Equal(got, want) {
+		t.Fatalf("expected rids %v, got %v", want, got)
+	}
+}
+
+// The transport sends a GET again by itself when a reused connection closes
+// before the first byte of the response. qBittorrent can have built a response
+// for the first copy, so the answer to the second copy is not complete.
+func TestSyncManager_TransportResendAsksForFullUpdate(t *testing.T) {
+	tests := []struct {
+		name          string
+		webAPIVersion string
+		wantRids      []string
+		wantSecond    bool
+	}{
+		{name: "5.2", webAPIVersion: "2.15.1", wantRids: []string{"0", "5", "5", "0"}, wantSecond: true},
+		{name: "5.3", webAPIVersion: "2.16.2", wantRids: []string{"0", "5", "5"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			script := &syncScript{replies: []func(http.ResponseWriter, *http.Request){
+				sendBody(fullUpdateOneTorrent),
+				closeConnection,
+				replyByRid(`{"rid":7,"torrents":{"abc":{"state":"stalledUP"}}}`),
+			}}
+			server := newScriptedSyncServer(t, tt.webAPIVersion, script)
+			client := newLostAttemptClient(t, server)
+			if _, err := client.GetWebAPIVersionCtx(t.Context()); err != nil {
+				t.Fatalf("read the version: %v", err)
+			}
+			sm := NewSyncManager(client)
+
+			for i := range 2 {
+				if err := sm.Sync(t.Context()); err != nil {
+					t.Fatalf("sync %d: %v", i+1, err)
+				}
+			}
+
+			if got := script.seenRids(); !slices.Equal(got, tt.wantRids) {
+				t.Fatalf("expected rids %v, got %v", tt.wantRids, got)
+			}
+			if _, ok := sm.GetTorrentUnchecked("def"); ok != tt.wantSecond {
+				t.Fatalf("expected the torrent of the full update in the cache: %v, got %v", tt.wantSecond, ok)
+			}
+		})
+	}
+}
+
+// A redirect also makes the transport write two requests, but qBittorrent
+// gets one of them, so the sync keeps its rid.
+func TestSyncManager_RedirectKeepsRid(t *testing.T) {
+	script := &syncScript{replies: []func(http.ResponseWriter, *http.Request){
+		sendBody(fullUpdateOneTorrent),
+		sendBody(`{"rid":6,"torrents":{"abc":{"progress":1}}}`),
+	}}
+	mux := http.NewServeMux()
+	mux.Handle("GET /api/v2/sync/maindata", script)
+	mux.HandleFunc("GET /proxy/api/v2/sync/maindata", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/api/v2/sync/maindata?"+r.URL.RawQuery, http.StatusTemporaryRedirect)
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	client := NewClient(Config{Host: server.URL + "/proxy", APIKey: "test-key"})
+	client.retryDelay = time.Millisecond
+	sm := NewSyncManager(client)
+
+	for i := range 2 {
+		if err := sm.Sync(t.Context()); err != nil {
+			t.Fatalf("sync %d: %v", i+1, err)
+		}
+	}
+	if want, got := []string{"0", "5"}, script.seenRids(); !slices.Equal(got, want) {
 		t.Fatalf("expected rids %v, got %v", want, got)
 	}
 }
