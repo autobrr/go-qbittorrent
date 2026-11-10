@@ -1068,6 +1068,10 @@ func (c *Client) BanPeersCtx(ctx context.Context, peers []string) error {
 	return nil
 }
 
+// syncResendMinVersion is the first WebAPI version where sync/maindata gives
+// a complete diff when the client sends a rid again.
+var syncResendMinVersion = semver.MustParse("2.16.0")
+
 // SyncMainDataCtx Sync API implements requests for obtaining changes since the last request.
 // Response ID. If not provided, rid=0 will be assumed. If the given rid is different from the one of last server reply, full_update will be true (see the server reply details for more info)
 func (c *Client) SyncMainDataCtx(ctx context.Context, rid int64) (*MainData, error) {
@@ -1081,7 +1085,15 @@ func (c *Client) SyncMainDataCtxWithRaw(ctx context.Context, rid int64) (*MainDa
 		"rid": strconv.FormatInt(rid, 10),
 	}
 
-	resp, err := c.getCtx(ctx, "/sync/maindata", opts)
+	// Before 5.3.0rc1 (WebAPI 2.16), qBittorrent drops changes when a client
+	// asks for a rid again after it lost the response. Thus the attempt after
+	// a lost one asks for a full update. An unknown version gets the same rule.
+	var afterLostResponse map[string]string
+	if ver := c.version.Load(); rid != 0 && (ver == nil || ver.LessThan(syncResendMinVersion)) {
+		afterLostResponse = map[string]string{"rid": "0"}
+	}
+
+	resp, err := c.getWithLostResponseCtx(ctx, "/sync/maindata", opts, afterLostResponse)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "could not get main data")
 	}

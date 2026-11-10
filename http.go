@@ -20,6 +20,13 @@ import (
 )
 
 func (c *Client) getCtx(ctx context.Context, endpoint string, opts map[string]string) (*http.Response, error) {
+	return c.getWithLostResponseCtx(ctx, endpoint, opts, nil)
+}
+
+// getWithLostResponseCtx works as getCtx. With afterLostResponse set, an
+// attempt that the server can have answered is followed by one last attempt
+// with those query parameters (see retryDo).
+func (c *Client) getWithLostResponseCtx(ctx context.Context, endpoint string, opts, afterLostResponse map[string]string) (*http.Response, error) {
 	reqUrl := c.buildUrl(endpoint, opts)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqUrl, nil)
@@ -41,8 +48,13 @@ func (c *Client) getCtx(ctx context.Context, endpoint string, opts map[string]st
 		}
 	}
 
+	var lostResponseURL *url.URL
+	if afterLostResponse != nil {
+		lostResponseURL, _ = url.Parse(c.buildUrl(endpoint, afterLostResponse))
+	}
+
 	// try request and if fail run 10 retries
-	resp, err := c.retryDo(ctx, req)
+	resp, err := c.retryDo(ctx, req, lostResponseURL)
 	if err != nil {
 		return nil, errors.Wrap(err, "error making get request: %v", reqUrl)
 	}
@@ -83,7 +95,7 @@ func (c *Client) postCtx(ctx context.Context, endpoint string, opts map[string]s
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 
 	// try request and if fail run 10 retries
-	resp, err := c.retryDo(ctx, req)
+	resp, err := c.retryDo(ctx, req, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "error making post request: %v", reqUrl)
 	}
@@ -195,7 +207,7 @@ func (c *Client) postMultiMemoryCtx(ctx context.Context, endpoint string, files 
 
 	req.Header.Set("Content-Type", contentType)
 
-	resp, err := c.retryDo(ctx, req)
+	resp, err := c.retryDo(ctx, req, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "error making post multi-file request")
 	}
@@ -262,7 +274,7 @@ func (c *Client) postReaderCtx(ctx context.Context, endpoint string, reader io.R
 	// Set correct content type
 	req.Header.Set("Content-Type", contentType)
 
-	resp, err := c.retryDo(ctx, req)
+	resp, err := c.retryDo(ctx, req, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "error making post file request")
 	}
@@ -392,10 +404,14 @@ func isDialError(err error) bool {
 	return errors.As(err, &opErr) && opErr.Op == "dial"
 }
 
-func (c *Client) retryDo(ctx context.Context, req *http.Request) (*http.Response, error) {
+// retryDo sends req and retries it. With lostResponseURL set, an attempt that
+// fails after the dial is followed by one last attempt to that URL, because
+// the server can have built a response that the client did not get.
+func (c *Client) retryDo(ctx context.Context, req *http.Request, lostResponseURL *url.URL) (*http.Response, error) {
 	var (
 		originalBody []byte
 		err          error
+		lastChance   bool
 	)
 
 	if req != nil && req.Body != nil {
@@ -439,6 +455,15 @@ func (c *Client) retryDo(ctx context.Context, req *http.Request) (*http.Response
 			// Drop the other pooled connections, which may be dead too.
 			if isClosedConnectionError(err) {
 				c.http.CloseIdleConnections()
+			}
+
+			if lostResponseURL != nil && !isDialError(err) {
+				if lastChance {
+					return retry.Unrecoverable(err)
+				}
+				lastChance = true
+				req = req.Clone(ctx)
+				req.URL = lostResponseURL
 			}
 
 			return err
