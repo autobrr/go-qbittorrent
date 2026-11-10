@@ -974,6 +974,11 @@ type MainDataChanges struct {
 	// Torrents holds the hashes of the added and changed torrents.
 	Torrents        []string
 	TorrentsRemoved []string
+	// TorrentsLeftOut holds the hashes of new torrents that a partial update
+	// named without their full data. qBittorrent before 5.3.0rc1 sends such
+	// a diff after the client asks for a rid again. These torrents are not in
+	// Torrents, and Rid is 0, so that the next sync is a full update.
+	TorrentsLeftOut []string
 	Categories      bool
 	Tags            bool
 	Trackers        bool

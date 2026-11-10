@@ -65,6 +65,10 @@ type SyncOptions struct {
 	// sync still succeeds, so LastError does not change.
 	// The callback must not change or keep update.
 	BeforeFullUpdate func(ctx context.Context, update *MainData) error
+	// OnTorrentsLeftOut is called with the hashes that a sync response left
+	// out of the cache (see MainDataChanges.TorrentsLeftOut). The next sync
+	// asks for a full update, which brings them in.
+	OnTorrentsLeftOut func(hashes []string)
 	// RetainRemovedData keeps removed items for one sync cycle for comparison
 	RetainRemovedData bool
 }
@@ -225,7 +229,7 @@ func (sm *SyncManager) doSync(ctx context.Context) (interface{}, error) {
 		cbErr = sm.options.BeforeFullUpdate(ctx, source)
 	}
 
-	update := sm.applySyncResult(source, rawData, startTime, err)
+	update, leftOut := sm.applySyncResult(source, rawData, startTime, err)
 
 	// Report the callback error after the update enters the cache, so that
 	// a checked getter in OnError does not wait for this sync.
@@ -246,6 +250,9 @@ func (sm *SyncManager) doSync(ctx context.Context) (interface{}, error) {
 		}
 		return nil, err
 	}
+	if len(leftOut) > 0 && sm.options.OnTorrentsLeftOut != nil {
+		sm.options.OnTorrentsLeftOut(leftOut)
+	}
 	if update != nil && sm.options.OnUpdate != nil {
 		sm.options.OnUpdate(update)
 	}
@@ -256,7 +263,8 @@ func (sm *SyncManager) doSync(ctx context.Context) (interface{}, error) {
 // applySyncResult merges a fetched sync response and updates the sync clocks
 // under a brief write lock. It returns a deep copy of the merged data when an
 // OnUpdate callback needs to be invoked, and nil when the response changed nothing.
-func (sm *SyncManager) applySyncResult(source *MainData, rawData map[string]interface{}, startTime time.Time, syncErr error) *MainData {
+// It also returns the hashes that the merge left out of the cache.
+func (sm *SyncManager) applySyncResult(source *MainData, rawData map[string]any, startTime time.Time, syncErr error) (update *MainData, leftOut []string) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
@@ -268,10 +276,10 @@ func (sm *SyncManager) applySyncResult(source *MainData, rawData map[string]inte
 		sm.data = &MainData{}
 	}
 
-	var update *MainData
 	if syncErr == nil {
 		sm.data.applySync(source, rawData)
 		changes := sm.data.Changes
+		leftOut = slices.Clone(changes.TorrentsLeftOut)
 		if len(changes.Torrents) > 0 || len(changes.TorrentsRemoved) > 0 {
 			sm.updateAllTorrents()
 		}
@@ -294,7 +302,7 @@ func (sm *SyncManager) applySyncResult(source *MainData, rawData map[string]inte
 		sm.lastSuccessfulSync = sm.lastSync
 	}
 	sm.lastError = syncErr
-	return update
+	return update, leftOut
 }
 
 func (sm *SyncManager) updateAllTorrents() {
@@ -784,6 +792,7 @@ func (sm *SyncManager) copyMainData(src *MainData) *MainData {
 	}
 	dst.Changes.Torrents = slices.Clone(src.Changes.Torrents)
 	dst.Changes.TorrentsRemoved = slices.Clone(src.Changes.TorrentsRemoved)
+	dst.Changes.TorrentsLeftOut = slices.Clone(src.Changes.TorrentsLeftOut)
 
 	return dst
 }

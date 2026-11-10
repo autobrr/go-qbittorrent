@@ -154,6 +154,10 @@ func (dest *MainData) UpdateWithRawData(rawData map[string]interface{}, source *
 			dest.Changes.ServerState = len(serverStateMap) > 0
 		}
 	}
+
+	if len(dest.Changes.TorrentsLeftOut) > 0 {
+		dest.Rid = 0
+	}
 }
 
 // mergeTorrentsPartial merges only the fields that are present in the update
@@ -166,7 +170,12 @@ func (dest *MainData) mergeTorrentsPartial(torrentsMap map[string]interface{}) {
 
 		existing, exists := dest.Torrents[hash]
 		if !exists {
-			// New torrent - create a minimal torrent with the hash at least
+			// qBittorrent sends every field of a torrent that the client does
+			// not know. A diff without added_on lost the earlier fields.
+			if _, complete := updateMap["added_on"]; !complete {
+				dest.Changes.TorrentsLeftOut = append(dest.Changes.TorrentsLeftOut, hash)
+				continue
+			}
 			existing = Torrent{Hash: hash}
 		}
 

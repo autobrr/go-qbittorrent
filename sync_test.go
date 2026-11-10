@@ -434,6 +434,7 @@ func TestMergeTorrents_NewTorrent(t *testing.T) {
 		"torrents": map[string]interface{}{
 			"def456": map[string]interface{}{
 				"hash":     "def456",
+				"added_on": float64(1700000000),
 				"name":     "New Torrent",
 				"progress": 0.25,
 				"dlspeed":  float64(2000),
@@ -2113,7 +2114,7 @@ func TestMainData_Changes(t *testing.T) {
 	}{
 		{name: "nothing", body: `{"rid":2}`},
 		{name: "empty sections", body: `{"rid":2,"torrents":{},"categories":{},"tags":[],"trackers":{},"server_state":{}}`},
-		{name: "torrents", body: `{"rid":2,"torrents":{"a":{"dlspeed":5},"d":{"name":"d"}}}`, want: MainDataChanges{Torrents: []string{"a", "d"}}},
+		{name: "torrents", body: `{"rid":2,"torrents":{"a":{"dlspeed":5},"d":{"added_on":1700000000,"name":"d"}}}`, want: MainDataChanges{Torrents: []string{"a", "d"}}},
 		{name: "torrent removed", body: `{"rid":2,"torrents_removed":["c"]}`, want: MainDataChanges{TorrentsRemoved: []string{"c"}, Trackers: true}},
 		{name: "category added", body: `{"rid":2,"categories":{"movies":{"name":"movies"}}}`, want: MainDataChanges{Categories: true}},
 		{name: "category removed", body: `{"rid":2,"categories_removed":["tv"]}`, want: MainDataChanges{Categories: true}},
