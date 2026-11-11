@@ -50,7 +50,7 @@ func removeStrings(input []string, toRemove []string) []string {
 
 // matchesTorrentFilter checks if a torrent matches the category, tag and state
 // filters. The caller applies the hash filter.
-func matchesTorrentFilter(torrent Torrent, options TorrentFilterOptions) bool {
+func matchesTorrentFilter(torrent *Torrent, options TorrentFilterOptions) bool {
 	if options.Category != "" && torrent.Category != options.Category {
 		return false
 	}
@@ -248,24 +248,19 @@ func matchesStateFilter(state TorrentState, filter TorrentFilter) bool {
 	return filter == TorrentFilterAll
 }
 
-// applyTorrentFilterOptions applies sorting, reverse, limit, and offset to torrents
-func applyTorrentFilterOptions(torrents []Torrent, options TorrentFilterOptions) []Torrent {
-	// Sort
-	applyTorrentSorting(torrents, options.Sort, options.Reverse)
-
-	// Apply offset and limit
-	if options.Offset > 0 || options.Limit > 0 {
-		start := options.Offset
-		if start >= len(torrents) {
-			torrents = torrents[:0]
-		} else {
-			end := len(torrents)
-			if options.Limit > 0 && start+options.Limit < end {
-				end = start + options.Limit
-			}
-			torrents = torrents[start:end]
-		}
+// pageTorrentRefs returns the torrents from offset, at most limit of them.
+// A limit of 0 has no limit.
+func pageTorrentRefs(torrents []*Torrent, offset, limit int) []*Torrent {
+	if offset <= 0 && limit <= 0 {
+		return torrents
 	}
-
-	return torrents
+	start := max(offset, 0)
+	if start >= len(torrents) {
+		return torrents[:0]
+	}
+	end := len(torrents)
+	if limit > 0 && start+limit < end {
+		end = start + limit
+	}
+	return torrents[start:end]
 }

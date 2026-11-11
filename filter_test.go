@@ -65,7 +65,7 @@ func TestMatchesTorrentFilter_Tag(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if got := matchesTorrentFilter(torrent, tt.options); got != tt.want {
+			if got := matchesTorrentFilter(&torrent, tt.options); got != tt.want {
 				t.Fatalf("matchesTorrentFilter() = %v, want %v", got, tt.want)
 			}
 		})

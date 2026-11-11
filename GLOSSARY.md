@@ -19,3 +19,7 @@ _Avoid_: Mandatory argument
 **Capture**:
 A testdata file that the capture command writes from one release, from its Docker image or its source tag.
 _Avoid_: Fixture, snapshot
+
+**Sync snapshot**:
+The torrents of one instance as one sync of a sync manager left them. Every reader of that sync shares them, and no reader changes them.
+_Avoid_: Copy, sync cache, snapshot alone

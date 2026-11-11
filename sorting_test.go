@@ -7,7 +7,7 @@ import (
 
 func TestTorrentSorting(t *testing.T) {
 	// Create test torrents with different values
-	torrents := []Torrent{
+	torrents := []*Torrent{
 		{Name: "Charlie", Hash: "hash3", Size: 300, Priority: 3},
 		{Name: "Alice", Hash: "hash1", Size: 100, Priority: 1},
 		{Name: "Bob", Hash: "hash2", Size: 200, Priority: 2},
@@ -16,7 +16,7 @@ func TestTorrentSorting(t *testing.T) {
 
 	t.Run("sort by name ascending", func(t *testing.T) {
 		test := slices.Clone(torrents)
-		applyTorrentSorting(test, "name", false)
+		sortTorrentRefs(test, "name", false)
 
 		expected := []string{"Alice", "Bob", "Charlie", "David"}
 		for i, torrent := range test {
@@ -28,7 +28,7 @@ func TestTorrentSorting(t *testing.T) {
 
 	t.Run("sort by name descending", func(t *testing.T) {
 		test := slices.Clone(torrents)
-		applyTorrentSorting(test, "name", true)
+		sortTorrentRefs(test, "name", true)
 
 		expected := []string{"David", "Charlie", "Bob", "Alice"}
 		for i, torrent := range test {
@@ -40,7 +40,7 @@ func TestTorrentSorting(t *testing.T) {
 
 	t.Run("sort by size ascending", func(t *testing.T) {
 		test := slices.Clone(torrents)
-		applyTorrentSorting(test, "size", false)
+		sortTorrentRefs(test, "size", false)
 
 		expected := []int64{100, 200, 300, 400}
 		for i, torrent := range test {
@@ -52,7 +52,7 @@ func TestTorrentSorting(t *testing.T) {
 
 	t.Run("sort by priority with stability", func(t *testing.T) {
 		test := slices.Clone(torrents)
-		applyTorrentSorting(test, "priority", false)
+		sortTorrentRefs(test, "priority", false)
 
 		// Alice and David both have priority 1, should be sorted by hash (secondary sort)
 		// hash1 < hash4, so Alice should come before David
@@ -66,7 +66,7 @@ func TestTorrentSorting(t *testing.T) {
 
 	t.Run("sort by invalid field uses default", func(t *testing.T) {
 		test := slices.Clone(torrents)
-		applyTorrentSorting(test, "invalid_field", false)
+		sortTorrentRefs(test, "invalid_field", false)
 
 		// Should fall back to name sorting
 		expected := []string{"Alice", "Bob", "Charlie", "David"}
@@ -81,10 +81,10 @@ func TestTorrentSorting(t *testing.T) {
 func BenchmarkTorrentSorting(b *testing.B) {
 	// Create a large slice for benchmarking
 	const size = 10000
-	torrents := make([]Torrent, size)
+	torrents := make([]*Torrent, size)
 
 	for i := 0; i < size; i++ {
-		torrents[i] = Torrent{
+		torrents[i] = &Torrent{
 			Name:     string(rune('A' + (i % 26))),
 			Hash:     string(rune('0' + (i % 10))),
 			Size:     int64(size - i), // Reverse order to force sorting
@@ -95,14 +95,14 @@ func BenchmarkTorrentSorting(b *testing.B) {
 	b.Run("sort by name", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			test := slices.Clone(torrents)
-			applyTorrentSorting(test, "name", false)
+			sortTorrentRefs(test, "name", false)
 		}
 	})
 
 	b.Run("sort by size", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			test := slices.Clone(torrents)
-			applyTorrentSorting(test, "size", false)
+			sortTorrentRefs(test, "size", false)
 		}
 	})
 }
