@@ -261,7 +261,7 @@ func TestSyncManager_InitializeData(t *testing.T) {
 		},
 	}
 
-	syncManager.updateAllTorrents()
+	seedSyncManager(syncManager, syncManager.data)
 
 	// Test GetData returns a copy
 	data := syncManager.GetData()
@@ -347,7 +347,7 @@ func TestSyncManager_InitializeData(t *testing.T) {
 	}
 
 	// Test LastSyncTime is set when we update lastSync
-	syncManager.lastSync = time.Now()
+	setLastSync(syncManager, time.Now())
 	lastSync := syncManager.LastSyncTime()
 	if time.Since(lastSync) > time.Second {
 		t.Error("LastSyncTime should be recent")
@@ -714,7 +714,7 @@ func TestSyncManager_CalculateNextInterval(t *testing.T) {
 	syncManager := NewSyncManager(client, options)
 
 	// Test with short sync duration
-	syncManager.lastSyncDuration = 500 * time.Millisecond
+	setLastSyncDuration(syncManager, 500*time.Millisecond)
 	interval := syncManager.calculateNextInterval()
 	expected := 1 * time.Second // Should be clamped to minimum
 	if interval != expected {
@@ -722,7 +722,7 @@ func TestSyncManager_CalculateNextInterval(t *testing.T) {
 	}
 
 	// Test with medium sync duration
-	syncManager.lastSyncDuration = 2 * time.Second
+	setLastSyncDuration(syncManager, 2*time.Second)
 	interval = syncManager.calculateNextInterval()
 	expected = 4 * time.Second // Double the duration
 	if interval != expected {
@@ -730,7 +730,7 @@ func TestSyncManager_CalculateNextInterval(t *testing.T) {
 	}
 
 	// Test with long sync duration
-	syncManager.lastSyncDuration = 8 * time.Second
+	setLastSyncDuration(syncManager, 8*time.Second)
 	interval = syncManager.calculateNextInterval()
 	expected = 10 * time.Second // Should be clamped to maximum
 	if interval != expected {
@@ -748,7 +748,7 @@ func TestSyncManager_CalculateNextIntervalWithJitter(t *testing.T) {
 	}
 
 	syncManager := NewSyncManager(client, options)
-	syncManager.lastSyncDuration = 2 * time.Second
+	setLastSyncDuration(syncManager, 2*time.Second)
 
 	// Run multiple times to ensure jitter is applied
 	intervals := make([]time.Duration, 10)
@@ -796,7 +796,7 @@ func TestSyncManager_LastSyncDuration(t *testing.T) {
 	}
 
 	// Set a duration and test getter
-	syncManager.lastSyncDuration = 2 * time.Second
+	setLastSyncDuration(syncManager, 2*time.Second)
 	duration = syncManager.LastSyncDuration()
 	if duration != 2*time.Second {
 		t.Errorf("Expected duration 2s, got %v", duration)
@@ -966,7 +966,7 @@ func TestSyncManager_LastSuccessfulSyncTimeUnchangedOnFailure(t *testing.T) {
 
 	// Seed a prior successful sync at a clearly-old time.
 	priorSuccess := time.Now().Add(-time.Hour)
-	sm.lastSync = priorSuccess
+	setLastSync(sm, priorSuccess)
 	sm.lastSuccessfulSync = priorSuccess
 
 	if err := sm.Sync(context.Background()); err == nil {
@@ -1662,7 +1662,7 @@ func TestSyncManager_ReadersNotBlockedDuringSlowSync(t *testing.T) {
 
 	// Seed cached data so readers have something to return while the sync is in flight.
 	sm.data = &MainData{Rid: 1, Torrents: map[string]Torrent{"abc": {Hash: "abc"}}}
-	sm.updateAllTorrents()
+	seedSyncManager(sm, sm.data)
 
 	syncDone := make(chan error, 1)
 	go func() { syncDone <- sm.Sync(context.Background()) }()
@@ -2005,13 +2005,24 @@ func TestSyncManager_GetTorrentsByHashMatchesScan(t *testing.T) {
 
 	sm, hashes := newLibrarySyncManager(60)
 	scan := func(options TorrentFilterOptions) []Torrent {
-		matched := []Torrent{}
-		for _, torrent := range sm.allTorrents {
-			if (len(options.Hashes) == 0 || slices.Contains(options.Hashes, torrent.Hash)) && matchesTorrentFilter(torrent, options) {
-				matched = append(matched, torrent)
+		matched := []*Torrent{}
+		for _, torrent := range sm.SnapshotUnchecked().Torrents() {
+			if len(options.Hashes) > 0 && !slices.Contains(options.Hashes, torrent.Hash) {
+				continue
 			}
+			if options.Category != "" && torrent.Category != options.Category {
+				continue
+			}
+			if options.Tag != "" && !containsExactTag(torrent.Tags, options.Tag) {
+				continue
+			}
+			if options.Filter != "" && !matchesStateFilter(torrent.State, options.Filter) {
+				continue
+			}
+			matched = append(matched, torrent)
 		}
-		return slices.Clone(applyTorrentFilterOptions(matched, options))
+		sortTorrentRefs(matched, options.Sort, options.Reverse)
+		return copyTorrents(pageTorrentRefs(matched, options.Offset, options.Limit))
 	}
 
 	reversed := slices.Clone(hashes)
@@ -2315,4 +2326,26 @@ func TestSyncManager_BeforeFullUpdateGetsTheSyncDeadline(t *testing.T) {
 	if remaining <= client.attemptTimeout() {
 		t.Fatalf("expected the callback to get more than one attempt timeout (%v), got %v", client.attemptTimeout(), remaining)
 	}
+}
+
+// seedSyncManager publishes data as if one sync had applied it.
+func seedSyncManager(sm *SyncManager, data *MainData) {
+	snapshot, _ := (*SyncSnapshot)(nil).nextFull(data.Torrents)
+	snapshot.number = 1
+	seeded := *data
+	seeded.Torrents = nil
+	seeded.ensureInitialized()
+	sm.data = &seeded
+	sm.snapshot.Store(snapshot)
+	if sm.clock.Load() == nil {
+		sm.clock.Store(&syncClock{})
+	}
+}
+
+func setLastSync(sm *SyncManager, last time.Time) {
+	sm.clock.Store(&syncClock{last: last, duration: sm.LastSyncDuration()})
+}
+
+func setLastSyncDuration(sm *SyncManager, duration time.Duration) {
+	sm.clock.Store(&syncClock{last: sm.LastSyncTime(), duration: duration})
 }

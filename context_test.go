@@ -60,9 +60,7 @@ func newStaleSyncManager(t *testing.T, c *Client) *SyncManager {
 	if err := sm.Sync(t.Context()); err != nil {
 		t.Fatalf("initial sync: %v", err)
 	}
-	sm.mu.Lock()
-	sm.lastSync = time.Now().Add(-time.Hour)
-	sm.mu.Unlock()
+	setLastSync(sm, time.Now().Add(-time.Hour))
 	return sm
 }
 
@@ -445,9 +443,7 @@ func TestSyncManager_StaleReadStartsNewSyncAfterBackgroundSyncEnds(t *testing.T)
 	}
 
 	// The next stale read must start a new sync, not join the ended one.
-	sm.mu.Lock()
-	sm.lastSync = time.Now().Add(-time.Hour)
-	sm.mu.Unlock()
+	setLastSync(sm, time.Now().Add(-time.Hour))
 	sm.GetTorrents(TorrentFilterOptions{})
 	waitForHits(t, hits, 3)
 }

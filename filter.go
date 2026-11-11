@@ -48,19 +48,50 @@ func removeStrings(input []string, toRemove []string) []string {
 	return result
 }
 
-// matchesTorrentFilter checks if a torrent matches the category, tag and state
-// filters. The caller applies the hash filter.
-func matchesTorrentFilter(torrent Torrent, options TorrentFilterOptions) bool {
-	if options.Category != "" && torrent.Category != options.Category {
+// torrentFilter checks torrents against the category, tag and state filters
+// of one read. The caller applies the hash filter.
+type torrentFilter struct {
+	category string
+	tag      string
+	state    TorrentFilter
+	// states remembers the result of the state filter for each state of this
+	// read. A library has few states, so a scan of the list is faster than
+	// the two map lookups of matchesStateFilter.
+	states []stateFilterResult
+}
+
+type stateFilterResult struct {
+	state   TorrentState
+	matches bool
+}
+
+// maxRememberedStates limits the scan of torrentFilter.states for a library
+// with many unknown states.
+const maxRememberedStates = 32
+
+func newTorrentFilter(options TorrentFilterOptions) torrentFilter {
+	return torrentFilter{category: options.Category, tag: options.Tag, state: options.Filter}
+}
+
+func (f *torrentFilter) matches(torrent *Torrent) bool {
+	if f.category != "" && torrent.Category != f.category {
 		return false
 	}
-	if options.Tag != "" && !containsExactTag(torrent.Tags, options.Tag) {
+	if f.tag != "" && !containsExactTag(torrent.Tags, f.tag) {
 		return false
 	}
-	if options.Filter != "" && !matchesStateFilter(torrent.State, options.Filter) {
-		return false
+	return f.state == "" || f.matchesState(torrent.State)
+}
+
+func (f *torrentFilter) matchesState(state TorrentState) bool {
+	if i := slices.IndexFunc(f.states, func(r stateFilterResult) bool { return r.state == state }); i >= 0 {
+		return f.states[i].matches
 	}
-	return true
+	matches := matchesStateFilter(state, f.state)
+	if len(f.states) < maxRememberedStates {
+		f.states = append(f.states, stateFilterResult{state: state, matches: matches})
+	}
+	return matches
 }
 
 // containsExactTag reports whether the comma-separated tags string includes the target as a full token.
@@ -248,24 +279,19 @@ func matchesStateFilter(state TorrentState, filter TorrentFilter) bool {
 	return filter == TorrentFilterAll
 }
 
-// applyTorrentFilterOptions applies sorting, reverse, limit, and offset to torrents
-func applyTorrentFilterOptions(torrents []Torrent, options TorrentFilterOptions) []Torrent {
-	// Sort
-	applyTorrentSorting(torrents, options.Sort, options.Reverse)
-
-	// Apply offset and limit
-	if options.Offset > 0 || options.Limit > 0 {
-		start := options.Offset
-		if start >= len(torrents) {
-			torrents = torrents[:0]
-		} else {
-			end := len(torrents)
-			if options.Limit > 0 && start+options.Limit < end {
-				end = start + options.Limit
-			}
-			torrents = torrents[start:end]
-		}
+// pageTorrentRefs returns the torrents from offset, at most limit of them.
+// A limit of 0 has no limit.
+func pageTorrentRefs(torrents []*Torrent, offset, limit int) []*Torrent {
+	if offset <= 0 && limit <= 0 {
+		return torrents
 	}
-
-	return torrents
+	start := max(offset, 0)
+	if start >= len(torrents) {
+		return torrents[:0]
+	}
+	end := len(torrents)
+	if limit > 0 {
+		end = start + min(limit, end-start)
+	}
+	return torrents[start:end]
 }

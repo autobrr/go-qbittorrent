@@ -2,6 +2,7 @@ package qbittorrent
 
 import (
 	"fmt"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -28,7 +29,8 @@ func createBenchSyncManager() *SyncManager {
 			Trackers:   make(map[string][]string),
 		},
 	}
-	sm.lastSync = time.Now()
+	seedSyncManager(sm, sm.data)
+	setLastSync(sm, time.Now())
 	sm.options.DynamicSync = true
 	sm.options.MinSyncInterval = 1 * time.Second
 
@@ -135,8 +137,7 @@ func newLibrarySyncManager(n int) (*SyncManager, []string) {
 	}
 
 	sm := NewSyncManager(nil)
-	sm.data = &MainData{Torrents: torrents}
-	sm.updateAllTorrents()
+	seedSyncManager(sm, &MainData{Torrents: torrents})
 	return sm, hashes
 }
 
@@ -153,12 +154,29 @@ func BenchmarkSyncManager_GetTorrentsByHash(b *testing.B) {
 	}
 }
 
-// BenchmarkSyncManager_UpdateAllTorrents measures the cache rebuild that runs
-// after each sync.
-func BenchmarkSyncManager_UpdateAllTorrents(b *testing.B) {
-	sm, _ := newLibrarySyncManager(50_000)
-	for b.Loop() {
-		sm.updateAllTorrents()
+// BenchmarkSyncManager_Sync measures one sync of a library of 20,000
+// torrents in which 100 torrents change, with each kind of update callback.
+func BenchmarkSyncManager_Sync(b *testing.B) {
+	lib := newSyncLibrary(20_000, 100)
+	for _, tc := range []struct {
+		name string
+		set  func(*SyncOptions)
+	}{
+		{"callback=none", func(*SyncOptions) {}},
+		{"callback=OnUpdate", func(o *SyncOptions) { o.OnUpdate = func(*MainData) {} }},
+		{"callback=OnSyncUpdate", func(o *SyncOptions) { o.OnSyncUpdate = func(SyncUpdate) {} }},
+	} {
+		b.Run(tc.name, func(b *testing.B) {
+			options := DefaultSyncOptions()
+			tc.set(&options)
+			sm := newLibraryManager(b, lib, options)
+			b.ReportAllocs()
+			for b.Loop() {
+				if err := sm.Sync(b.Context()); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
 	}
 }
 
@@ -170,8 +188,30 @@ func BenchmarkSyncManager_ApplyUnchangedSync(b *testing.B) {
 	source := &MainData{Rid: 2}
 	raw := map[string]any{"rid": float64(2)}
 	for b.Loop() {
-		sm.applySyncResult(source, raw, time.Now(), nil)
+		next, changes := buildSnapshot(sm.SnapshotUnchecked(), source, raw)
+		sm.applySyncResult(source, raw, next, changes, time.Now(), nil)
 	}
+}
+
+// BenchmarkSyncManager_MemoryAtRest reports the heap that a manager keeps
+// for a library of 20,000 torrents after a full sync and one diff.
+func BenchmarkSyncManager_MemoryAtRest(b *testing.B) {
+	lib := newSyncLibrary(20_000, 100)
+	var held uint64
+	for b.Loop() {
+		var before, after runtime.MemStats
+		runtime.GC()
+		runtime.ReadMemStats(&before)
+		sm := newLibraryManager(b, lib, DefaultSyncOptions())
+		if err := sm.Sync(b.Context()); err != nil {
+			b.Fatal(err)
+		}
+		runtime.GC()
+		runtime.ReadMemStats(&after)
+		held = after.HeapAlloc - before.HeapAlloc
+		runtime.KeepAlive(sm)
+	}
+	b.ReportMetric(float64(held), "heap-B")
 }
 
 func BenchmarkSyncManager_GetTorrentsMatching(b *testing.B) {

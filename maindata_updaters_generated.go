@@ -3,6 +3,12 @@
 
 package qbittorrent
 
+import (
+	"hash/maphash"
+	"math"
+	"slices"
+)
+
 // updateTorrentAddedOn updates the AddedOn field of Torrent
 func updateTorrentAddedOn(val interface{}, obj *Torrent) {
 	if a, ok := val.(float64); ok {
@@ -922,5 +928,170 @@ func updateServerStateFields(obj *ServerState, updateMap map[string]interface{})
 			updater(val, obj)
 		}
 	}
+}
+
+// torrentEqual reports whether a and b hold the same values.
+func torrentEqual(a, b *Torrent) bool {
+	return a.AddedOn == b.AddedOn &&
+		a.AmountLeft == b.AmountLeft &&
+		a.AutoManaged == b.AutoManaged &&
+		a.Availability == b.Availability &&
+		a.Category == b.Category &&
+		a.Comment == b.Comment &&
+		a.Completed == b.Completed &&
+		a.CompletionOn == b.CompletionOn &&
+		a.ConnectionsCount == b.ConnectionsCount &&
+		a.ConnectionsLimit == b.ConnectionsLimit &&
+		a.CreatedBy == b.CreatedBy &&
+		a.CreationDate == b.CreationDate &&
+		a.ContentPath == b.ContentPath &&
+		a.DlLimit == b.DlLimit &&
+		a.DlSpeed == b.DlSpeed &&
+		a.DownloadPath == b.DownloadPath &&
+		a.Downloaded == b.Downloaded &&
+		a.DownloadedSession == b.DownloadedSession &&
+		a.ETA == b.ETA &&
+		a.FirstLastPiecePrio == b.FirstLastPiecePrio &&
+		a.ForceStart == b.ForceStart &&
+		a.Hash == b.Hash &&
+		equalPtr(a.HasMetadata, b.HasMetadata) &&
+		a.HasTrackerWarning == b.HasTrackerWarning &&
+		a.HasTrackerError == b.HasTrackerError &&
+		a.HasOtherAnnounceError == b.HasOtherAnnounceError &&
+		a.InfohashV1 == b.InfohashV1 &&
+		a.InfohashV2 == b.InfohashV2 &&
+		a.Popularity == b.Popularity &&
+		a.Private == b.Private &&
+		a.LastActivity == b.LastActivity &&
+		a.MagnetURI == b.MagnetURI &&
+		a.MaxRatio == b.MaxRatio &&
+		a.MaxSeedingTime == b.MaxSeedingTime &&
+		a.MaxInactiveSeedingTime == b.MaxInactiveSeedingTime &&
+		a.Name == b.Name &&
+		a.NumComplete == b.NumComplete &&
+		a.NumIncomplete == b.NumIncomplete &&
+		a.NumLeechs == b.NumLeechs &&
+		a.NumSeeds == b.NumSeeds &&
+		a.PieceSize == b.PieceSize &&
+		a.PiecesHave == b.PiecesHave &&
+		a.PiecesNum == b.PiecesNum &&
+		a.Priority == b.Priority &&
+		a.Progress == b.Progress &&
+		a.Ratio == b.Ratio &&
+		a.RatioLimit == b.RatioLimit &&
+		a.Reannounce == b.Reannounce &&
+		a.SavePath == b.SavePath &&
+		a.SeedingTime == b.SeedingTime &&
+		a.SeedingTimeLimit == b.SeedingTimeLimit &&
+		a.InactiveSeedingTimeLimit == b.InactiveSeedingTimeLimit &&
+		a.ShareLimitAction == b.ShareLimitAction &&
+		a.ShareLimitsMode == b.ShareLimitsMode &&
+		a.SeenComplete == b.SeenComplete &&
+		a.SequentialDownload == b.SequentialDownload &&
+		a.Size == b.Size &&
+		a.State == b.State &&
+		a.SuperSeeding == b.SuperSeeding &&
+		a.Tags == b.Tags &&
+		a.TimeActive == b.TimeActive &&
+		a.TotalSize == b.TotalSize &&
+		a.TotalWasted == b.TotalWasted &&
+		a.Tracker == b.Tracker &&
+		a.TrackersCount == b.TrackersCount &&
+		a.UpLimit == b.UpLimit &&
+		a.Uploaded == b.Uploaded &&
+		a.UploadedSession == b.UploadedSession &&
+		a.UpSpeed == b.UpSpeed &&
+		slices.Equal(a.Trackers, b.Trackers)
+}
+
+// writeTorrentChecksum writes each field of v to h.
+func writeTorrentChecksum(h *maphash.Hash, v *Torrent) {
+	checksumUint(h, uint64(v.AddedOn))
+	checksumUint(h, uint64(v.AmountLeft))
+	checksumBool(h, v.AutoManaged)
+	checksumUint(h, math.Float64bits(v.Availability))
+	checksumString(h, string(v.Category))
+	checksumString(h, string(v.Comment))
+	checksumUint(h, uint64(v.Completed))
+	checksumUint(h, uint64(v.CompletionOn))
+	checksumUint(h, uint64(v.ConnectionsCount))
+	checksumUint(h, uint64(v.ConnectionsLimit))
+	checksumString(h, string(v.CreatedBy))
+	checksumUint(h, uint64(v.CreationDate))
+	checksumString(h, string(v.ContentPath))
+	checksumUint(h, uint64(v.DlLimit))
+	checksumUint(h, uint64(v.DlSpeed))
+	checksumString(h, string(v.DownloadPath))
+	checksumUint(h, uint64(v.Downloaded))
+	checksumUint(h, uint64(v.DownloadedSession))
+	checksumUint(h, uint64(v.ETA))
+	checksumBool(h, v.FirstLastPiecePrio)
+	checksumBool(h, v.ForceStart)
+	checksumString(h, string(v.Hash))
+	checksumBool(h, v.HasMetadata != nil)
+	if v.HasMetadata != nil {
+		checksumBool(h, *v.HasMetadata)
+	}
+	checksumBool(h, v.HasTrackerWarning)
+	checksumBool(h, v.HasTrackerError)
+	checksumBool(h, v.HasOtherAnnounceError)
+	checksumString(h, string(v.InfohashV1))
+	checksumString(h, string(v.InfohashV2))
+	checksumUint(h, math.Float64bits(v.Popularity))
+	checksumBool(h, v.Private)
+	checksumUint(h, uint64(v.LastActivity))
+	checksumString(h, string(v.MagnetURI))
+	checksumUint(h, math.Float64bits(v.MaxRatio))
+	checksumUint(h, uint64(v.MaxSeedingTime))
+	checksumUint(h, uint64(v.MaxInactiveSeedingTime))
+	checksumString(h, string(v.Name))
+	checksumUint(h, uint64(v.NumComplete))
+	checksumUint(h, uint64(v.NumIncomplete))
+	checksumUint(h, uint64(v.NumLeechs))
+	checksumUint(h, uint64(v.NumSeeds))
+	checksumUint(h, uint64(v.PieceSize))
+	checksumUint(h, uint64(v.PiecesHave))
+	checksumUint(h, uint64(v.PiecesNum))
+	checksumUint(h, uint64(v.Priority))
+	checksumUint(h, math.Float64bits(v.Progress))
+	checksumUint(h, math.Float64bits(v.Ratio))
+	checksumUint(h, math.Float64bits(v.RatioLimit))
+	checksumUint(h, uint64(v.Reannounce))
+	checksumString(h, string(v.SavePath))
+	checksumUint(h, uint64(v.SeedingTime))
+	checksumUint(h, uint64(v.SeedingTimeLimit))
+	checksumUint(h, uint64(v.InactiveSeedingTimeLimit))
+	checksumString(h, string(v.ShareLimitAction))
+	checksumString(h, string(v.ShareLimitsMode))
+	checksumUint(h, uint64(v.SeenComplete))
+	checksumBool(h, v.SequentialDownload)
+	checksumUint(h, uint64(v.Size))
+	checksumString(h, string(v.State))
+	checksumBool(h, v.SuperSeeding)
+	checksumString(h, string(v.Tags))
+	checksumUint(h, uint64(v.TimeActive))
+	checksumUint(h, uint64(v.TotalSize))
+	checksumUint(h, uint64(v.TotalWasted))
+	checksumString(h, string(v.Tracker))
+	checksumUint(h, uint64(v.TrackersCount))
+	checksumUint(h, uint64(v.UpLimit))
+	checksumUint(h, uint64(v.Uploaded))
+	checksumUint(h, uint64(v.UploadedSession))
+	checksumUint(h, uint64(v.UpSpeed))
+	checksumUint(h, uint64(len(v.Trackers)))
+	for i := range v.Trackers {
+		writeTorrentTrackerChecksum(h, &v.Trackers[i])
+	}
+}
+
+// writeTorrentTrackerChecksum writes each field of v to h.
+func writeTorrentTrackerChecksum(h *maphash.Hash, v *TorrentTracker) {
+	checksumString(h, string(v.Url))
+	checksumUint(h, uint64(v.Status))
+	checksumUint(h, uint64(v.NumPeers))
+	checksumUint(h, uint64(v.NumSeeds))
+	checksumUint(h, uint64(v.NumLeechers))
+	checksumUint(h, uint64(v.NumDownloaded))
+	checksumString(h, string(v.Message))
 }
 
