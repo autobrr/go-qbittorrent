@@ -3,6 +3,7 @@ package qbittorrent
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"runtime"
@@ -329,6 +330,18 @@ func TestSyncManager_OnUpdateGetsAllData(t *testing.T) {
 	updates[1].Torrents["abc"] = Torrent{Name: "changed"}
 	abc, _ := sm.GetTorrentUnchecked("abc")
 	require.Equal(t, "first", abc.Name)
+}
+
+func TestSyncManager_GetTorrentsLimitDoesNotOverflow(t *testing.T) {
+	sm, hashes := newLibrarySyncManager(3)
+
+	torrents := sm.GetTorrentsUnchecked(TorrentFilterOptions{Sort: "hash", Offset: 1, Limit: math.MaxInt})
+
+	got := make([]string, len(torrents))
+	for i, torrent := range torrents {
+		got[i] = torrent.Hash
+	}
+	require.Equal(t, hashes[1:], got)
 }
 
 // syncLibrary serves a full update of n torrents with all fields, and then

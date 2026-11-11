@@ -290,8 +290,8 @@ func pageTorrentRefs(torrents []*Torrent, offset, limit int) []*Torrent {
 		return torrents[:0]
 	}
 	end := len(torrents)
-	if limit > 0 && start+limit < end {
-		end = start + limit
+	if limit > 0 {
+		end = start + min(limit, end-start)
 	}
 	return torrents[start:end]
 }
