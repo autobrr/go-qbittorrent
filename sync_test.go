@@ -2007,9 +2007,19 @@ func TestSyncManager_GetTorrentsByHashMatchesScan(t *testing.T) {
 	scan := func(options TorrentFilterOptions) []Torrent {
 		matched := []*Torrent{}
 		for _, torrent := range sm.SnapshotUnchecked().Torrents() {
-			if (len(options.Hashes) == 0 || slices.Contains(options.Hashes, torrent.Hash)) && matchesTorrentFilter(torrent, options) {
-				matched = append(matched, torrent)
+			if len(options.Hashes) > 0 && !slices.Contains(options.Hashes, torrent.Hash) {
+				continue
 			}
+			if options.Category != "" && torrent.Category != options.Category {
+				continue
+			}
+			if options.Tag != "" && !containsExactTag(torrent.Tags, options.Tag) {
+				continue
+			}
+			if options.Filter != "" && !matchesStateFilter(torrent.State, options.Filter) {
+				continue
+			}
+			matched = append(matched, torrent)
 		}
 		sortTorrentRefs(matched, options.Sort, options.Reverse)
 		return copyTorrents(pageTorrentRefs(matched, options.Offset, options.Limit))

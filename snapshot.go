@@ -85,6 +85,7 @@ type SyncUpdate struct {
 // options says. It returns an empty slice when no torrent matches.
 func (s *SyncSnapshot) filter(options TorrentFilterOptions) []*Torrent {
 	var refs []*Torrent
+	filter := newTorrentFilter(options)
 	if len(options.Hashes) > 0 {
 		// Visit only the requested torrents, in the order of the snapshot.
 		positions := make([]int, 0, len(options.Hashes))
@@ -97,14 +98,14 @@ func (s *SyncSnapshot) filter(options TorrentFilterOptions) []*Torrent {
 		positions = slices.Compact(positions)
 		refs = make([]*Torrent, 0, len(positions))
 		for _, i := range positions {
-			if matchesTorrentFilter(s.torrents[i], options) {
+			if filter.matches(s.torrents[i]) {
 				refs = append(refs, s.torrents[i])
 			}
 		}
 	} else {
 		refs = make([]*Torrent, 0, len(s.torrents))
 		for _, t := range s.torrents {
-			if matchesTorrentFilter(t, options) {
+			if filter.matches(t) {
 				refs = append(refs, t)
 			}
 		}
