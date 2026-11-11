@@ -734,6 +734,20 @@ func (c *Client) GetTorrentTrackersCtx(ctx context.Context, hash string) ([]Torr
 	return trackers, nil
 }
 
+// WebAPI before 2.14.0 answers a refused add with status 200 and the body Fails. instead of 409.
+func checkTextAddResult(resp *http.Response) error {
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return errors.Wrap(err, "could not read body")
+	}
+
+	if string(body) == "Fails." {
+		return errors.Wrap(ErrTorrentAddFailed, "qBittorrent answered Fails.")
+	}
+
+	return nil
+}
+
 func (c *Client) AddTorrentFromMemory(buf []byte, options map[string]string) (*TorrentAddResponse, error) {
 	return c.AddTorrentFromMemoryCtx(context.Background(), buf, options)
 }
@@ -767,6 +781,10 @@ func (c *Client) AddTorrentFromMemoryCtx(ctx context.Context, buf []byte, option
 
 	if !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/plain") {
 		return nil, errors.Wrap(ErrUnexpectedContentType, "could not add torrent | unexpected content-type: %s", resp.Header.Get("Content-Type"))
+	}
+
+	if err := checkTextAddResult(resp); err != nil {
+		return nil, errors.Wrap(err, "could not add torrent")
 	}
 
 	res := TorrentAddResponse{SuccessCount: 1}
@@ -817,6 +835,10 @@ func (c *Client) AddTorrentsFromMemoryCtx(ctx context.Context, files [][]byte, o
 		return nil, errors.Wrap(ErrUnexpectedContentType, "could not add torrents | unexpected content-type: %s", resp.Header.Get("Content-Type"))
 	}
 
+	if err := checkTextAddResult(resp); err != nil {
+		return nil, errors.Wrap(err, "could not add torrents")
+	}
+
 	res := TorrentAddResponse{SuccessCount: 1}
 
 	return &res, nil
@@ -856,6 +878,10 @@ func (c *Client) AddTorrentFromFileCtx(ctx context.Context, filePath string, opt
 
 	if !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/plain") {
 		return nil, errors.Wrap(ErrUnexpectedContentType, "could not add torrent: file: %s | unexpected content-type: %s", filePath, resp.Header.Get("Content-Type"))
+	}
+
+	if err := checkTextAddResult(resp); err != nil {
+		return nil, errors.Wrap(err, "could not add torrent: file: %s", filePath)
 	}
 
 	res := TorrentAddResponse{SuccessCount: 1}
@@ -907,6 +933,10 @@ func (c *Client) AddTorrentFromUrlCtx(ctx context.Context, url string, options m
 		return nil, errors.Wrap(ErrUnexpectedContentType, "could not add torrent: url: %s | unexpected content-type: %s", url, resp.Header.Get("Content-Type"))
 	}
 
+	if err := checkTextAddResult(resp); err != nil {
+		return nil, errors.Wrap(err, "could not add torrent: url: %s", url)
+	}
+
 	res := TorrentAddResponse{SuccessCount: 1}
 
 	return &res, nil
@@ -950,6 +980,10 @@ func (c *Client) AddTorrentsFromUrlsCtx(ctx context.Context, urls []string, opti
 
 	if !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/plain") {
 		return nil, errors.Wrap(ErrUnexpectedContentType, "could not add torrents: urls: %v | unexpected content-type: %s", urls, resp.Header.Get("Content-Type"))
+	}
+
+	if err := checkTextAddResult(resp); err != nil {
+		return nil, errors.Wrap(err, "could not add torrents: urls: %v", urls)
 	}
 
 	res := TorrentAddResponse{SuccessCount: 1}

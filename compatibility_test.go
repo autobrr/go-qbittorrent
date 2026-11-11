@@ -3,7 +3,9 @@ package qbittorrent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"maps"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/iotest"
 
 	"github.com/stretchr/testify/require"
 )
@@ -25,13 +28,16 @@ func newCompatibilityClient(handler http.HandlerFunc) *Client {
 	})
 }
 
-func TestAddTorrentSeedModeCompatibility(t *testing.T) {
+type addTorrentMethod struct {
+	name string
+	add  func(context.Context, *Client, map[string]string) (*TorrentAddResponse, error)
+}
+
+func addTorrentMethods(t *testing.T) []addTorrentMethod {
+	t.Helper()
 	file := filepath.Join(t.TempDir(), "fixture.torrent")
 	require.NoError(t, os.WriteFile(file, []byte("fixture"), 0o600))
-	methods := []struct {
-		name string
-		add  func(context.Context, *Client, map[string]string) (*TorrentAddResponse, error)
-	}{
+	return []addTorrentMethod{
 		{"memory", func(_ context.Context, c *Client, opts map[string]string) (*TorrentAddResponse, error) {
 			return c.AddTorrentFromMemory([]byte("fixture"), opts)
 		}},
@@ -60,6 +66,10 @@ func TestAddTorrentSeedModeCompatibility(t *testing.T) {
 			return c.AddTorrentsFromUrlsCtx(ctx, []string{"https://example.invalid/fixture.torrent", "https://example.invalid/second.torrent"}, opts)
 		}},
 	}
+}
+
+func TestAddTorrentSeedModeCompatibility(t *testing.T) {
+	methods := addTorrentMethods(t)
 
 	for _, method := range methods {
 		for _, tc := range []struct {
@@ -116,6 +126,83 @@ func TestAddTorrentSeedModeCompatibility(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestAddTorrentResponse(t *testing.T) {
+	const textPlain = "text/plain; charset=UTF-8"
+	ok := &TorrentAddResponse{SuccessCount: 1}
+	for _, tc := range []struct {
+		name        string
+		status      int
+		contentType string
+		body        string
+		want        *TorrentAddResponse
+		wantErr     error
+	}{
+		{name: "text refused", status: http.StatusOK, contentType: textPlain, body: "Fails.", wantErr: ErrTorrentAddFailed},
+		{name: "text refused bare content type", status: http.StatusOK, contentType: "text/plain", body: "Fails.", wantErr: ErrTorrentAddFailed},
+		{name: "text accepted", status: http.StatusOK, contentType: textPlain, body: "Ok.", want: ok},
+		// qBittorrent only sends Ok. and Fails. so anything else keeps the old result.
+		{name: "text empty", status: http.StatusOK, contentType: textPlain, want: ok},
+		{name: "text other", status: http.StatusOK, contentType: textPlain, body: "Accepted", want: ok},
+		{name: "text lowercase", status: http.StatusOK, contentType: textPlain, body: "fails.", want: ok},
+		{name: "text without period", status: http.StatusOK, contentType: textPlain, body: "Fails", want: ok},
+		{name: "text starting with it", status: http.StatusOK, contentType: textPlain, body: "Fails. extra", want: ok},
+		{name: "text containing", status: http.StatusOK, contentType: textPlain, body: "Not Fails.", want: ok},
+		{name: "conflict", status: http.StatusConflict, contentType: textPlain, wantErr: ErrTorrentAddFailed},
+		{name: "not a torrent", status: http.StatusUnsupportedMediaType, contentType: textPlain, wantErr: ErrTorrentAddFailed},
+		{name: "other status", status: http.StatusBadRequest, contentType: textPlain, body: "Fails.", wantErr: ErrUnexpectedStatus},
+		{name: "other content type", status: http.StatusOK, contentType: "text/html", body: "Fails.", wantErr: ErrUnexpectedContentType},
+		{
+			name: "json", status: http.StatusOK, contentType: "application/json",
+			body: `{"success_count":2,"failure_count":1,"pending_count":0,"added_torrent_ids":["a","b"]}`,
+			want: &TorrentAddResponse{SuccessCount: 2, FailureCount: 1, AddedTorrentIds: []string{"a", "b"}},
+		},
+		{
+			name: "json pending", status: http.StatusAccepted, contentType: "application/json",
+			body: `{"success_count":0,"failure_count":0,"pending_count":1,"added_torrent_ids":[]}`,
+			want: &TorrentAddResponse{PendingCount: 1, AddedTorrentIds: []string{}},
+		},
+	} {
+		for _, method := range addTorrentMethods(t) {
+			t.Run(tc.name+"/"+method.name, func(t *testing.T) {
+				client := newCompatibilityClient(func(w http.ResponseWriter, _ *http.Request) {
+					w.Header().Set("Content-Type", tc.contentType)
+					w.WriteHeader(tc.status)
+					_, _ = w.Write([]byte(tc.body))
+				})
+				got, err := method.add(t.Context(), client, nil)
+				if tc.wantErr != nil {
+					require.ErrorIs(t, err, tc.wantErr)
+					require.Nil(t, got)
+					return
+				}
+				require.NoError(t, err)
+				require.Equal(t, tc.want, got)
+			})
+		}
+	}
+}
+
+func TestAddTorrentResponseBodyReadFailure(t *testing.T) {
+	readErr := errors.New("connection lost")
+	for _, method := range addTorrentMethods(t) {
+		t.Run(method.name, func(t *testing.T) {
+			client := NewClient(Config{Host: "http://qbittorrent.test", APIKey: "fixture"}).WithHTTPClient(&http.Client{
+				Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+					return &http.Response{
+						StatusCode: http.StatusOK,
+						Header:     http.Header{"Content-Type": {"text/plain; charset=UTF-8"}},
+						Body:       io.NopCloser(iotest.ErrReader(readErr)),
+					}, nil
+				}),
+			})
+			got, err := method.add(t.Context(), client, nil)
+			require.ErrorIs(t, err, readErr)
+			require.NotErrorIs(t, err, ErrTorrentAddFailed)
+			require.Nil(t, got)
+		})
 	}
 }
 
