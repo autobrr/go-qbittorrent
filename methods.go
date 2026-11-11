@@ -3111,7 +3111,8 @@ func (c *Client) GetFreeSpaceAtPath(path string) (int64, error) {
 
 // GetFreeSpaceAtPathCtx returns free bytes at path on the qBittorrent host.
 // It requires qBittorrent 5.3 and WebAPI 2.15.2 or later. A negative result means free space is unavailable.
-// If path does not exist, qBittorrent queries its parent directories.
+// If qBittorrent cannot read free space at path, for example because path does not exist yet,
+// it tries each parent directory up to the root.
 func (c *Client) GetFreeSpaceAtPathCtx(ctx context.Context, path string) (int64, error) {
 	if ok, err := c.RequiresMinVersionCtx(ctx, semver.MustParse("2.15.2")); !ok {
 		return 0, errors.Wrap(err, "GetFreeSpaceAtPath requires qBittorrent 5.3 and WebAPI >= 2.15.2")
