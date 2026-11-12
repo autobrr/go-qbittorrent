@@ -1,6 +1,7 @@
 package qbittorrent
 
 import (
+	"encoding/json/v2"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -36,8 +37,6 @@ func TestGetTrackersCtx(t *testing.T) {
 	require.Equal(t, "hashes=abc%7Cdef&includeTrackers=true", query)
 }
 
-// For each recorded torrents/info response with trackers, the tracker read
-// returns the hash and the trackers that the torrent list read returns.
 func TestGetTrackersCtx_RecordedResponses(t *testing.T) {
 	for _, version := range []string{"4.6.7", "5.0.0", "5.1.4", "5.2.4", "5.3.0"} {
 		t.Run(version, func(t *testing.T) {
@@ -135,4 +134,75 @@ func TestSyncMainDataCtx_BuildsNoRawData(t *testing.T) {
 
 	// The raw data has one map for each torrent.
 	require.Less(t, plain+torrents, withRaw)
+}
+
+// The read returns nil raw data for a full update, so it must not build any.
+// Only the allocations show that.
+func TestSyncMainDataCtxWithRaw_BuildsNoRawDataForAFullUpdate(t *testing.T) {
+	const torrents = 1000
+	body := newSyncLibrary(torrents, 0).full
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(body)
+	}))
+	t.Cleanup(server.Close)
+	client := NewClient(Config{Host: server.URL, APIKey: "test-key", RetryAttempts: 1})
+
+	plain := testing.AllocsPerRun(5, func() {
+		_, err := client.SyncMainDataCtx(t.Context(), 5)
+		require.NoError(t, err)
+	})
+	withRaw := testing.AllocsPerRun(5, func() {
+		_, _, err := client.SyncMainDataCtxWithRaw(t.Context(), 5)
+		require.NoError(t, err)
+	})
+
+	// The raw data has one map for each torrent.
+	require.Less(t, withRaw, plain+torrents)
+}
+
+// A read that holds the whole response allocates at least the size of that
+// response.
+func TestStreamReads_AllocateLessThanTheResponse(t *testing.T) {
+	const torrents = 5000
+	lib := newSyncLibrary(torrents, 0)
+	var full MainData
+	require.NoError(t, json.Unmarshal(lib.full, &full))
+	list := make([]Torrent, 0, torrents)
+	for _, torrent := range full.Torrents {
+		torrent.Trackers = []TorrentTracker{{Url: "https://tracker.test/announce", Status: TrackerStatusOK}}
+		list = append(list, torrent)
+	}
+	listBody, err := json.Marshal(list)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name string
+		body []byte
+		read func(*Client) error
+	}{
+		{"full update for rid 0", lib.full, func(c *Client) error {
+			_, _, err := c.SyncMainDataCtxWithRaw(t.Context(), 0)
+			return err
+		}},
+		{"full update without raw data", lib.full, func(c *Client) error {
+			_, err := c.SyncMainDataCtx(t.Context(), 5)
+			return err
+		}},
+		{"tracker read", listBody, func(c *Client) error {
+			_, err := c.GetTrackersCtx(t.Context(), TorrentFilterOptions{})
+			return err
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write(tt.body)
+			}))
+			t.Cleanup(server.Close)
+			client := NewClient(Config{Host: server.URL, APIKey: "test-key", RetryAttempts: 1})
+
+			allocated := bytesPerCall(func() { require.NoError(t, tt.read(client)) })
+			require.Less(t, allocated, uint64(len(tt.body)))
+		})
+	}
 }

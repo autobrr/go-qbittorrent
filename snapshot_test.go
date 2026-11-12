@@ -426,12 +426,18 @@ func newLibraryManager(tb testing.TB, lib *syncLibrary, options SyncOptions) *Sy
 // a few syncs.
 func bytesPerSync(t *testing.T, sm *SyncManager) uint64 {
 	t.Helper()
+	return bytesPerCall(func() { syncOnce(t, sm) })
+}
+
+// bytesPerCall returns the fewest bytes that one call allocated over a few
+// calls.
+func bytesPerCall(call func()) uint64 {
 	var least uint64
 	for i := range 5 {
 		var before, after runtime.MemStats
 		runtime.GC()
 		runtime.ReadMemStats(&before)
-		syncOnce(t, sm)
+		call()
 		runtime.ReadMemStats(&after)
 		if n := after.TotalAlloc - before.TotalAlloc; i == 0 || n < least {
 			least = n

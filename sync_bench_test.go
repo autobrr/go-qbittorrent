@@ -182,9 +182,6 @@ func BenchmarkSyncManager_Sync(b *testing.B) {
 	}
 }
 
-// BenchmarkClient_SyncMainData measures the read of one sync/maindata response
-// for a library of 20,000 torrents: a full update for rid 0, a full update for
-// an update request, and an update of 5,000 torrents.
 func BenchmarkClient_SyncMainData(b *testing.B) {
 	lib := newSyncLibrary(20_000, 5_000)
 	for _, tc := range []struct {

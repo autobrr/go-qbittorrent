@@ -14,7 +14,6 @@ const (
 	trackerIncludeChunkSize = 100
 )
 
-// TorrentTrackers is the hash and the trackers of one torrent.
 type TorrentTrackers struct {
 	Hash     string           `json:"hash"`
 	Trackers []TorrentTracker `json:"trackers"`
