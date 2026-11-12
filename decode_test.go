@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -32,6 +34,33 @@ func TestGetTrackersCtx(t *testing.T) {
 	tracker := []TorrentTracker{{Url: "https://tracker.test/announce", Status: TrackerStatusOK, NumPeers: 3, Message: "ok"}}
 	require.Equal(t, []TorrentTrackers{{Hash: "abc", Trackers: tracker}, {Hash: "def", Trackers: tracker}}, got)
 	require.Equal(t, "hashes=abc%7Cdef&includeTrackers=true", query)
+}
+
+// For each recorded torrents/info response with trackers, the tracker read
+// returns the hash and the trackers that the torrent list read returns.
+func TestGetTrackersCtx_RecordedResponses(t *testing.T) {
+	for _, version := range []string{"4.6.7", "5.0.0", "5.1.4", "5.2.4", "5.3.0"} {
+		t.Run(version, func(t *testing.T) {
+			body, err := os.ReadFile(filepath.Join("testdata", "torrents", version+"-info-trackers.json"))
+			require.NoError(t, err)
+			client := newCompatibilityClient(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write(body)
+			})
+
+			torrents, err := client.GetTorrentsCtx(t.Context(), TorrentFilterOptions{IncludeTrackers: true})
+			require.NoError(t, err)
+			require.NotEmpty(t, torrents)
+			want := make([]TorrentTrackers, len(torrents))
+			for i, torrent := range torrents {
+				require.NotEmpty(t, torrent.Hash)
+				want[i] = TorrentTrackers{Hash: torrent.Hash, Trackers: torrent.Trackers}
+			}
+
+			got, err := client.GetTrackersCtx(t.Context(), TorrentFilterOptions{})
+			require.NoError(t, err)
+			require.Equal(t, want, got)
+		})
+	}
 }
 
 func TestSyncMainDataCtxWithRaw_RawDataOnlyForAnUpdate(t *testing.T) {
