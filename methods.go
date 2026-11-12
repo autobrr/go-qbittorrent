@@ -1134,14 +1134,18 @@ var syncResendMinVersion = semver.MustParse("2.16.0")
 // SyncMainDataCtx Sync API implements requests for obtaining changes since the last request.
 // Response ID. If not provided, rid=0 will be assumed. If the given rid is different from the one of last server reply, full_update will be true (see the server reply details for more info)
 func (c *Client) SyncMainDataCtx(ctx context.Context, rid int64) (*MainData, error) {
-	info, _, err := c.SyncMainDataCtxWithRaw(ctx, rid)
+	info, _, err := c.syncMainData(ctx, rid, false)
 	return info, err
 }
 
 // SyncMainDataCtxWithRaw returns both parsed MainData and raw JSON data for partial updates.
-// For rid 0 the raw JSON data is nil: qBittorrent answers with a full update,
-// and the parsed MainData holds all of it.
+// For a full update the raw JSON data is nil, because the parsed MainData holds
+// all of it. An answer to rid 0 that is not a full update is an error.
 func (c *Client) SyncMainDataCtxWithRaw(ctx context.Context, rid int64) (*MainData, map[string]interface{}, error) {
+	return c.syncMainData(ctx, rid, true)
+}
+
+func (c *Client) syncMainData(ctx context.Context, rid int64, wantRaw bool) (*MainData, map[string]any, error) {
 	opts := map[string]string{
 		"rid": strconv.FormatInt(rid, 10),
 	}
@@ -1169,11 +1173,14 @@ func (c *Client) SyncMainDataCtxWithRaw(ctx context.Context, rid int64) (*MainDa
 	}
 
 	var info MainData
-	if rid == 0 {
+
+	// qBittorrent answers rid 0 with a full update, which can be large and
+	// needs no raw data. Thus only an update request reads the body two times.
+	if rid == 0 || !wantRaw {
 		if err := decodeStream(resp.Body, &info); err != nil {
 			return nil, nil, errors.Wrap(err, "could not unmarshal body")
 		}
-		if !info.FullUpdate {
+		if wantRaw && !info.FullUpdate {
 			return nil, nil, errors.New("could not get main data: the response to rid 0 is not a full update")
 		}
 
@@ -1181,29 +1188,23 @@ func (c *Client) SyncMainDataCtxWithRaw(ctx context.Context, rid int64) (*MainDa
 		return &info, nil, nil
 	}
 
-	rp, wp := io.Pipe()
-	var rawData map[string]interface{}
-	mapDone := make(chan error, 1)
-	go func() {
-		err := decodeStream(io.TeeReader(resp.Body, wp), &rawData)
-		wp.Close()
-		mapDone <- err
-	}()
-
-	// Then decode into structured MainData
-	err = decodeStream(rp, &info)
-	// A decode that stops at an error leaves the map decode blocked on the pipe.
-	rp.Close()
-	mapErr := <-mapDone
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
+		return nil, nil, errors.Wrap(err, "could not read body")
+	}
+	if err := json.Unmarshal(body, &info); err != nil {
 		return nil, nil, errors.Wrap(err, "could not unmarshal body")
 	}
-	if mapErr != nil {
-		return nil, nil, errors.Wrap(mapErr, "could not unmarshal body to map")
+	normalizeHashes(info.Torrents)
+	if info.FullUpdate {
+		return &info, nil, nil
 	}
 
+	var rawData map[string]any
+	if err := json.Unmarshal(body, &rawData); err != nil {
+		return nil, nil, errors.Wrap(err, "could not unmarshal body to map")
+	}
 	normalizeHashesRaw(rawData)
-	normalizeHashes(info.Torrents)
 	return &info, rawData, nil
 }
 

@@ -2,6 +2,8 @@ package qbittorrent
 
 import (
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"runtime"
 	"testing"
 	"time"
@@ -173,6 +175,36 @@ func BenchmarkSyncManager_Sync(b *testing.B) {
 			b.ReportAllocs()
 			for b.Loop() {
 				if err := sm.Sync(b.Context()); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+// BenchmarkClient_SyncMainData measures the read of one sync/maindata response
+// for a library of 20,000 torrents: a full update for rid 0, a full update for
+// an update request, and an update of 5,000 torrents.
+func BenchmarkClient_SyncMainData(b *testing.B) {
+	lib := newSyncLibrary(20_000, 5_000)
+	for _, tc := range []struct {
+		name string
+		rid  int64
+		body []byte
+	}{
+		{"response=full/rid=0", 0, lib.full},
+		{"response=full/rid=7", 7, lib.full},
+		{"response=update/rid=7", 7, lib.diffs[0]},
+	} {
+		b.Run(tc.name, func(b *testing.B) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write(tc.body)
+			}))
+			b.Cleanup(server.Close)
+			client := NewClient(Config{Host: server.URL, APIKey: "test-key", RetryAttempts: 1})
+			b.ReportAllocs()
+			for b.Loop() {
+				if _, _, err := client.SyncMainDataCtxWithRaw(b.Context(), tc.rid); err != nil {
 					b.Fatal(err)
 				}
 			}

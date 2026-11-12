@@ -2,12 +2,10 @@ package qbittorrent
 
 import (
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -36,65 +34,76 @@ func TestGetTrackersCtx(t *testing.T) {
 	require.Equal(t, "hashes=abc%7Cdef&includeTrackers=true", query)
 }
 
-func TestSyncMainDataCtxWithRaw_RawDataOnlyForAnUpdateRequest(t *testing.T) {
-	script := &syncScript{replies: []func(http.ResponseWriter, *http.Request){
-		sendBody(fullUpdateOneTorrent),
-		sendBody(`{"rid":6,"torrents":{"abc":{"progress":1}}}`),
-	}}
-	server := newScriptedSyncServer(t, "2.16.0", script)
-	client := NewClient(Config{Host: server.URL, APIKey: "test-key"})
+func TestSyncMainDataCtxWithRaw_RawDataOnlyForAnUpdate(t *testing.T) {
+	first := map[string]Torrent{"abc": {Hash: "abc", AddedOn: 1700000000, Name: "first", Progress: 0.5}}
+	tests := []struct {
+		name    string
+		rid     int64
+		body    string
+		wantRaw map[string]any
+		want    map[string]Torrent
+	}{
+		{name: "full update for rid 0", rid: 0, body: fullUpdateOneTorrent, want: first},
+		{name: "full update for an update request", rid: 4, body: fullUpdateOneTorrent, want: first},
+		{
+			name:    "update",
+			rid:     5,
+			body:    `{"rid":6,"torrents":{"abc":{"progress":1}}}`,
+			wantRaw: map[string]any{"rid": float64(6), "torrents": map[string]any{"abc": map[string]any{"hash": "abc", "progress": float64(1)}}},
+			want:    map[string]Torrent{"abc": {Hash: "abc", Progress: 1}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			script := &syncScript{replies: []func(http.ResponseWriter, *http.Request){sendBody(tt.body)}}
+			server := newScriptedSyncServer(t, "2.16.0", script)
+			client := NewClient(Config{Host: server.URL, APIKey: "test-key"})
 
-	full, raw, err := client.SyncMainDataCtxWithRaw(t.Context(), 0)
-	require.NoError(t, err)
-	require.Nil(t, raw)
-	require.True(t, full.FullUpdate)
-	require.Equal(t, map[string]Torrent{"abc": {Hash: "abc", AddedOn: 1700000000, Name: "first", Progress: 0.5}}, full.Torrents)
-
-	update, raw, err := client.SyncMainDataCtxWithRaw(t.Context(), full.Rid)
-	require.NoError(t, err)
-	require.False(t, update.FullUpdate)
-	require.Equal(t, map[string]any{"rid": float64(6), "torrents": map[string]any{"abc": map[string]any{"hash": "abc", "progress": float64(1)}}}, raw)
+			data, raw, err := client.SyncMainDataCtxWithRaw(t.Context(), tt.rid)
+			require.NoError(t, err)
+			require.Equal(t, tt.wantRaw, raw)
+			require.Equal(t, tt.want, data.Torrents)
+			require.Equal(t, tt.wantRaw == nil, data.FullUpdate)
+		})
+	}
 }
 
 // The raw data tells which fields an update holds. A sync with rid 0 reads
 // none, so it cannot apply an update.
-func TestSyncMainDataCtx_UpdateInAnswerToRid0(t *testing.T) {
+func TestSyncMainDataCtxWithRaw_UpdateInAnswerToRid0(t *testing.T) {
 	script := &syncScript{replies: []func(http.ResponseWriter, *http.Request){
 		sendBody(`{"rid":6,"torrents":{"abc":{"progress":1}}}`),
 	}}
 	server := newScriptedSyncServer(t, "2.16.0", script)
 	client := NewClient(Config{Host: server.URL, APIKey: "test-key"})
 
-	_, err := client.SyncMainDataCtx(t.Context(), 0)
+	_, _, err := client.SyncMainDataCtxWithRaw(t.Context(), 0)
 	require.ErrorContains(t, err, "not a full update")
 }
 
-// The two decodes of an update share one pipe. When the typed decode stops at
-// an error, the other must not wait for a reader of the rest.
-func TestSyncMainDataCtx_DecodeErrorBeforeTheEndOfTheBody(t *testing.T) {
-	torrents := make([]string, 4000)
-	for i := range torrents {
-		torrents[i] = fmt.Sprintf(`"hash%d":{"name":"%s","progress":1}`, i, strings.Repeat("n", 200))
+// SyncMainDataCtx returns no raw data, so it must not build any. Only the
+// allocations show that.
+func TestSyncMainDataCtx_BuildsNoRawData(t *testing.T) {
+	const torrents = 1000
+	updates := make([]string, torrents)
+	for i := range updates {
+		updates[i] = fmt.Sprintf(`"hash%d":{"dlspeed":%d,"upspeed":%d}`, i, i, i)
 	}
-	body := `{"rid":"not a number","torrents":{` + strings.Join(torrents, ",") + `}}`
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/v2/sync/maindata", func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = io.WriteString(w, body)
-	})
-	server := httptest.NewServer(mux)
-	t.Cleanup(server.Close)
+	script := &syncScript{replies: []func(http.ResponseWriter, *http.Request){
+		sendBody(`{"rid":6,"torrents":{` + strings.Join(updates, ",") + `}}`),
+	}}
+	server := newScriptedSyncServer(t, "2.16.0", script)
 	client := NewClient(Config{Host: server.URL, APIKey: "test-key"})
 
-	done := make(chan error, 1)
-	go func() {
+	plain := testing.AllocsPerRun(5, func() {
 		_, err := client.SyncMainDataCtx(t.Context(), 5)
-		done <- err
-	}()
+		require.NoError(t, err)
+	})
+	withRaw := testing.AllocsPerRun(5, func() {
+		_, _, err := client.SyncMainDataCtxWithRaw(t.Context(), 5)
+		require.NoError(t, err)
+	})
 
-	select {
-	case err := <-done:
-		require.ErrorContains(t, err, "could not unmarshal body")
-	case <-time.After(10 * time.Second):
-		t.Fatal("the sync did not return after the decode error")
-	}
+	// The raw data has one map for each torrent.
+	require.Less(t, plain+torrents, withRaw)
 }
