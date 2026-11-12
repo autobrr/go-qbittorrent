@@ -161,8 +161,8 @@ func TestSyncMainDataCtxWithRaw_BuildsNoRawDataForAFullUpdate(t *testing.T) {
 }
 
 // A read that holds the whole response allocates at least the size of that
-// response.
-func TestStreamReads_AllocateLessThanTheResponse(t *testing.T) {
+// response on top of the decoded data.
+func TestStreamReads_DoNotHoldTheWholeResponse(t *testing.T) {
 	const torrents = 5000
 	lib := newSyncLibrary(torrents, 0)
 	var full MainData
@@ -178,17 +178,18 @@ func TestStreamReads_AllocateLessThanTheResponse(t *testing.T) {
 	tests := []struct {
 		name string
 		body []byte
+		into func() any
 		read func(*Client) error
 	}{
-		{"full update for rid 0", lib.full, func(c *Client) error {
+		{"full update for rid 0", lib.full, func() any { return new(MainData) }, func(c *Client) error {
 			_, _, err := c.SyncMainDataCtxWithRaw(t.Context(), 0)
 			return err
 		}},
-		{"full update without raw data", lib.full, func(c *Client) error {
+		{"full update without raw data", lib.full, func() any { return new(MainData) }, func(c *Client) error {
 			_, err := c.SyncMainDataCtx(t.Context(), 5)
 			return err
 		}},
-		{"tracker read", listBody, func(c *Client) error {
+		{"tracker read", listBody, func() any { return new([]TorrentTrackers) }, func(c *Client) error {
 			_, err := c.GetTrackersCtx(t.Context(), TorrentFilterOptions{})
 			return err
 		}},
@@ -201,8 +202,9 @@ func TestStreamReads_AllocateLessThanTheResponse(t *testing.T) {
 			t.Cleanup(server.Close)
 			client := NewClient(Config{Host: server.URL, APIKey: "test-key", RetryAttempts: 1})
 
+			decoded := bytesPerCall(func() { require.NoError(t, json.Unmarshal(tt.body, tt.into(), streamOptions)) })
 			allocated := bytesPerCall(func() { require.NoError(t, tt.read(client)) })
-			require.Less(t, allocated, uint64(len(tt.body)))
+			require.Less(t, allocated, decoded+uint64(len(tt.body))/2)
 		})
 	}
 }
