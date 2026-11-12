@@ -261,22 +261,25 @@ func TestSyncManager_OnSyncUpdate(t *testing.T) {
 	sm := newSnapshotSyncManager(t, &syncScript{replies: []func(http.ResponseWriter, *http.Request){
 		sendBody(`{"rid":1,"full_update":true,"torrents":{"abc":{"added_on":1700000000,"name":"first"}},"categories":{"tv":{"name":"tv","savePath":"/tv"}},"tags":["x"],"trackers":{"http://tracker.test/a":["abc"]},"server_state":{"dl_info_speed":3}}`),
 		sendBody(`{"rid":2,"torrents":{"abc":{"progress":0.5}}}`),
-		sendBody(`{"rid":3,"torrents":{"def":{"added_on":1700000500,"name":"second"},"zzz":{"progress":1}}}`),
+		sendBody(`{"rid":3,"torrents":{"def":{"added_on":1700000500,"name":"second"}}}`),
 		sendBody(`{"rid":4,"torrents_removed":["abc"]}`),
 		sendBody(`{"rid":5}`),
+		// Last, because the sync after a torrent that is left out asks for rid 0.
+		sendBody(`{"rid":6,"torrents":{"ghi":{"added_on":1700000900,"name":"third"},"zzz":{"progress":1}}}`),
 	}}, options)
 
 	snapshots := []*SyncSnapshot{}
-	for range 5 {
+	for range 6 {
 		syncOnce(t, sm)
 		snapshots = append(snapshots, sm.SnapshotUnchecked())
 	}
 
 	mu.Lock()
 	defer mu.Unlock()
-	require.Len(t, updates, 4, "a sync that changed nothing calls no callback")
+	require.Len(t, updates, 5, "a sync that changed nothing calls no callback")
+	changed := append(snapshots[:4:4], snapshots[5])
 	for i, u := range updates {
-		require.Same(t, snapshots[i], u.Snapshot, "update %d", i)
+		require.Same(t, changed[i], u.Snapshot, "update %d", i)
 	}
 
 	full := updates[0]
@@ -295,15 +298,19 @@ func TestSyncManager_OnSyncUpdate(t *testing.T) {
 
 	add := updates[2]
 	require.Equal(t, []string{"def"}, add.Changes.Torrents)
-	require.Equal(t, []string{"zzz"}, add.Changes.TorrentsLeftOut)
-	_, ok := add.Snapshot.Torrent("zzz")
-	require.False(t, ok)
+	require.Empty(t, add.Changes.TorrentsLeftOut)
 
 	del := updates[3]
 	require.Empty(t, del.Changes.Torrents)
 	require.Equal(t, []string{"abc"}, del.Changes.TorrentsRemoved)
 	require.Equal(t, []string{"def"}, snapshotHashes(del.Snapshot))
 	require.Empty(t, del.Trackers, "the removed torrent leaves the tracker map")
+
+	leftOut := updates[4]
+	require.Equal(t, []string{"ghi"}, leftOut.Changes.Torrents)
+	require.Equal(t, []string{"zzz"}, leftOut.Changes.TorrentsLeftOut)
+	_, ok := leftOut.Snapshot.Torrent("zzz")
+	require.False(t, ok)
 }
 
 func TestSyncManager_OnUpdateGetsAllData(t *testing.T) {
@@ -419,12 +426,18 @@ func newLibraryManager(tb testing.TB, lib *syncLibrary, options SyncOptions) *Sy
 // a few syncs.
 func bytesPerSync(t *testing.T, sm *SyncManager) uint64 {
 	t.Helper()
+	return bytesPerCall(func() { syncOnce(t, sm) })
+}
+
+// bytesPerCall returns the fewest bytes that one call allocated over a few
+// calls.
+func bytesPerCall(call func()) uint64 {
 	var least uint64
 	for i := range 5 {
 		var before, after runtime.MemStats
 		runtime.GC()
 		runtime.ReadMemStats(&before)
-		syncOnce(t, sm)
+		call()
 		runtime.ReadMemStats(&after)
 		if n := after.TotalAlloc - before.TotalAlloc; i == 0 || n < least {
 			least = n

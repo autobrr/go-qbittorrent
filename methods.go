@@ -3,6 +3,7 @@ package qbittorrent
 import (
 	"context"
 	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"io"
 	"maps"
 	"net/http"
@@ -554,6 +555,31 @@ func (c *Client) GetTorrents(o TorrentFilterOptions) ([]Torrent, error) {
 }
 
 func (c *Client) GetTorrentsCtx(ctx context.Context, o TorrentFilterOptions) ([]Torrent, error) {
+	var torrents []Torrent
+	if err := c.torrentsInfo(ctx, o, &torrents); err != nil {
+		return nil, err
+	}
+
+	return torrents, nil
+}
+
+// GetTrackersCtx returns the hash and the trackers of each torrent that o
+// selects. It sends the request of GetTorrentsCtx with IncludeTrackers, which
+// needs qBittorrent 5.1, and reads only those two fields of the response.
+func (c *Client) GetTrackersCtx(ctx context.Context, o TorrentFilterOptions) ([]TorrentTrackers, error) {
+	o.IncludeTrackers = true
+
+	trackers := make([]TorrentTrackers, 0, len(o.Hashes))
+	if err := c.torrentsInfo(ctx, o, &trackers); err != nil {
+		return nil, err
+	}
+
+	return trackers, nil
+}
+
+// torrentsInfo decodes the torrents/info response for o into out, a pointer to
+// a slice.
+func (c *Client) torrentsInfo(ctx context.Context, o TorrentFilterOptions, out any) error {
 	opts := map[string]string{}
 
 	if o.Reverse {
@@ -597,7 +623,7 @@ func (c *Client) GetTorrentsCtx(ctx context.Context, o TorrentFilterOptions) ([]
 
 	resp, err := c.getCtx(ctx, "torrents/info", opts)
 	if err != nil {
-		return nil, errors.Wrap(err, "get torrents error")
+		return errors.Wrap(err, "get torrents error")
 	}
 
 	defer drainAndClose(resp)
@@ -606,15 +632,14 @@ func (c *Client) GetTorrentsCtx(ctx context.Context, o TorrentFilterOptions) ([]
 	case http.StatusOK:
 		break
 	default:
-		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get torrents; status code: %d", resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not get torrents; status code: %d", resp.StatusCode)
 	}
 
-	var torrents []Torrent
-	if err := json.NewDecoder(resp.Body).Decode(&torrents); err != nil {
-		return nil, errors.Wrap(err, "could not unmarshal body")
+	if err := decodeStream(resp.Body, out); err != nil {
+		return errors.Wrap(err, "could not unmarshal body")
 	}
 
-	return torrents, nil
+	return nil
 }
 
 func (c *Client) GetTorrentsActiveDownloads() ([]Torrent, error) {
@@ -1109,12 +1134,18 @@ var syncResendMinVersion = semver.MustParse("2.16.0")
 // SyncMainDataCtx Sync API implements requests for obtaining changes since the last request.
 // Response ID. If not provided, rid=0 will be assumed. If the given rid is different from the one of last server reply, full_update will be true (see the server reply details for more info)
 func (c *Client) SyncMainDataCtx(ctx context.Context, rid int64) (*MainData, error) {
-	info, _, err := c.SyncMainDataCtxWithRaw(ctx, rid)
+	info, _, err := c.syncMainData(ctx, rid, false)
 	return info, err
 }
 
-// SyncMainDataCtxWithRaw returns both parsed MainData and raw JSON data for partial updates
+// SyncMainDataCtxWithRaw returns both parsed MainData and raw JSON data for partial updates.
+// For a full update the raw JSON data is nil, because the parsed MainData holds
+// all of it. An answer to rid 0 that is not a full update is an error.
 func (c *Client) SyncMainDataCtxWithRaw(ctx context.Context, rid int64) (*MainData, map[string]interface{}, error) {
+	return c.syncMainData(ctx, rid, true)
+}
+
+func (c *Client) syncMainData(ctx context.Context, rid int64, wantRaw bool) (*MainData, map[string]any, error) {
 	opts := map[string]string{
 		"rid": strconv.FormatInt(rid, 10),
 	}
@@ -1141,32 +1172,50 @@ func (c *Client) SyncMainDataCtxWithRaw(ctx context.Context, rid int64) (*MainDa
 		return nil, nil, errors.Wrap(ErrUnexpectedStatus, "could not get main data; status code: %d", resp.StatusCode)
 	}
 
-	rp, wp := io.Pipe()
-	var rawData map[string]interface{}
-	var mapErr error
-	go func() {
-		defer wp.Close()
-		mapErr = json.NewDecoder(io.TeeReader(resp.Body, wp)).Decode(&rawData)
-		if mapErr == nil {
-			normalizeHashesRaw(rawData)
-		}
-	}()
-
-	// Then decode into structured MainData
 	var info MainData
-	if err := json.NewDecoder(rp).Decode(&info); err != nil {
+
+	// qBittorrent answers rid 0 with a full update, which can be large and
+	// needs no raw data. Thus only an update request reads the body two times.
+	if rid == 0 || !wantRaw {
+		if err := decodeStream(resp.Body, &info); err != nil {
+			return nil, nil, errors.Wrap(err, "could not unmarshal body")
+		}
+		if wantRaw && !info.FullUpdate {
+			return nil, nil, errors.New("could not get main data: the response to rid 0 is not a full update")
+		}
+
+		normalizeHashes(info.Torrents)
+		return &info, nil, nil
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "could not read body")
+	}
+	if err := json.Unmarshal(body, &info); err != nil {
 		return nil, nil, errors.Wrap(err, "could not unmarshal body")
 	}
-
-	io.Copy(io.Discard, rp)
-
-	if mapErr != nil {
-		return nil, nil, errors.Wrap(mapErr, "could not unmarshal body to map")
+	normalizeHashes(info.Torrents)
+	if info.FullUpdate {
+		return &info, nil, nil
 	}
 
-	normalizeHashes(info.Torrents)
+	var rawData map[string]any
+	if err := json.Unmarshal(body, &rawData); err != nil {
+		return nil, nil, errors.Wrap(err, "could not unmarshal body to map")
+	}
+	normalizeHashesRaw(rawData)
 	return &info, rawData, nil
+}
 
+// streamOptions keeps the decode rules of encoding/json and drops its check of
+// the whole value before the decode, which holds the whole response in memory.
+var streamOptions = jsonv2.JoinOptions(json.DefaultOptionsV1(), json.ReportErrorsWithLegacySemantics(false))
+
+// decodeStream decodes the JSON value in r into out. It reads r to the end and
+// never holds the whole value. After an error, out can hold a part of the value.
+func decodeStream(r io.Reader, out any) error {
+	return jsonv2.UnmarshalRead(r, out, streamOptions)
 }
 
 func (c *Client) Pause(hashes []string) error {
