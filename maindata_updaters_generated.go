@@ -889,6 +889,13 @@ func updateServerStateWriteCacheOverload(val interface{}, obj *ServerState) {
 	}
 }
 
+// updateServerStateSessionPaused updates the SessionPaused field of ServerState
+func updateServerStateSessionPaused(val interface{}, obj *ServerState) {
+	if s, ok := val.(bool); ok {
+		obj.SessionPaused = s
+	}
+}
+
 // Precomputed field updaters for ServerState - created once at package init
 var serverstateFieldUpdaters = map[string]func(val interface{}, obj *ServerState){
 	"alltime_dl": updateServerStateAlltimeDl,
@@ -918,6 +925,7 @@ var serverstateFieldUpdaters = map[string]func(val interface{}, obj *ServerState
 	"use_alt_speed_limits": updateServerStateUseAltSpeedLimits,
 	"use_subcategories": updateServerStateUseSubcategories,
 	"write_cache_overload": updateServerStateWriteCacheOverload,
+	"session_state": updateServerStateSessionPaused,
 }
 
 // updateServerStateFields updates only the fields that are present in the update map
