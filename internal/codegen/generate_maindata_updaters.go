@@ -164,11 +164,90 @@ func generateAllUpdaters(structs []StructInfo) {
 	fmt.Println()
 	fmt.Println("package qbittorrent")
 	fmt.Println()
+	fmt.Println("import (")
+	fmt.Println("\t\"hash/maphash\"")
+	fmt.Println("\t\"math\"")
+	fmt.Println("\t\"slices\"")
+	fmt.Println(")")
+	fmt.Println()
 
 	for _, structInfo := range structs {
 		generateStructUpdater(structInfo)
 		fmt.Println()
 	}
+
+	for _, structInfo := range structs {
+		switch structInfo.Name {
+		case "Torrent":
+			generateEqual(structInfo)
+			generateChecksum(structInfo)
+		case "TorrentTracker":
+			generateChecksum(structInfo)
+		}
+	}
+}
+
+// generateEqual writes a function that reports whether two values of the
+// struct hold the same values. A full sync update keeps a torrent object when
+// it is equal.
+func generateEqual(structInfo StructInfo) {
+	name := structInfo.Name
+	fmt.Printf("// %sEqual reports whether a and b hold the same values.\n", lowerFirst(name))
+	fmt.Printf("func %sEqual(a, b *%s) bool {\n", lowerFirst(name), name)
+	fmt.Print("\treturn ")
+	for i, field := range structInfo.Fields {
+		if i > 0 {
+			fmt.Print(" &&\n\t\t")
+		}
+		switch {
+		case strings.HasPrefix(field.GoType, "*"):
+			fmt.Printf("equalPtr(a.%s, b.%s)", field.Name, field.Name)
+		case strings.HasPrefix(field.GoType, "[]"):
+			fmt.Printf("slices.Equal(a.%s, b.%s)", field.Name, field.Name)
+		default:
+			fmt.Printf("a.%s == b.%s", field.Name, field.Name)
+		}
+	}
+	fmt.Print("\n}\n\n")
+}
+
+// generateChecksum writes a function that writes each field of the struct to
+// a maphash.Hash. A sealed sync snapshot keeps the checksum of each torrent.
+func generateChecksum(structInfo StructInfo) {
+	name := structInfo.Name
+	fmt.Printf("// write%sChecksum writes each field of v to h.\n", name)
+	fmt.Printf("func write%sChecksum(h *maphash.Hash, v *%s) {\n", name, name)
+	for _, field := range structInfo.Fields {
+		switch field.GoType {
+		case "string", "TorrentState":
+			fmt.Printf("\tchecksumString(h, string(v.%s))\n", field.Name)
+		case "int64", "int", "TrackerStatus":
+			fmt.Printf("\tchecksumUint(h, uint64(v.%s))\n", field.Name)
+		case "float64":
+			fmt.Printf("\tchecksumUint(h, math.Float64bits(v.%s))\n", field.Name)
+		case "float32":
+			fmt.Printf("\tchecksumUint(h, uint64(math.Float32bits(v.%s)))\n", field.Name)
+		case "bool":
+			fmt.Printf("\tchecksumBool(h, v.%s)\n", field.Name)
+		case "*bool":
+			fmt.Printf("\tchecksumBool(h, v.%s != nil)\n", field.Name)
+			fmt.Printf("\tif v.%s != nil {\n", field.Name)
+			fmt.Printf("\t\tchecksumBool(h, *v.%s)\n", field.Name)
+			fmt.Printf("\t}\n")
+		case "[]TorrentTracker":
+			fmt.Printf("\tchecksumUint(h, uint64(len(v.%s)))\n", field.Name)
+			fmt.Printf("\tfor i := range v.%s {\n", field.Name)
+			fmt.Printf("\t\twriteTorrentTrackerChecksum(h, &v.%s[i])\n", field.Name)
+			fmt.Printf("\t}\n")
+		default:
+			log.Fatalf("Unhandled checksum type: %s for field %s - add proper handling", field.GoType, name+"."+field.Name)
+		}
+	}
+	fmt.Print("}\n\n")
+}
+
+func lowerFirst(s string) string {
+	return strings.ToLower(s[:1]) + s[1:]
 }
 
 func generateStructUpdater(structInfo StructInfo) {

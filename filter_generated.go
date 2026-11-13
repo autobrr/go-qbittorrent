@@ -5,6 +5,7 @@ package qbittorrent
 
 import (
 	"slices"
+	"strings"
 )
 func compareAddedOn(a, b *Torrent) int {
 	if a.AddedOn < b.AddedOn {
@@ -709,32 +710,10 @@ var torrentComparators = map[string]func(a, b *Torrent) int{
 	"default": compareDefault,
 }
 
-// torrentSorter is a reusable struct for sorting torrents without allocations
-type torrentSorter struct {
-	torrents   []Torrent
-	comparator func(a, b *Torrent) int
-	reverse    bool
-}
-
-// compare is a static method that doesn't allocate
-func (s *torrentSorter) compare(i, j int) int {
-	result := s.comparator(&s.torrents[i], &s.torrents[j])
-	if result == 0 {
-		if s.torrents[i].Hash == s.torrents[j].Hash {
-			result = 0
-		} else if s.torrents[i].Hash < s.torrents[j].Hash {
-			result = -1
-		} else {
-			result = 1
-		} // secondary sort by hash for stability
-	}
-	if s.reverse {
-		return -result
-	}
-	return result
-}
-
-func applyTorrentSorting(torrents []Torrent, sortField string, reverse bool) {
+// sortTorrentRefs sorts torrents by the field with the JSON name sortField,
+// and by hash when two torrents have equal values. An unknown field sorts by
+// name. An empty sortField keeps the order.
+func sortTorrentRefs(torrents []*Torrent, sortField string, reverse bool) {
 	if sortField == "" {
 		return
 	}
@@ -744,37 +723,14 @@ func applyTorrentSorting(torrents []Torrent, sortField string, reverse bool) {
 		comparator = torrentComparators["default"]
 	}
 
-	// Create indices to sort instead of large structs
-	indices := make([]int, len(torrents))
-	for i := range indices {
-		indices[i] = i
-	}
-
-	sorter := &torrentSorter{
-		torrents:  torrents,
-		comparator: comparator,
-		reverse:   reverse,
-	}
-
-	// Sort indices using the static method - no allocation!
-	slices.SortFunc(indices, sorter.compare)
-
-	// Apply permutation in place using cycle decomposition
-	for i := 0; i < len(torrents); i++ {
-		if indices[i] != i {
-			// Start of a cycle
-			temp := torrents[i]
-			j := i
-			for {
-				k := indices[j]
-				indices[j] = j // Mark as processed
-				if k == i {
-					torrents[j] = temp
-					break
-				}
-				torrents[j] = torrents[k]
-				j = k
-			}
+	slices.SortFunc(torrents, func(a, b *Torrent) int {
+		result := comparator(a, b)
+		if result == 0 {
+			result = strings.Compare(a.Hash, b.Hash)
 		}
-	}
+		if reverse {
+			return -result
+		}
+		return result
+	})
 }
