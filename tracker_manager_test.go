@@ -9,7 +9,7 @@ import (
 
 type mockTrackerAPI struct{}
 
-func (m *mockTrackerAPI) GetTorrentsCtx(ctx context.Context, o TorrentFilterOptions) ([]Torrent, error) {
+func (m *mockTrackerAPI) GetTrackersCtx(ctx context.Context, o TorrentFilterOptions) ([]TorrentTrackers, error) {
 	return nil, nil
 }
 
@@ -43,16 +43,12 @@ type recordingTrackerAPI struct {
 	failAbove int
 }
 
-func (a *recordingTrackerAPI) GetTorrentsCtx(ctx context.Context, o TorrentFilterOptions) ([]Torrent, error) {
-	if !o.IncludeTrackers {
-		return nil, nil
-	}
-
+func (a *recordingTrackerAPI) GetTrackersCtx(ctx context.Context, o TorrentFilterOptions) ([]TorrentTrackers, error) {
 	if len(o.Hashes) == 0 {
 		a.calls = append(a.calls, 0)
-		result := make([]Torrent, 0, len(a.data))
+		result := make([]TorrentTrackers, 0, len(a.data))
 		for hash, trackers := range a.data {
-			result = append(result, Torrent{Hash: hash, Trackers: trackers})
+			result = append(result, TorrentTrackers{Hash: hash, Trackers: trackers})
 		}
 		return result, nil
 	}
@@ -63,10 +59,10 @@ func (a *recordingTrackerAPI) GetTorrentsCtx(ctx context.Context, o TorrentFilte
 		return nil, errors.New("request too large")
 	}
 
-	result := make([]Torrent, 0, len(o.Hashes))
+	result := make([]TorrentTrackers, 0, len(o.Hashes))
 	for _, hash := range o.Hashes {
 		trackers := a.data[hash]
-		result = append(result, Torrent{Hash: hash, Trackers: trackers})
+		result = append(result, TorrentTrackers{Hash: hash, Trackers: trackers})
 	}
 	return result, nil
 }
@@ -163,22 +159,18 @@ type fallbackTrackerAPI struct {
 	fullFetchCalls int
 }
 
-func (a *fallbackTrackerAPI) GetTorrentsCtx(ctx context.Context, o TorrentFilterOptions) ([]Torrent, error) {
-	if !o.IncludeTrackers {
-		return nil, nil
-	}
-
+func (a *fallbackTrackerAPI) GetTrackersCtx(ctx context.Context, o TorrentFilterOptions) ([]TorrentTrackers, error) {
 	if len(o.Hashes) == 0 {
 		a.fullFetchCalls++
-		result := make([]Torrent, 0, len(a.data))
+		result := make([]TorrentTrackers, 0, len(a.data))
 		for hash, trackers := range a.data {
-			result = append(result, Torrent{Hash: hash, Trackers: trackers})
+			result = append(result, TorrentTrackers{Hash: hash, Trackers: trackers})
 		}
 		return result, nil
 	}
 
 	a.chunkCalls++
-	return []Torrent{}, nil
+	return []TorrentTrackers{}, nil
 }
 
 func TestTrackerManagerHydrateWithIncludeTrackersFallback(t *testing.T) {
@@ -219,13 +211,13 @@ type statusTrackerAPI struct {
 	last   TorrentFilterOptions
 }
 
-func (a *statusTrackerAPI) GetTorrentsCtx(ctx context.Context, o TorrentFilterOptions) ([]Torrent, error) {
+func (a *statusTrackerAPI) GetTrackersCtx(ctx context.Context, o TorrentFilterOptions) ([]TorrentTrackers, error) {
 	a.calls++
 	a.last = o
 	if a.err != nil {
 		return nil, a.err
 	}
-	return []Torrent{{Hash: "HASHA", Trackers: []TorrentTracker{{Url: "udp://a", Status: a.status}}}}, nil
+	return []TorrentTrackers{{Hash: "HASHA", Trackers: []TorrentTracker{{Url: "udp://a", Status: a.status}}}}, nil
 }
 
 func TestTrackerManagerRefreshReplacesCachedEntry(t *testing.T) {
@@ -240,8 +232,8 @@ func TestTrackerManagerRefreshReplacesCachedEntry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Refresh returned error: %v", err)
 	}
-	if api.calls-calls != 1 || len(api.last.Hashes) != 0 || !api.last.IncludeTrackers {
-		t.Fatalf("Refresh sent %d requests, last %+v; want 1 unfiltered includeTrackers request", api.calls-calls, api.last)
+	if api.calls-calls != 1 || len(api.last.Hashes) != 0 {
+		t.Fatalf("Refresh sent %d requests, last %+v; want 1 unfiltered request", api.calls-calls, api.last)
 	}
 	if got := refreshed[0].Trackers[0].Status; got != TrackerStatusNotWorking {
 		t.Fatalf("Refresh returned status %v, want %v", got, TrackerStatusNotWorking)

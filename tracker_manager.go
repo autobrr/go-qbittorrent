@@ -14,9 +14,14 @@ const (
 	trackerIncludeChunkSize = 100
 )
 
+type TorrentTrackers struct {
+	Hash     string           `json:"hash"`
+	Trackers []TorrentTracker `json:"trackers"`
+}
+
 // trackerAPI describes the subset of Client functionality required by TrackerManager.
 type trackerAPI interface {
-	GetTorrentsCtx(ctx context.Context, o TorrentFilterOptions) ([]Torrent, error)
+	GetTrackersCtx(ctx context.Context, o TorrentFilterOptions) ([]TorrentTrackers, error)
 }
 
 // TrackerManager coordinates tracker metadata hydration with caching.
@@ -98,7 +103,7 @@ func (tm *TrackerManager) Refresh(ctx context.Context, torrents []Torrent) ([]To
 		return torrents, nil, nil
 	}
 
-	fetched, err := tm.api.GetTorrentsCtx(ctx, TorrentFilterOptions{IncludeTrackers: true})
+	fetched, err := tm.api.GetTrackersCtx(ctx, TorrentFilterOptions{})
 	if err != nil {
 		return torrents, nil, err
 	}
@@ -145,7 +150,7 @@ func (tm *TrackerManager) hydrateWithIncludeTrackers(ctx context.Context, torren
 
 	// applyFetched records tracker responses on the relevant torrent entries and returns
 	// how many of the outstanding hashes were satisfied by this batch.
-	applyFetched := func(fetched []Torrent) int {
+	applyFetched := func(fetched []TorrentTrackers) int {
 		progress := 0
 		for _, fetched := range fetched {
 			hash := strings.TrimSpace(fetched.Hash)
@@ -169,10 +174,7 @@ func (tm *TrackerManager) hydrateWithIncludeTrackers(ctx context.Context, torren
 
 	// Try fetching all hashes in one request first for environments without proxy limits. If that
 	// works we skip the chunking overhead entirely.
-	if fetchedTorrents, err := tm.api.GetTorrentsCtx(ctx, TorrentFilterOptions{
-		Hashes:          ordered,
-		IncludeTrackers: true,
-	}); err == nil {
+	if fetchedTorrents, err := tm.api.GetTrackersCtx(ctx, TorrentFilterOptions{Hashes: ordered}); err == nil {
 		applyFetched(fetchedTorrents)
 		if len(pending) == 0 {
 			return
@@ -181,7 +183,7 @@ func (tm *TrackerManager) hydrateWithIncludeTrackers(ctx context.Context, torren
 
 	// Fallback that relies on qBittorrent returning all torrents when no hash filter is provided.
 	fetchAll := func() {
-		fetchedTorrents, err := tm.api.GetTorrentsCtx(ctx, TorrentFilterOptions{IncludeTrackers: true})
+		fetchedTorrents, err := tm.api.GetTrackersCtx(ctx, TorrentFilterOptions{})
 		if err != nil {
 			return
 		}
@@ -197,10 +199,7 @@ func (tm *TrackerManager) hydrateWithIncludeTrackers(ctx context.Context, torren
 			}
 		}
 
-		fetchedTorrents, err := tm.api.GetTorrentsCtx(ctx, TorrentFilterOptions{
-			Hashes:          chunk,
-			IncludeTrackers: true,
-		})
+		fetchedTorrents, err := tm.api.GetTrackersCtx(ctx, TorrentFilterOptions{Hashes: chunk})
 		if err != nil {
 			fetchAll()
 			return

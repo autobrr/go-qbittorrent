@@ -266,6 +266,9 @@ const (
 	// Torrent has just started downloading and is fetching metadata
 	TorrentStateMetaDl TorrentState = "metaDL"
 
+	// Same as metaDL, but torrent is forced to start and ignores queue limit
+	TorrentStateForcedMetaDl TorrentState = "forcedMetaDL"
+
 	// Torrent is paused and has NOT finished downloading
 	TorrentStatePausedDl TorrentState = "pausedDL"
 
@@ -309,28 +312,32 @@ const (
 	// Torrent is completed
 	TorrentFilterCompleted TorrentFilter = "completed"
 
-	// Torrent is resumed (for backward compatibility with qBittorrent < 4.6.0)
+	// Torrent is resumed (for backward compatibility with qBittorrent < 5.0.0)
 	// In older versions (e.g., v4.3.9), "resumed" means !isPaused()
-	// Removed in v4.6.0+ (commit 5d1c2496, March 2024) in favor of "running"
+	// Removed in qBittorrent 5.0.0 in favor of "running"
 	TorrentFilterResumed TorrentFilter = "resumed"
 
 	// Torrent is paused
 	TorrentFilterPaused TorrentFilter = "paused"
 
 	// Torrent is stopped
-	// Added in qBittorrent v4.6.0+ (commit 5d1c2496, March 2024)
+	// Added in qBittorrent 5.0.0
 	// Replaces the old "paused" filter
 	TorrentFilterStopped TorrentFilter = "stopped"
 
 	// Torrent is running (not stopped)
-	// Added in qBittorrent v4.6.0+ (commit 5d1c2496, March 2024)
+	// Added in qBittorrent 5.0.0
 	// Replaces the old "resumed" filter
 	TorrentFilterRunning TorrentFilter = "running"
 
 	// Torrent is stalled
 	TorrentFilterStalled TorrentFilter = "stalled"
 
-	// Torrent is being seeded and data is being transferred
+	// Torrent is complete and running: uploading, stalledUP, queuedUP, checkingUP or forcedUP
+	TorrentFilterSeeding TorrentFilter = "seeding"
+
+	// Same as TorrentFilterSeeding. qBittorrent has no "uploading" filter, so
+	// the client sends "seeding" for it.
 	TorrentFilterUploading TorrentFilter = "uploading"
 
 	// Torrent is being seeded, but no connection were made
@@ -526,16 +533,20 @@ type TorrentAddResponse struct {
 	AddedTorrentIds []string `json:"added_torrent_ids"`
 }
 
+// ParseTorrentFilter returns the TorrentFilter for a filter name qBittorrent accepts, in any version.
+// Like qBittorrent, it returns TorrentFilterAll for a name it doesn't know.
 func ParseTorrentFilter(filter string) TorrentFilter {
 	switch filter {
 	case "downloading":
 		return TorrentFilterDownloading
 	case "seeding":
-		return TorrentFilterUploading
+		return TorrentFilterSeeding
 	case "completed":
 		return TorrentFilterCompleted
 	case "resumed":
 		return TorrentFilterResumed
+	case "paused":
+		return TorrentFilterPaused
 	case "stopped":
 		return TorrentFilterStopped
 	case "running":
@@ -852,6 +863,8 @@ type AppPreferences struct {
 	WebUIUsername                      string           `json:"web_ui_username"`
 
 	// qBittorrent 5.3 preferences.
+	ConfirmRemoveAllTags                 bool   `json:"confirm_remove_all_tags"`
+	ConfirmRemoveTrackerFromAllTorrents  bool   `json:"confirm_remove_tracker_from_all_torrents"`
 	EnableMultiConnectionsFromSamePeerID bool   `json:"enable_multi_connections_from_same_peer_id"`
 	I2PInboundLengthVariance             int    `json:"i2p_inbound_length_variance"`
 	I2POutboundLengthVariance            int    `json:"i2p_outbound_length_variance"`
@@ -961,6 +974,11 @@ type MainDataChanges struct {
 	// Torrents holds the hashes of the added and changed torrents.
 	Torrents        []string
 	TorrentsRemoved []string
+	// TorrentsLeftOut holds the hashes of new torrents that a partial update
+	// named without their full data. qBittorrent before 5.3.0rc1 sends such
+	// a diff after the client asks for a rid again. These torrents are not in
+	// Torrents, and Rid is 0, so that the next sync is a full update.
+	TorrentsLeftOut []string
 	Categories      bool
 	Tags            bool
 	Trackers        bool

@@ -91,9 +91,6 @@ func (dest *MainData) applySync(source *MainData, rawData map[string]interface{}
 // This provides field-level merging similar to the SyncManager's logic
 func (dest *MainData) UpdateWithRawData(rawData map[string]interface{}, source *MainData) {
 	dest.ensureInitialized()
-
-	dest.Rid = source.Rid
-	dest.FullUpdate = source.FullUpdate
 	dest.Changes = MainDataChanges{}
 
 	// Handle torrents ONLY if the torrents field is present in the raw JSON
@@ -107,8 +104,41 @@ func (dest *MainData) UpdateWithRawData(rawData map[string]interface{}, source *
 	// Remove deleted torrents ONLY if there are actually items to remove
 	if len(source.TorrentsRemoved) > 0 {
 		remove(source.TorrentsRemoved, &dest.Torrents)
-		dest.removeTrackerHashes(source.TorrentsRemoved)
 		dest.Changes.TorrentsRemoved = source.TorrentsRemoved
+	}
+
+	dest.mergeExceptTorrents(rawData, source)
+}
+
+// applySyncExceptTorrents merges a fetched sync response into all of dest but
+// the torrents, which a SyncManager keeps in its Sync snapshot. changes tells
+// what the response changed in the torrents.
+func (dest *MainData) applySyncExceptTorrents(source *MainData, rawData map[string]any, changes MainDataChanges) {
+	if source.FullUpdate {
+		*dest = *source
+		dest.Torrents = nil
+		dest.ensureInitialized()
+		changes.Categories = true
+		changes.Tags = true
+		changes.Trackers = true
+		changes.ServerState = true
+		dest.Changes = changes
+		return
+	}
+
+	dest.ensureInitialized()
+	dest.Changes = changes
+	dest.mergeExceptTorrents(rawData, source)
+}
+
+// mergeExceptTorrents merges a partial update into all of dest but the
+// torrents. dest.Changes already tells what changed in the torrents.
+func (dest *MainData) mergeExceptTorrents(rawData map[string]any, source *MainData) {
+	dest.Rid = source.Rid
+	dest.FullUpdate = source.FullUpdate
+
+	if len(source.TorrentsRemoved) > 0 {
+		dest.removeTrackerHashes(source.TorrentsRemoved)
 	}
 
 	// Handle categories ONLY if present in raw JSON
@@ -154,6 +184,10 @@ func (dest *MainData) UpdateWithRawData(rawData map[string]interface{}, source *
 			dest.Changes.ServerState = len(serverStateMap) > 0
 		}
 	}
+
+	if len(dest.Changes.TorrentsLeftOut) > 0 {
+		dest.Rid = 0
+	}
 }
 
 // mergeTorrentsPartial merges only the fields that are present in the update
@@ -166,7 +200,10 @@ func (dest *MainData) mergeTorrentsPartial(torrentsMap map[string]interface{}) {
 
 		existing, exists := dest.Torrents[hash]
 		if !exists {
-			// New torrent - create a minimal torrent with the hash at least
+			if !completeNewTorrent(updateMap) {
+				dest.Changes.TorrentsLeftOut = append(dest.Changes.TorrentsLeftOut, hash)
+				continue
+			}
 			existing = Torrent{Hash: hash}
 		}
 
@@ -176,6 +213,14 @@ func (dest *MainData) mergeTorrentsPartial(torrentsMap map[string]interface{}) {
 		dest.Torrents[hash] = existing
 		dest.Changes.Torrents = append(dest.Changes.Torrents, hash)
 	}
+}
+
+// completeNewTorrent reports whether the fields of a torrent that the client
+// does not know are complete. qBittorrent sends every field of such a
+// torrent. A diff without added_on lost the earlier fields.
+func completeNewTorrent(fields map[string]any) bool {
+	_, ok := fields["added_on"]
+	return ok
 }
 
 // removeTrackerHashes removes the given torrent hashes from each tracker,

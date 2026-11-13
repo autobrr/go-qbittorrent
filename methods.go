@@ -3,6 +3,7 @@ package qbittorrent
 import (
 	"context"
 	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"io"
 	"maps"
 	"net/http"
@@ -252,9 +253,14 @@ func (c *Client) getApiVersion(ctx context.Context) (*semver.Version, error) {
 	return ver, nil
 }
 
-// translateFilter translates filter names based on qBittorrent version for compatibility
-// qBittorrent 4.6.0+ changed from "paused/resumed" to "stopped/running"
+// translateFilter translates filter names to the ones the server's qBittorrent version accepts.
+// qBittorrent 5.0.0 (WebAPI 2.11) renamed "paused"/"resumed" to "stopped"/"running"; the seeding
+// filter has always been "seeding".
 func (c *Client) translateFilter(ctx context.Context, filter TorrentFilter) string {
+	if filter == TorrentFilterUploading || filter == TorrentFilterSeeding {
+		return "seeding"
+	}
+
 	// Get the API version, but don't fail if we can't get it
 	ver, err := c.getApiVersion(ctx)
 	if err != nil {
@@ -262,10 +268,8 @@ func (c *Client) translateFilter(ctx context.Context, filter TorrentFilter) stri
 		return string(filter)
 	}
 
-	// Check if this is qBittorrent 4.6.0 or later
-	// The filter change happened in 4.6.0 (March 2024)
-	v460 := semver.MustParse("4.6.0")
-	isModernVersion := ver.GreaterThan(v460) || ver.Equal(v460)
+	// ver is the WebAPI version (2.x), not the qBittorrent version
+	isModernVersion := ver.GreaterThanEqual(semver.MustParse("2.11.0"))
 
 	switch filter {
 	case TorrentFilterResumed:
@@ -551,6 +555,31 @@ func (c *Client) GetTorrents(o TorrentFilterOptions) ([]Torrent, error) {
 }
 
 func (c *Client) GetTorrentsCtx(ctx context.Context, o TorrentFilterOptions) ([]Torrent, error) {
+	var torrents []Torrent
+	if err := c.torrentsInfo(ctx, o, &torrents); err != nil {
+		return nil, err
+	}
+
+	return torrents, nil
+}
+
+// GetTrackersCtx returns the hash and the trackers of each torrent that o
+// selects. It sends the request of GetTorrentsCtx with IncludeTrackers, which
+// needs qBittorrent 5.1, and reads only those two fields of the response.
+func (c *Client) GetTrackersCtx(ctx context.Context, o TorrentFilterOptions) ([]TorrentTrackers, error) {
+	o.IncludeTrackers = true
+
+	trackers := make([]TorrentTrackers, 0, len(o.Hashes))
+	if err := c.torrentsInfo(ctx, o, &trackers); err != nil {
+		return nil, err
+	}
+
+	return trackers, nil
+}
+
+// torrentsInfo decodes the torrents/info response for o into out, a pointer to
+// a slice.
+func (c *Client) torrentsInfo(ctx context.Context, o TorrentFilterOptions, out any) error {
 	opts := map[string]string{}
 
 	if o.Reverse {
@@ -594,7 +623,7 @@ func (c *Client) GetTorrentsCtx(ctx context.Context, o TorrentFilterOptions) ([]
 
 	resp, err := c.getCtx(ctx, "torrents/info", opts)
 	if err != nil {
-		return nil, errors.Wrap(err, "get torrents error")
+		return errors.Wrap(err, "get torrents error")
 	}
 
 	defer drainAndClose(resp)
@@ -603,15 +632,14 @@ func (c *Client) GetTorrentsCtx(ctx context.Context, o TorrentFilterOptions) ([]
 	case http.StatusOK:
 		break
 	default:
-		return nil, errors.Wrap(ErrUnexpectedStatus, "could not get torrents; status code: %d", resp.StatusCode)
+		return errors.Wrap(ErrUnexpectedStatus, "could not get torrents; status code: %d", resp.StatusCode)
 	}
 
-	var torrents []Torrent
-	if err := json.NewDecoder(resp.Body).Decode(&torrents); err != nil {
-		return nil, errors.Wrap(err, "could not unmarshal body")
+	if err := decodeStream(resp.Body, out); err != nil {
+		return errors.Wrap(err, "could not unmarshal body")
 	}
 
-	return torrents, nil
+	return nil
 }
 
 func (c *Client) GetTorrentsActiveDownloads() ([]Torrent, error) {
@@ -731,6 +759,20 @@ func (c *Client) GetTorrentTrackersCtx(ctx context.Context, hash string) ([]Torr
 	return trackers, nil
 }
 
+// WebAPI before 2.14.0 answers a refused add with status 200 and the body Fails. instead of 409.
+func checkTextAddResult(resp *http.Response) error {
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return errors.Wrap(err, "could not read body")
+	}
+
+	if string(body) == "Fails." {
+		return errors.Wrap(ErrTorrentAddFailed, "qBittorrent answered Fails.")
+	}
+
+	return nil
+}
+
 func (c *Client) AddTorrentFromMemory(buf []byte, options map[string]string) (*TorrentAddResponse, error) {
 	return c.AddTorrentFromMemoryCtx(context.Background(), buf, options)
 }
@@ -764,6 +806,10 @@ func (c *Client) AddTorrentFromMemoryCtx(ctx context.Context, buf []byte, option
 
 	if !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/plain") {
 		return nil, errors.Wrap(ErrUnexpectedContentType, "could not add torrent | unexpected content-type: %s", resp.Header.Get("Content-Type"))
+	}
+
+	if err := checkTextAddResult(resp); err != nil {
+		return nil, errors.Wrap(err, "could not add torrent")
 	}
 
 	res := TorrentAddResponse{SuccessCount: 1}
@@ -814,6 +860,10 @@ func (c *Client) AddTorrentsFromMemoryCtx(ctx context.Context, files [][]byte, o
 		return nil, errors.Wrap(ErrUnexpectedContentType, "could not add torrents | unexpected content-type: %s", resp.Header.Get("Content-Type"))
 	}
 
+	if err := checkTextAddResult(resp); err != nil {
+		return nil, errors.Wrap(err, "could not add torrents")
+	}
+
 	res := TorrentAddResponse{SuccessCount: 1}
 
 	return &res, nil
@@ -853,6 +903,10 @@ func (c *Client) AddTorrentFromFileCtx(ctx context.Context, filePath string, opt
 
 	if !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/plain") {
 		return nil, errors.Wrap(ErrUnexpectedContentType, "could not add torrent: file: %s | unexpected content-type: %s", filePath, resp.Header.Get("Content-Type"))
+	}
+
+	if err := checkTextAddResult(resp); err != nil {
+		return nil, errors.Wrap(err, "could not add torrent: file: %s", filePath)
 	}
 
 	res := TorrentAddResponse{SuccessCount: 1}
@@ -904,6 +958,10 @@ func (c *Client) AddTorrentFromUrlCtx(ctx context.Context, url string, options m
 		return nil, errors.Wrap(ErrUnexpectedContentType, "could not add torrent: url: %s | unexpected content-type: %s", url, resp.Header.Get("Content-Type"))
 	}
 
+	if err := checkTextAddResult(resp); err != nil {
+		return nil, errors.Wrap(err, "could not add torrent: url: %s", url)
+	}
+
 	res := TorrentAddResponse{SuccessCount: 1}
 
 	return &res, nil
@@ -947,6 +1005,10 @@ func (c *Client) AddTorrentsFromUrlsCtx(ctx context.Context, urls []string, opti
 
 	if !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/plain") {
 		return nil, errors.Wrap(ErrUnexpectedContentType, "could not add torrents: urls: %v | unexpected content-type: %s", urls, resp.Header.Get("Content-Type"))
+	}
+
+	if err := checkTextAddResult(resp); err != nil {
+		return nil, errors.Wrap(err, "could not add torrents: urls: %v", urls)
 	}
 
 	res := TorrentAddResponse{SuccessCount: 1}
@@ -1065,20 +1127,38 @@ func (c *Client) BanPeersCtx(ctx context.Context, peers []string) error {
 	return nil
 }
 
+// syncResendMinVersion is the first WebAPI version where sync/maindata gives
+// a complete diff when the client sends a rid again.
+var syncResendMinVersion = semver.MustParse("2.16.0")
+
 // SyncMainDataCtx Sync API implements requests for obtaining changes since the last request.
 // Response ID. If not provided, rid=0 will be assumed. If the given rid is different from the one of last server reply, full_update will be true (see the server reply details for more info)
 func (c *Client) SyncMainDataCtx(ctx context.Context, rid int64) (*MainData, error) {
-	info, _, err := c.SyncMainDataCtxWithRaw(ctx, rid)
+	info, _, err := c.syncMainData(ctx, rid, false)
 	return info, err
 }
 
-// SyncMainDataCtxWithRaw returns both parsed MainData and raw JSON data for partial updates
+// SyncMainDataCtxWithRaw returns both parsed MainData and raw JSON data for partial updates.
+// For a full update the raw JSON data is nil, because the parsed MainData holds
+// all of it. An answer to rid 0 that is not a full update is an error.
 func (c *Client) SyncMainDataCtxWithRaw(ctx context.Context, rid int64) (*MainData, map[string]interface{}, error) {
+	return c.syncMainData(ctx, rid, true)
+}
+
+func (c *Client) syncMainData(ctx context.Context, rid int64, wantRaw bool) (*MainData, map[string]any, error) {
 	opts := map[string]string{
 		"rid": strconv.FormatInt(rid, 10),
 	}
 
-	resp, err := c.getCtx(ctx, "/sync/maindata", opts)
+	// Before 5.3.0rc1 (WebAPI 2.16), qBittorrent drops changes when a client
+	// asks for a rid again after it lost the response. Thus the attempt after
+	// a lost one asks for a full update. An unknown version gets the same rule.
+	var afterLostResponse map[string]string
+	if ver := c.version.Load(); rid != 0 && (ver == nil || ver.LessThan(syncResendMinVersion)) {
+		afterLostResponse = map[string]string{"rid": "0"}
+	}
+
+	resp, err := c.getWithLostResponseCtx(ctx, "/sync/maindata", opts, afterLostResponse)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "could not get main data")
 	}
@@ -1092,32 +1172,50 @@ func (c *Client) SyncMainDataCtxWithRaw(ctx context.Context, rid int64) (*MainDa
 		return nil, nil, errors.Wrap(ErrUnexpectedStatus, "could not get main data; status code: %d", resp.StatusCode)
 	}
 
-	rp, wp := io.Pipe()
-	var rawData map[string]interface{}
-	var mapErr error
-	go func() {
-		defer wp.Close()
-		mapErr = json.NewDecoder(io.TeeReader(resp.Body, wp)).Decode(&rawData)
-		if mapErr == nil {
-			normalizeHashesRaw(rawData)
-		}
-	}()
-
-	// Then decode into structured MainData
 	var info MainData
-	if err := json.NewDecoder(rp).Decode(&info); err != nil {
+
+	// qBittorrent answers rid 0 with a full update, which can be large and
+	// needs no raw data. Thus only an update request reads the body two times.
+	if rid == 0 || !wantRaw {
+		if err := decodeStream(resp.Body, &info); err != nil {
+			return nil, nil, errors.Wrap(err, "could not unmarshal body")
+		}
+		if wantRaw && !info.FullUpdate {
+			return nil, nil, errors.New("could not get main data: the response to rid 0 is not a full update")
+		}
+
+		normalizeHashes(info.Torrents)
+		return &info, nil, nil
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "could not read body")
+	}
+	if err := json.Unmarshal(body, &info); err != nil {
 		return nil, nil, errors.Wrap(err, "could not unmarshal body")
 	}
-
-	io.Copy(io.Discard, rp)
-
-	if mapErr != nil {
-		return nil, nil, errors.Wrap(mapErr, "could not unmarshal body to map")
+	normalizeHashes(info.Torrents)
+	if info.FullUpdate {
+		return &info, nil, nil
 	}
 
-	normalizeHashes(info.Torrents)
+	var rawData map[string]any
+	if err := json.Unmarshal(body, &rawData); err != nil {
+		return nil, nil, errors.Wrap(err, "could not unmarshal body to map")
+	}
+	normalizeHashesRaw(rawData)
 	return &info, rawData, nil
+}
 
+// streamOptions keeps the decode rules of encoding/json and drops its check of
+// the whole value before the decode, which holds the whole response in memory.
+var streamOptions = jsonv2.JoinOptions(json.DefaultOptionsV1(), json.ReportErrorsWithLegacySemantics(false))
+
+// decodeStream decodes the JSON value in r into out. It reads r to the end and
+// never holds the whole value. After an error, out can hold a part of the value.
+func decodeStream(r io.Reader, out any) error {
+	return jsonv2.UnmarshalRead(r, out, streamOptions)
 }
 
 func (c *Client) Pause(hashes []string) error {

@@ -31,7 +31,8 @@ Fixes # (issue)
 
 <!--- Only manual or live verification that CI cannot do: a run against a real
       qBittorrent, the version it ran, and the edge this change targets.
-      CI runs `go test -tags ci ./...`, so do not list that here.
+      CI runs `go test -tags ci ./...` and the tests of internal/capture,
+      so do not list them here.
       Delete this section if CI covers everything. --->
 
 ## Performance

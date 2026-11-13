@@ -1,0 +1,53 @@
+{
+  "endpoints": {
+    "app/getDirectoryContent": 400,
+    "app/processInfo": 200,
+    "app/sendTestEmail": 405,
+    "rss/setFeedURL": 405,
+    "torrentcreator/status": 200,
+    "torrents/editTracker": 405,
+    "torrents/export": 400,
+    "torrents/filePrio": 405,
+    "torrents/rename": 405,
+    "torrents/renameFile": 405,
+    "torrents/renameFolder": 405,
+    "torrents/setComment": 405,
+    "torrents/setTags": 405
+  },
+  "export_trackers": {
+    "announce": "http://127.0.0.1:1/announce",
+    "announce_list": null
+  },
+  "image": "lscr.io/linuxserver/qbittorrent@sha256:05c1454f9a32967affc1f34f67f8cc0cc57dd805dca45489fe797095a6286556",
+  "libtorrent": "2.1.2.0",
+  "network": "none",
+  "save_path_edit": {
+    "after": {
+      "download_path": "/edit-incomplete",
+      "inactive_seeding_time_limit": -2,
+      "name": "edit",
+      "ratio_limit": -2,
+      "savePath": "/edited",
+      "seeding_time_limit": -2,
+      "share_limit_action": "Default",
+      "share_limits_mode": "Default"
+    },
+    "before": {
+      "download_path": "/edit-incomplete",
+      "inactive_seeding_time_limit": -2,
+      "name": "edit",
+      "ratio_limit": -2,
+      "savePath": "/edit",
+      "seeding_time_limit": -2,
+      "share_limit_action": "Default",
+      "share_limits_mode": "Default"
+    }
+  },
+  "set_share_limits": {
+    "without_share_limit_action": 400,
+    "without_share_limits_mode": 400
+  },
+  "subcategory_save_path": "/p/x:y",
+  "version": "v5.3.0",
+  "webapi_version": "2.16.2"
+}

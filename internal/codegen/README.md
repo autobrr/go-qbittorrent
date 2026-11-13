@@ -21,6 +21,8 @@ Generates type-safe field update methods for MainData partial updates.
 - `updateServerStateFields()`
 - `updateCategoryFields()`
 - `updateTorrentTrackerFields()`
+- `torrentEqual()`. A full sync update uses it to keep the object of a torrent that did not change.
+- `writeTorrentChecksum()` and `writeTorrentTrackerChecksum()`. A sealed Sync snapshot uses them to find a torrent that a reader changed.
 
 **Usage**: Run from project root with `go generate`
 

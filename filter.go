@@ -2,7 +2,11 @@
 
 package qbittorrent
 
-import "strings"
+import (
+	"maps"
+	"slices"
+	"strings"
+)
 
 // removeDuplicateStrings removes duplicate strings from a slice and returns unique items
 func removeDuplicateStrings(input []string) []string {
@@ -44,19 +48,50 @@ func removeStrings(input []string, toRemove []string) []string {
 	return result
 }
 
-// matchesTorrentFilter checks if a torrent matches the category, tag and state
-// filters. The caller applies the hash filter.
-func matchesTorrentFilter(torrent Torrent, options TorrentFilterOptions) bool {
-	if options.Category != "" && torrent.Category != options.Category {
+// torrentFilter checks torrents against the category, tag and state filters
+// of one read. The caller applies the hash filter.
+type torrentFilter struct {
+	category string
+	tag      string
+	state    TorrentFilter
+	// states remembers the result of the state filter for each state of this
+	// read. A library has few states, so a scan of the list is faster than
+	// the two map lookups of matchesStateFilter.
+	states []stateFilterResult
+}
+
+type stateFilterResult struct {
+	state   TorrentState
+	matches bool
+}
+
+// maxRememberedStates limits the scan of torrentFilter.states for a library
+// with many unknown states.
+const maxRememberedStates = 32
+
+func newTorrentFilter(options TorrentFilterOptions) torrentFilter {
+	return torrentFilter{category: options.Category, tag: options.Tag, state: options.Filter}
+}
+
+func (f *torrentFilter) matches(torrent *Torrent) bool {
+	if f.category != "" && torrent.Category != f.category {
 		return false
 	}
-	if options.Tag != "" && !containsExactTag(torrent.Tags, options.Tag) {
+	if f.tag != "" && !containsExactTag(torrent.Tags, f.tag) {
 		return false
 	}
-	if options.Filter != "" && !matchesStateFilter(torrent.State, options.Filter) {
-		return false
+	return f.state == "" || f.matchesState(torrent.State)
+}
+
+func (f *torrentFilter) matchesState(state TorrentState) bool {
+	if i := slices.IndexFunc(f.states, func(r stateFilterResult) bool { return r.state == state }); i >= 0 {
+		return f.states[i].matches
 	}
-	return true
+	matches := matchesStateFilter(state, f.state)
+	if len(f.states) < maxRememberedStates {
+		f.states = append(f.states, stateFilterResult{state: state, matches: matches})
+	}
+	return matches
 }
 
 // containsExactTag reports whether the comma-separated tags string includes the target as a full token.
@@ -79,7 +114,10 @@ func containsExactTag(tags string, target string) bool {
 	return false
 }
 
-// stateFilterMatches is a precomputed lookup table for state-filter matches
+// stateFilterMatches is a precomputed lookup table for state-filter matches.
+// Its keys are the known states returned by KnownTorrentStates, so every
+// TorrentState constant needs an entry here. testdata/filters holds the
+// results of real qBittorrent that the table follows.
 var stateFilterMatches = map[TorrentState]map[TorrentFilter]struct{}{
 	TorrentStateError: {
 		TorrentFilterAll:      struct{}{},
@@ -88,14 +126,14 @@ var stateFilterMatches = map[TorrentState]map[TorrentFilter]struct{}{
 	},
 	TorrentStateMissingFiles: {
 		TorrentFilterAll:      struct{}{},
+		TorrentFilterError:    struct{}{},
 		TorrentFilterInactive: struct{}{},
 	},
 	TorrentStateUploading: {
 		TorrentFilterAll:       struct{}{},
 		TorrentFilterActive:    struct{}{},
-		TorrentFilterUploading: struct{}{},
+		TorrentFilterSeeding:   struct{}{},
 		TorrentFilterCompleted: struct{}{},
-		TorrentFilterResumed:   struct{}{},
 	},
 	TorrentStatePausedUp: {
 		TorrentFilterAll:       struct{}{},
@@ -113,6 +151,7 @@ var stateFilterMatches = map[TorrentState]map[TorrentFilter]struct{}{
 	},
 	TorrentStateQueuedUp: {
 		TorrentFilterAll:       struct{}{},
+		TorrentFilterSeeding:   struct{}{},
 		TorrentFilterCompleted: struct{}{},
 		TorrentFilterInactive:  struct{}{},
 	},
@@ -120,99 +159,115 @@ var stateFilterMatches = map[TorrentState]map[TorrentFilter]struct{}{
 		TorrentFilterAll:              struct{}{},
 		TorrentFilterStalled:          struct{}{},
 		TorrentFilterStalledUploading: struct{}{},
+		TorrentFilterSeeding:          struct{}{},
 		TorrentFilterCompleted:        struct{}{},
 		TorrentFilterInactive:         struct{}{},
 	},
 	TorrentStateCheckingUp: {
 		TorrentFilterAll:       struct{}{},
-		TorrentFilterActive:    struct{}{},
+		TorrentFilterSeeding:   struct{}{},
 		TorrentFilterCompleted: struct{}{},
-		TorrentFilterResumed:   struct{}{},
+		TorrentFilterChecking:  struct{}{},
+		TorrentFilterInactive:  struct{}{},
 	},
 	TorrentStateForcedUp: {
 		TorrentFilterAll:       struct{}{},
 		TorrentFilterActive:    struct{}{},
-		TorrentFilterUploading: struct{}{},
+		TorrentFilterSeeding:   struct{}{},
 		TorrentFilterCompleted: struct{}{},
-		TorrentFilterResumed:   struct{}{},
 	},
 	TorrentStateAllocating: {
 		TorrentFilterAll:         struct{}{},
-		TorrentFilterActive:      struct{}{},
+		TorrentFilterInactive:    struct{}{},
 		TorrentFilterDownloading: struct{}{},
-		TorrentFilterResumed:     struct{}{},
 	},
 	TorrentStateDownloading: {
 		TorrentFilterAll:         struct{}{},
 		TorrentFilterActive:      struct{}{},
 		TorrentFilterDownloading: struct{}{},
-		TorrentFilterResumed:     struct{}{},
 	},
 	TorrentStateMetaDl: {
 		TorrentFilterAll:         struct{}{},
 		TorrentFilterActive:      struct{}{},
 		TorrentFilterDownloading: struct{}{},
-		TorrentFilterResumed:     struct{}{},
+	},
+	TorrentStateForcedMetaDl: {
+		TorrentFilterAll:         struct{}{},
+		TorrentFilterActive:      struct{}{},
+		TorrentFilterDownloading: struct{}{},
 	},
 	TorrentStatePausedDl: {
-		TorrentFilterAll:      struct{}{},
-		TorrentFilterPaused:   struct{}{},
-		TorrentFilterStopped:  struct{}{},
-		TorrentFilterInactive: struct{}{},
+		TorrentFilterAll:         struct{}{},
+		TorrentFilterPaused:      struct{}{},
+		TorrentFilterStopped:     struct{}{},
+		TorrentFilterDownloading: struct{}{},
+		TorrentFilterInactive:    struct{}{},
 	},
 	TorrentStateStoppedDl: {
-		TorrentFilterAll:      struct{}{},
-		TorrentFilterPaused:   struct{}{},
-		TorrentFilterStopped:  struct{}{},
-		TorrentFilterInactive: struct{}{},
+		TorrentFilterAll:         struct{}{},
+		TorrentFilterPaused:      struct{}{},
+		TorrentFilterStopped:     struct{}{},
+		TorrentFilterDownloading: struct{}{},
+		TorrentFilterInactive:    struct{}{},
 	},
 	TorrentStateQueuedDl: {
-		TorrentFilterAll:      struct{}{},
-		TorrentFilterInactive: struct{}{},
+		TorrentFilterAll:         struct{}{},
+		TorrentFilterDownloading: struct{}{},
+		TorrentFilterInactive:    struct{}{},
 	},
 	TorrentStateStalledDl: {
 		TorrentFilterAll:                struct{}{},
 		TorrentFilterStalled:            struct{}{},
 		TorrentFilterStalledDownloading: struct{}{},
+		TorrentFilterDownloading:        struct{}{},
 		TorrentFilterInactive:           struct{}{},
 	},
 	TorrentStateCheckingDl: {
 		TorrentFilterAll:         struct{}{},
-		TorrentFilterActive:      struct{}{},
 		TorrentFilterDownloading: struct{}{},
-		TorrentFilterResumed:     struct{}{},
+		TorrentFilterChecking:    struct{}{},
+		TorrentFilterInactive:    struct{}{},
 	},
 	TorrentStateForcedDl: {
 		TorrentFilterAll:         struct{}{},
 		TorrentFilterActive:      struct{}{},
 		TorrentFilterDownloading: struct{}{},
-		TorrentFilterResumed:     struct{}{},
 	},
 	TorrentStateCheckingResumeData: {
-		TorrentFilterAll: struct{}{},
+		TorrentFilterAll:      struct{}{},
+		TorrentFilterChecking: struct{}{},
+		TorrentFilterInactive: struct{}{},
 	},
 	TorrentStateMoving: {
-		TorrentFilterAll: struct{}{},
+		TorrentFilterAll:    struct{}{},
+		TorrentFilterActive: struct{}{},
+		TorrentFilterMoving: struct{}{},
 	},
 	TorrentStateUnknown: {
 		TorrentFilterAll: struct{}{},
 	},
 }
 
+// IsKnown reports whether s is a TorrentState declared by this library.
+// It does not validate: unknown values are still unmarshalled verbatim.
+func (s TorrentState) IsKnown() bool {
+	_, ok := stateFilterMatches[s]
+	return ok
+}
+
+// KnownTorrentStates returns every TorrentState declared by this library, sorted.
+// The caller owns the returned slice.
+func KnownTorrentStates() []TorrentState {
+	return slices.Sorted(maps.Keys(stateFilterMatches))
+}
+
 // matchesStateFilter checks if a torrent state matches the given filter using precomputed lookup
 func matchesStateFilter(state TorrentState, filter TorrentFilter) bool {
-	// Special case: TorrentFilterRunning means "not stopped"
-	// Added in qBittorrent v4.6.0+ (commit 5d1c2496, March 2024)
-	if filter == TorrentFilterRunning {
-		// Running is the inverse of stopped states
-		return state != TorrentStateStoppedUp && state != TorrentStateStoppedDl
+	if filter == TorrentFilterUploading {
+		filter = TorrentFilterSeeding
 	}
-
-	// Special case: TorrentFilterResumed for backward compatibility
-	// Used in qBittorrent < v4.6.0 (e.g., v4.3.9)
-	// "Resumed" meant !isPaused() in older versions
-	if filter == TorrentFilterResumed {
-		// Resumed is the inverse of paused states
+	// running and resumed are the same filter: qBittorrent 5.0.0 renamed resumed.
+	if filter == TorrentFilterRunning || filter == TorrentFilterResumed {
 		return state != TorrentStatePausedUp && state != TorrentStatePausedDl &&
 			state != TorrentStateStoppedUp && state != TorrentStateStoppedDl
 	}
@@ -224,24 +279,19 @@ func matchesStateFilter(state TorrentState, filter TorrentFilter) bool {
 	return filter == TorrentFilterAll
 }
 
-// applyTorrentFilterOptions applies sorting, reverse, limit, and offset to torrents
-func applyTorrentFilterOptions(torrents []Torrent, options TorrentFilterOptions) []Torrent {
-	// Sort
-	applyTorrentSorting(torrents, options.Sort, options.Reverse)
-
-	// Apply offset and limit
-	if options.Offset > 0 || options.Limit > 0 {
-		start := options.Offset
-		if start >= len(torrents) {
-			torrents = torrents[:0]
-		} else {
-			end := len(torrents)
-			if options.Limit > 0 && start+options.Limit < end {
-				end = start + options.Limit
-			}
-			torrents = torrents[start:end]
-		}
+// pageTorrentRefs returns the torrents from offset, at most limit of them.
+// A limit of 0 has no limit.
+func pageTorrentRefs(torrents []*Torrent, offset, limit int) []*Torrent {
+	if offset <= 0 && limit <= 0 {
+		return torrents
 	}
-
-	return torrents
+	start := max(offset, 0)
+	if start >= len(torrents) {
+		return torrents[:0]
+	}
+	end := len(torrents)
+	if limit > 0 {
+		end = start + min(limit, end-start)
+	}
+	return torrents[start:end]
 }
