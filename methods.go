@@ -2468,6 +2468,53 @@ func (c *Client) ToggleAlternativeSpeedLimitsCtx(ctx context.Context) error {
 	return nil
 }
 
+// PauseSession pauses the whole BitTorrent session of qBittorrent.
+// It requires qBittorrent 5.3 and WebAPI 2.16.2 or later.
+func (c *Client) PauseSession() error {
+	return c.PauseSessionCtx(context.Background())
+}
+
+// PauseSessionCtx pauses the whole BitTorrent session of qBittorrent.
+// It requires qBittorrent 5.3 and WebAPI 2.16.2 or later. [ServerState.SessionPaused]
+// tells whether the session is paused.
+func (c *Client) PauseSessionCtx(ctx context.Context) error {
+	return c.postSessionAction(ctx, "transfer/pauseSession", "PauseSession")
+}
+
+// ResumeSession resumes a paused BitTorrent session of qBittorrent.
+// It requires qBittorrent 5.3 and WebAPI 2.16.2 or later.
+// It does not start the torrents that are stopped one by one.
+func (c *Client) ResumeSession() error {
+	return c.ResumeSessionCtx(context.Background())
+}
+
+// ResumeSessionCtx resumes a paused BitTorrent session of qBittorrent.
+// It requires qBittorrent 5.3 and WebAPI 2.16.2 or later.
+// It does not start the torrents that are stopped one by one.
+func (c *Client) ResumeSessionCtx(ctx context.Context) error {
+	return c.postSessionAction(ctx, "transfer/resumeSession", "ResumeSession")
+}
+
+func (c *Client) postSessionAction(ctx context.Context, action, method string) error {
+	if ok, err := c.RequiresMinVersionCtx(ctx, semver.MustParse("2.16.2")); !ok {
+		return errors.Wrap(err, "%s requires qBittorrent 5.3 and WebAPI >= 2.16.2", method)
+	}
+
+	resp, err := c.postCtx(ctx, action, nil)
+	if err != nil {
+		return errors.Wrap(err, "%s: could not post %s", method, action)
+	}
+
+	defer drainAndClose(resp)
+
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		return nil
+	default:
+		return errors.Wrap(ErrUnexpectedStatus, "%s: could not post %s; status code: %d", method, action, resp.StatusCode)
+	}
+}
+
 // GetAlternativeSpeedLimitsMode get alternative speed limits mode
 func (c *Client) GetAlternativeSpeedLimitsMode() (bool, error) {
 	return c.GetAlternativeSpeedLimitsModeCtx(context.Background())

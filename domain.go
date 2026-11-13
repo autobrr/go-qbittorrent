@@ -1017,6 +1017,10 @@ type ServerState struct {
 	UseAltSpeedLimits     bool   `json:"use_alt_speed_limits"`
 	UseSubcategories      bool   `json:"use_subcategories"`
 	WriteCacheOverload    string `json:"write_cache_overload"`
+	// SessionPaused is true while the whole BitTorrent session is paused. qBittorrent
+	// sends it from WebAPI 2.16.2 (qBittorrent 5.3). An older server does not send it,
+	// so it stays false there, also when the session is paused in the qBittorrent GUI.
+	SessionPaused bool `json:"session_state"`
 }
 
 // Log
