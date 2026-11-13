@@ -10,9 +10,8 @@ import (
 )
 
 func createBenchSyncManager() *SyncManager {
-	mockClient := NewMockClient()
 	sm := &SyncManager{
-		client:  mockClient.Client,
+		client:  newOfflineClient(),
 		options: DefaultSyncOptions(),
 		data: &MainData{
 			Rid:        1,
