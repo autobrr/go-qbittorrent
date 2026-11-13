@@ -24,10 +24,8 @@ type roundTripFunc func(req *http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
 
-// newOfflineClient returns a client that fails each request without a
-// network call, for tests that need no qBittorrent.
 func newOfflineClient() *Client {
-	client := NewClient(Config{Host: "http://qbit.test", APIKey: "test-key", RetryAttempts: 1})
+	client := newTestClient("http://qbit.test", 1)
 	client.http.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) {
 		return nil, context.DeadlineExceeded
 	})
