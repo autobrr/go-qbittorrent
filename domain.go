@@ -2,6 +2,7 @@ package qbittorrent
 
 import (
 	"encoding/json"
+	"fmt"
 	"maps"
 	"strconv"
 	"time"
@@ -12,6 +13,14 @@ import (
 var (
 	ErrBadCredentials = errors.New("bad credentials")
 	ErrIPBanned       = errors.New("User's IP is banned for too many failed login attempts")
+
+	// ErrInvalidAPIKey reports that qBittorrent rejected Config.APIKey, which is
+	// wrong or set while qBittorrent has none. It comes only with Config.APIKey
+	// set: from any action on a 401 with a Bearer challenge (qBittorrent 5.4, Web
+	// API 2.17.0), and from GetWebAPIVersionCtx, GetAppVersionCtx and
+	// GetTorrentTrackersCtx on a 403 (qBittorrent 5.2 and 5.3), which a reverse
+	// proxy can also send. errors.AsType[*InvalidAPIKeyError] gives the status code.
+	ErrInvalidAPIKey = errors.New("qBittorrent rejected the API key")
 
 	ErrUnexpectedStatus      = errors.New("unexpected status code")
 	ErrUnexpectedContentType = errors.New("unexpected Content-Type")
@@ -55,6 +64,20 @@ var (
 	ErrRSSPathConflict = errors.New("RSS path already exists or is invalid")
 	ErrRSSRuleNotFound = errors.New("RSS rule not found")
 )
+
+// InvalidAPIKeyError is the error that matches ErrInvalidAPIKey. StatusCode is
+// the HTTP status code of the response that rejected the key.
+type InvalidAPIKeyError struct {
+	StatusCode int
+}
+
+func (e *InvalidAPIKeyError) Error() string {
+	return fmt.Sprintf("qBittorrent rejected the API key (HTTP %d)", e.StatusCode)
+}
+
+func (e *InvalidAPIKeyError) Is(target error) bool {
+	return target == ErrInvalidAPIKey
+}
 
 type Torrent struct {
 	AddedOn                  int64            `json:"added_on"`
