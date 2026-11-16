@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -167,4 +168,56 @@ func TestInvalidAPIKey_NotWithoutAPIKey(t *testing.T) {
 			t.Errorf("requests = %d, want 5", got)
 		}
 	})
+}
+
+// The transport sends a sync request again by itself when a reused connection
+// closes. The Bearer 401 on that resend must not start the lost-response replay.
+func TestInvalidAPIKey_TransportResendOfSync(t *testing.T) {
+	script := &syncScript{replies: []func(http.ResponseWriter, *http.Request){
+		sendBody(fullUpdateOneTorrent),
+		closeConnection,
+		func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("WWW-Authenticate", `Bearer realm="qBittorrent", error="invalid_token"`)
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		},
+	}}
+	server := newScriptedSyncServer(t, "2.15.1", script)
+	client := newLostAttemptClient(t, server)
+	if _, err := client.GetWebAPIVersionCtx(t.Context()); err != nil {
+		t.Fatalf("read the version: %v", err)
+	}
+	sm := NewSyncManager(client)
+	if err := sm.Sync(t.Context()); err != nil {
+		t.Fatalf("first sync: %v", err)
+	}
+
+	err := sm.Sync(t.Context())
+
+	requireInvalidAPIKey(t, err, http.StatusUnauthorized)
+	if want, got := []string{"0", "5", "5"}, script.seenRids(); !slices.Equal(got, want) {
+		t.Errorf("rids = %v, want %v", got, want)
+	}
+}
+
+func TestInvalidAPIKey_UnauthorizedWithoutAPIKey(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.Header().Set("WWW-Authenticate", `Bearer realm="qBittorrent", error="invalid_token"`)
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+	}))
+	defer server.Close()
+	client := NewClient(Config{Host: server.URL})
+
+	_, err := client.GetTorrentsCtx(t.Context(), TorrentFilterOptions{})
+
+	if errors.Is(err, ErrInvalidAPIKey) {
+		t.Fatalf("err = %v, want no ErrInvalidAPIKey", err)
+	}
+	if !errors.Is(err, ErrUnexpectedStatus) || !strings.Contains(err.Error(), "status code: 401") {
+		t.Errorf("err = %v, want ErrUnexpectedStatus with status code: 401", err)
+	}
+	if got := requests.Load(); got != 1 {
+		t.Errorf("requests = %d, want 1", got)
+	}
 }

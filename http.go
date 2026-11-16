@@ -484,6 +484,11 @@ func (c *Client) retryDo(ctx context.Context, req *http.Request, lostResponseURL
 			return err
 		}
 
+		if resp.StatusCode == http.StatusUnauthorized && c.usingAPIKeyAuth() && hasBearerChallenge(resp.Header) {
+			drainAndClose(resp)
+			return retry.Unrecoverable(&InvalidAPIKeyError{StatusCode: resp.StatusCode})
+		}
+
 		// The transport sends a GET again by itself when a reused connection
 		// closes before the first byte of the response. A redirect also sends
 		// two requests, but to two URLs.
@@ -493,11 +498,6 @@ func (c *Client) retryDo(ctx context.Context, req *http.Request, lostResponseURL
 			req = req.Clone(ctx)
 			req.URL = lostResponseURL
 			return errors.New("the transport sent the request again")
-		}
-
-		if resp.StatusCode == http.StatusUnauthorized && c.usingAPIKeyAuth() && hasBearerChallenge(resp.Header) {
-			drainAndClose(resp)
-			return retry.Unrecoverable(&InvalidAPIKeyError{StatusCode: resp.StatusCode})
 		}
 
 		if resp.StatusCode == http.StatusForbidden {
