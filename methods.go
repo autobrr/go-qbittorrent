@@ -728,6 +728,9 @@ func (c *Client) GetTorrentTrackers(hash string) ([]TorrentTracker, error) {
 	return c.GetTorrentTrackersCtx(context.Background(), hash)
 }
 
+// GetTorrentTrackersCtx returns the trackers of the torrent with hash, or
+// ErrInvalidAPIKey for a rejected Config.APIKey (a 403 on qBittorrent 5.2 and
+// 5.3, a 401 on qBittorrent 5.4, Web API 2.17.0).
 func (c *Client) GetTorrentTrackersCtx(ctx context.Context, hash string) ([]TorrentTracker, error) {
 	opts := map[string]string{
 		"hash": hash,
@@ -739,6 +742,10 @@ func (c *Client) GetTorrentTrackersCtx(ctx context.Context, hash string) ([]Torr
 	}
 
 	defer drainAndClose(resp)
+
+	if err := c.forbiddenAPIKey(resp); err != nil {
+		return nil, err
+	}
 
 	switch resp.StatusCode {
 	case http.StatusOK:
@@ -2972,6 +2979,9 @@ func (c *Client) GetAppVersion() (string, error) {
 	return c.GetAppVersionCtx(context.Background())
 }
 
+// GetAppVersionCtx returns the qBittorrent version, or ErrInvalidAPIKey for a
+// rejected Config.APIKey (a 403 on qBittorrent 5.2 and 5.3, a 401 on
+// qBittorrent 5.4, Web API 2.17.0).
 func (c *Client) GetAppVersionCtx(ctx context.Context) (string, error) {
 	resp, err := c.getCtx(ctx, "app/version", nil)
 	if err != nil {
@@ -2979,6 +2989,10 @@ func (c *Client) GetAppVersionCtx(ctx context.Context) (string, error) {
 	}
 
 	defer drainAndClose(resp)
+
+	if err := c.forbiddenAPIKey(resp); err != nil {
+		return "", err
+	}
 
 	switch resp.StatusCode {
 	case http.StatusOK, http.StatusNoContent:
@@ -3156,6 +3170,9 @@ func (c *Client) GetWebAPIVersion() (string, error) {
 	return c.GetWebAPIVersionCtx(context.Background())
 }
 
+// GetWebAPIVersionCtx returns the Web API version, or ErrInvalidAPIKey for a
+// rejected Config.APIKey (a 403 on qBittorrent 5.2 and 5.3, a 401 on
+// qBittorrent 5.4, Web API 2.17.0).
 func (c *Client) GetWebAPIVersionCtx(ctx context.Context) (string, error) {
 	resp, err := c.getCtx(ctx, "app/webapiVersion", nil)
 	if err != nil {
@@ -3163,6 +3180,10 @@ func (c *Client) GetWebAPIVersionCtx(ctx context.Context) (string, error) {
 	}
 
 	defer drainAndClose(resp)
+
+	if err := c.forbiddenAPIKey(resp); err != nil {
+		return "", err
+	}
 
 	// HTTP Status Code 	Scenario
 	// 200 	All scenarios

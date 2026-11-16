@@ -484,6 +484,11 @@ func (c *Client) retryDo(ctx context.Context, req *http.Request, lostResponseURL
 			return err
 		}
 
+		if resp.StatusCode == http.StatusUnauthorized && c.usingAPIKeyAuth() && hasBearerChallenge(resp.Header) {
+			drainAndClose(resp)
+			return retry.Unrecoverable(&InvalidAPIKeyError{StatusCode: resp.StatusCode})
+		}
+
 		// The transport sends a GET again by itself when a reused connection
 		// closes before the first byte of the response. A redirect also sends
 		// two requests, but to two URLs.
@@ -543,4 +548,26 @@ func (c *Client) retryDo(ctx context.Context, req *http.Request, lostResponseURL
 	}
 
 	return resp, nil
+}
+
+// forbiddenAPIKey returns an *InvalidAPIKeyError for a 403 while Config.APIKey
+// is set. Use it only on actions that qBittorrent 5.2 and 5.3 answer with 403
+// for no other reason than a key they made no session for.
+func (c *Client) forbiddenAPIKey(resp *http.Response) error {
+	if c.usingAPIKeyAuth() && resp.StatusCode == http.StatusForbidden {
+		return &InvalidAPIKeyError{StatusCode: resp.StatusCode}
+	}
+	return nil
+}
+
+// hasBearerChallenge reports whether a WWW-Authenticate value uses the Bearer
+// scheme. qBittorrent sends it only for a key that it rejects.
+func hasBearerChallenge(h http.Header) bool {
+	for _, challenge := range h.Values("WWW-Authenticate") {
+		scheme, _, _ := strings.Cut(strings.TrimSpace(challenge), " ")
+		if strings.EqualFold(scheme, "Bearer") {
+			return true
+		}
+	}
+	return false
 }
