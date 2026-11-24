@@ -26,7 +26,6 @@ var (
 	liveDataErr     error
 )
 
-
 func loadLiveDataset() (*liveDataset, error) {
 	liveDatasetOnce.Do(func() {
 		host := os.Getenv("QBIT_BENCH_HOST")
@@ -106,7 +105,6 @@ func loadLiveDataset() (*liveDataset, error) {
 
 	return liveData, liveDataErr
 }
-
 
 func requireLiveDataset(tb testing.TB) *liveDataset {
 	tb.Helper()

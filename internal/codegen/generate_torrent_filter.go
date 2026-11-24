@@ -7,6 +7,7 @@ package main
 import (
 	"fmt"
 	"go/ast"
+	"go/format"
 	"go/parser"
 	"go/token"
 	"log"
@@ -233,9 +234,11 @@ func sortTorrentRefs(torrents []*Torrent, sortField string, reverse bool) {
 }
 `
 
-	// Write to file
-	err := os.WriteFile("filter_generated.go", []byte(output), 0644)
+	formatted, err := format.Source([]byte(output))
 	if err != nil {
+		log.Fatal(err)
+	}
+	if err := os.WriteFile("filter_generated.go", formatted, 0644); err != nil {
 		log.Fatal(err)
 	}
 
