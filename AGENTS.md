@@ -54,3 +54,19 @@ consumers, so say in the PR which of them a change reaches:
   rewrite gains nothing and breaks review history.
 - Put AI attribution only in the AI disclosure section of the template, and
   answer that section truthfully.
+
+## Rules and what enforces them
+
+When a review corrects a mistake, add its rule here with what enforces it. When a
+rule that only review enforces is broken again, add a check in the same change.
+
+| Rule | Enforced by |
+|---|---|
+| A function that takes `ctx` passes it on: it calls `XCtx(ctx, ...)`, never `X` or `context.Background()` | `TestLibraryCodePassesTheCallersContext` in `rules_context_test.go` |
+| An `httptest` handler reports with `t.Errorf` or `assert`, because it runs on a server goroutine | `TestHTTPHandlersInTestsDoNotFailNow` in `rules_handler_test.go` |
+| Every `.go` file is gofmt-formatted; the generators format their own output | `TestGoFilesAreGofmted` in `rules_format_test.go` |
+| A generated file matches its generator | `TestAllGeneratedFilesAreUpToDate` in `codegen_test.go` |
+| The library filter matches the recorded qBittorrent results, apart from named differences | `TestFilterResultsMatchQBittorrent` in `filter_results_test.go` |
+| The recorded WebAPI actions match the qBittorrent source and the feature probes | `TestWebAPIActionsComplete` and `TestWebAPIActionsMatchFeatureProbes` in `webapi_actions_test.go` |
+| A test talks only to `httptest`, never to a real tracker or qBittorrent | Review only |
+| `testdata/` changes only through the capture commands | Review only |
