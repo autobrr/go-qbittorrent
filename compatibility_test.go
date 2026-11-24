@@ -15,6 +15,7 @@ import (
 	"testing"
 	"testing/iotest"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -92,20 +93,21 @@ func TestAddTorrentSeedModeCompatibility(t *testing.T) {
 				calls := 0
 				client := newCompatibilityClient(func(w http.ResponseWriter, r *http.Request) {
 					calls++
-					require.Equal(t, http.MethodPost, r.Method)
-					require.Equal(t, "/api/v2/torrents/add", r.URL.Path)
+					assert.Equal(t, http.MethodPost, r.Method)
+					assert.Equal(t, "/api/v2/torrents/add", r.URL.Path)
 					if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/") {
-						require.NoError(t, r.ParseMultipartForm(1<<20))
-						defer r.MultipartForm.RemoveAll()
-						require.NotEmpty(t, r.MultipartForm.File["torrents"])
+						if assert.NoError(t, r.ParseMultipartForm(1<<20)) {
+							defer r.MultipartForm.RemoveAll()
+							assert.NotEmpty(t, r.MultipartForm.File["torrents"])
+						}
 					} else {
-						require.NoError(t, r.ParseForm())
-						require.Contains(t, r.Form.Get("urls"), "https://example.invalid/fixture.torrent")
+						assert.NoError(t, r.ParseForm())
+						assert.Contains(t, r.Form.Get("urls"), "https://example.invalid/fixture.torrent")
 					}
 					// 5.2.2 reads skip_checking. 5.3 reads seedMode.
 					for _, key := range []string{"skip_checking", "seedMode"} {
-						require.Equal(t, tc.want, r.Form.Get(key))
-						require.Equal(t, tc.want != "", r.Form.Has(key))
+						assert.Equal(t, tc.want, r.Form.Get(key))
+						assert.Equal(t, tc.want != "", r.Form.Has(key))
 					}
 					w.Header().Set("Content-Type", "text/plain")
 					_, _ = w.Write([]byte("Ok."))
@@ -228,20 +230,20 @@ func TestRSSRuleSeedModeCompatibility(t *testing.T) {
 						_, _ = fmt.Fprintf(w, `{"fixture":{"priority":1,"torrentParams":{%s,"share_limits_mode":%q,"category":"tv"}}}`, tc.seed, mode)
 					case "POST /api/v2/rss/setRule":
 						writes++
-						require.NoError(t, r.ParseForm())
-						require.Equal(t, "fixture", r.Form.Get("ruleName"))
+						assert.NoError(t, r.ParseForm())
+						assert.Equal(t, "fixture", r.Form.Get("ruleName"))
 						var wire struct {
 							Priority int            `json:"priority"`
 							Params   map[string]any `json:"torrentParams"`
 						}
-						require.NoError(t, json.Unmarshal([]byte(r.Form.Get("ruleDef")), &wire))
-						require.Equal(t, 2, wire.Priority)
-						require.Equal(t, "tv", wire.Params["category"])
-						require.Equal(t, mode, wire.Params["share_limits_mode"])
-						require.Equal(t, want, wire.Params["seed_mode"])
-						require.Equal(t, want, wire.Params["skip_checking"])
+						assert.NoError(t, json.Unmarshal([]byte(r.Form.Get("ruleDef")), &wire))
+						assert.Equal(t, 2, wire.Priority)
+						assert.Equal(t, "tv", wire.Params["category"])
+						assert.Equal(t, mode, wire.Params["share_limits_mode"])
+						assert.Equal(t, want, wire.Params["seed_mode"])
+						assert.Equal(t, want, wire.Params["skip_checking"])
 					default:
-						t.Fatalf("unexpected request: %s %s", r.Method, r.URL)
+						t.Errorf("unexpected request: %s %s", r.Method, r.URL)
 					}
 				})
 				rules, err := client.GetRSSRulesCtx(t.Context())
@@ -281,15 +283,15 @@ func TestTorrentCreationDateCompatibility(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			client := newCompatibilityClient(func(w http.ResponseWriter, r *http.Request) {
-				require.Equal(t, http.MethodGet, r.Method)
+				assert.Equal(t, http.MethodGet, r.Method)
 				switch r.URL.Path {
 				case "/api/v2/app/webapiVersion":
 					_, _ = w.Write([]byte("2.16.2"))
 				case "/api/v2/torrentcreator/status":
-					require.Equal(t, "fixture", r.URL.Query().Get("taskID"))
+					assert.Equal(t, "fixture", r.URL.Query().Get("taskID"))
 					_, _ = fmt.Fprintf(w, `[{"taskID":"fixture","status":"Finished",%s}]`, tc.body)
 				default:
-					t.Fatalf("unexpected request: %s", r.URL)
+					t.Errorf("unexpected request: %s", r.URL)
 				}
 			})
 			tasks, err := client.GetTorrentCreationStatusCtx(t.Context(), "fixture")
@@ -337,10 +339,10 @@ func TestAppPreferencesCompatibility(t *testing.T) {
 					_, _ = w.Write([]byte(tc.body))
 				case "POST /api/v2/app/setPreferences":
 					writes++
-					require.NoError(t, r.ParseForm())
-					require.JSONEq(t, tc.body, r.Form.Get("json"))
+					assert.NoError(t, r.ParseForm())
+					assert.JSONEq(t, tc.body, r.Form.Get("json"))
 				default:
-					t.Fatalf("unexpected request: %s %s", r.Method, r.URL)
+					t.Errorf("unexpected request: %s %s", r.Method, r.URL)
 				}
 			})
 			prefs, err := client.GetAppPreferencesCtx(t.Context())

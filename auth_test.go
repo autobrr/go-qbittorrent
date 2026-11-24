@@ -39,7 +39,7 @@ func TestClient_LoginDoesNotRequireExistingCookie(t *testing.T) {
 		requests++
 
 		if r.URL.Path != "/api/v2/auth/login" {
-			t.Fatalf("path = %q, want /api/v2/auth/login", r.URL.Path)
+			t.Errorf("path = %q, want /api/v2/auth/login", r.URL.Path)
 		}
 
 		http.SetCookie(w, &http.Cookie{Name: "SID", Value: "test-session"})
@@ -76,7 +76,7 @@ func TestClient_PostBasicDoesNotCheckCookies(t *testing.T) {
 		requests++
 
 		if r.URL.Path != "/api/v2/transfer/info" {
-			t.Fatalf("path = %q, want /api/v2/transfer/info", r.URL.Path)
+			t.Errorf("path = %q, want /api/v2/transfer/info", r.URL.Path)
 		}
 
 		_, _ = w.Write([]byte("Ok."))
