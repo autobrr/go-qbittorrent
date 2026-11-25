@@ -49,10 +49,10 @@ func TestTorrent52RecordedFields(t *testing.T) {
 					case strconv.FormatInt(initial.Rid, 10):
 						_, _ = w.Write(delta)
 					default:
-						t.Fatalf("unexpected response ID: %s", r.URL.RawQuery)
+						t.Errorf("unexpected response ID: %s", r.URL.RawQuery)
 					}
 				default:
-					t.Fatalf("unexpected endpoint: %s", r.URL.Path)
+					t.Errorf("unexpected endpoint: %s", r.URL.Path)
 				}
 			})
 

@@ -7,6 +7,7 @@ package main
 import (
 	"fmt"
 	"go/ast"
+	"go/format"
 	"go/parser"
 	"go/token"
 	"log"
@@ -70,7 +71,6 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer outFile.Close()
 
 	// Redirect stdout to file
 	oldStdout := os.Stdout
@@ -80,6 +80,20 @@ func main() {
 
 	// Restore stdout
 	os.Stdout = oldStdout
+	if err := outFile.Close(); err != nil {
+		log.Fatal(err)
+	}
+	generated, err := os.ReadFile(outputFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+	formatted, err := format.Source(generated)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if err := os.WriteFile(outputFile, formatted, 0644); err != nil {
+		log.Fatal(err)
+	}
 
 	fmt.Printf("Generated %s with %d struct updaters\n", outputFile, len(structs))
 }

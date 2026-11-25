@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -40,7 +41,7 @@ func TestGetCategoriesDownloadPath(t *testing.T) {
 		"relative": {"name": "relative", "savePath": "/data/relative", "download_path": "relative/sub"}
 	}`
 	client := newCategoryTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, "/api/v2/torrents/categories", r.URL.Path)
+		assert.Equal(t, "/api/v2/torrents/categories", r.URL.Path)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(body))
 	})
@@ -130,7 +131,7 @@ func TestMainDataCategoryDownloadPathUpdates(t *testing.T) {
 	}
 	step := 0
 	client := newCategoryTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, "/api/v2/sync/maindata", r.URL.Path)
+		assert.Equal(t, "/api/v2/sync/maindata", r.URL.Path)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(responses[step]))
 		step++
@@ -185,8 +186,8 @@ func captureCategoryForm(t *testing.T, endpoint string) (*Client, *url.Values) {
 	t.Helper()
 	var form url.Values
 	client := newCategoryTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, "/api/v2/torrents/"+endpoint, r.URL.Path)
-		require.NoError(t, r.ParseForm())
+		assert.Equal(t, "/api/v2/torrents/"+endpoint, r.URL.Path)
+		assert.NoError(t, r.ParseForm())
 		form = r.PostForm
 		w.WriteHeader(http.StatusOK)
 	})
